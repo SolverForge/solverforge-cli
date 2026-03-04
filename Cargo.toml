@@ -1,0 +1,16 @@
+[package]
+name = "solverforge-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Rails-inspired CLI for SolverForge constraint solver framework"
+license = "Apache-2.0"
+
+[[bin]]
+name = "solverforge"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+dialoguer = "0.11"
+include_dir = "0.7"
+owo-colors = "4"
