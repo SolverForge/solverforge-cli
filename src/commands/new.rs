@@ -4,8 +4,7 @@ use std::path::Path;
 
 use crate::template;
 
-static BASIC_GENERIC_TEMPLATE: Dir =
-    include_dir!("$CARGO_MANIFEST_DIR/templates/basic/generic");
+static BASIC_GENERIC_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/basic/generic");
 
 static EMPLOYEE_SCHEDULING_TEMPLATE: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/templates/basic/employee-scheduling");
@@ -60,7 +59,7 @@ fn scaffold(
     let vars: &[(&str, &str)] = &[
         ("project_name", project_name),
         ("crate_name", crate_name),
-        ("solverforge_version", "0.6"),
+        ("solverforge_version", "0.5.2"),
     ];
 
     template::render(template_dir, dest, vars)?;
@@ -114,6 +113,12 @@ impl Template {
 /// Converts a project name to a valid Rust crate name (underscores, lowercase).
 fn to_crate_name(name: &str) -> String {
     name.chars()
-        .map(|c| if c == '-' { '_' } else { c.to_ascii_lowercase() })
+        .map(|c| {
+            if c == '-' {
+                '_'
+            } else {
+                c.to_ascii_lowercase()
+            }
+        })
         .collect()
 }
