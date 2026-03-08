@@ -38,17 +38,22 @@ enum Command {
         #[arg(long = "list", value_name = "SPECIALIZATION", num_args = 0..=1, require_equals = true)]
         list: Option<Option<String>>,
     },
-    /// Add a new constraint to the current project
-    Add {
+    /// Generate a new resource for the current project
+    Generate {
         #[command(subcommand)]
-        resource: AddResource,
+        resource: GenerateResource,
+    },
+    /// Remove a resource from the current project
+    Destroy {
+        #[command(subcommand)]
+        resource: DestroyResource,
     },
     /// Start the development server (wraps `cargo run --release`)
     Server,
 }
 
 #[derive(Subcommand)]
-enum AddResource {
+enum GenerateResource {
     /// Add a new constraint skeleton to src/constraints/
     Constraint {
         /// Constraint module name in snake_case (e.g. max_hours)
@@ -121,6 +126,27 @@ enum AddResource {
     },
 }
 
+#[derive(Subcommand)]
+enum DestroyResource {
+    /// Remove the planning solution struct
+    Solution,
+    /// Remove a planning entity struct
+    Entity {
+        /// Entity name to remove
+        name: String,
+    },
+    /// Remove a problem fact struct
+    Fact {
+        /// Fact name to remove
+        name: String,
+    },
+    /// Remove a constraint
+    Constraint {
+        /// Constraint name to remove
+        name: String,
+    },
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -135,23 +161,35 @@ fn main() {
                 Err(e) => Err(e),
             }
         }
-        Command::Add {
-            resource: AddResource::Constraint { name, hard: _, soft, unary, pair, join, balance, reward },
-        } => commands::add_constraint::run(&name, soft, unary, pair, join, balance, reward),
-        Command::Add { resource: AddResource::Entity { name, planning_variable } } => {
-            commands::add_domain::run_entity(&name, planning_variable.as_deref())
+        Command::Generate {
+            resource: GenerateResource::Constraint { name, hard: _, soft, unary, pair, join, balance, reward },
+        } => commands::generate_constraint::run(&name, soft, unary, pair, join, balance, reward),
+        Command::Generate { resource: GenerateResource::Entity { name, planning_variable } } => {
+            commands::generate_domain::run_entity(&name, planning_variable.as_deref())
         }
-        Command::Add { resource: AddResource::Fact { name } } => {
-            commands::add_domain::run_fact(&name)
+        Command::Generate { resource: GenerateResource::Fact { name } } => {
+            commands::generate_domain::run_fact(&name)
         }
-        Command::Add { resource: AddResource::Solution { name, score } } => {
-            commands::add_domain::run_solution(&name, &score)
+        Command::Generate { resource: GenerateResource::Solution { name, score } } => {
+            commands::generate_domain::run_solution(&name, &score)
         }
-        Command::Add { resource: AddResource::Variable { field, entity } } => {
-            commands::add_domain::run_variable(&field, &entity)
+        Command::Generate { resource: GenerateResource::Variable { field, entity } } => {
+            commands::generate_domain::run_variable(&field, &entity)
         }
-        Command::Add { resource: AddResource::Score { score_type } } => {
-            commands::add_domain::run_score(&score_type)
+        Command::Generate { resource: GenerateResource::Score { score_type } } => {
+            commands::generate_domain::run_score(&score_type)
+        }
+        Command::Destroy { resource: DestroyResource::Solution } => {
+            commands::destroy::run_solution()
+        }
+        Command::Destroy { resource: DestroyResource::Entity { name } } => {
+            commands::destroy::run_entity(&name)
+        }
+        Command::Destroy { resource: DestroyResource::Fact { name } } => {
+            commands::destroy::run_fact(&name)
+        }
+        Command::Destroy { resource: DestroyResource::Constraint { name } } => {
+            commands::destroy::run_constraint(&name)
         }
         Command::Server => commands::server::run(),
     };
