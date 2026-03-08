@@ -1,4 +1,4 @@
-//! Clarke-Wright savings construction heuristic followed by intra-route 2-opt.
+// Clarke-Wright savings construction heuristic followed by intra-route 2-opt.
 
 use crate::domain::{ProblemData, VrpPlan};
 

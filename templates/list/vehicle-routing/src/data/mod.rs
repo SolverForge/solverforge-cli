@@ -1,6 +1,6 @@
-//! Demo data — a small 10-customer CVRP instance.
-//!
-//! Replace with your own instance loading (file, API, database, …).
+/* Demo data — a small 10-customer CVRP instance.
+
+   Replace with your own instance loading (file, API, database, …). */
 
 use crate::domain::ProblemData;
 

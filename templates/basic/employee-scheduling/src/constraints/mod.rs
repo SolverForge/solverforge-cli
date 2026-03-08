@@ -1,7 +1,7 @@
-//! Constraint definitions for Employee Scheduling.
-//!
-//! Each constraint is a separate function returning an `IncrementalConstraint`.
-//! The tuple assembles them into a `ConstraintSet` for the solver.
+/* Constraint definitions for Employee Scheduling.
+
+   Each constraint is a separate function returning an `IncrementalConstraint`.
+   The tuple assembles them into a `ConstraintSet` for the solver. */
 
 mod balance;
 mod no_overlap;

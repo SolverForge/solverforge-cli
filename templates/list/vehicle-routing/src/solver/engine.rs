@@ -1,4 +1,4 @@
-//! Local search engine — wires the move selectors, acceptor, and phase.
+// Local search engine — wires the move selectors, acceptor, and phase.
 
 use solverforge_core::domain::{EntityDescriptor, SolutionDescriptor, TypedEntityExtractor};
 use solverforge_scoring::{ScoreDirector, TypedScoreDirector};

@@ -1,8 +1,8 @@
-//! Built-in demo data generator.
-//!
-//! Generates sample employees and shifts so the app runs out of the box
-//! without requiring external CSV files. Matches the quickstart's DemoData
-//! generator (same seed, same algorithm, same output).
+/* Built-in demo data generator.
+
+   Generates sample employees and shifts so the app runs out of the box
+   without requiring external CSV files. Matches the quickstart's DemoData
+   generator (same seed, same algorithm, same output). */
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Weekday};
 use rand::prelude::*;

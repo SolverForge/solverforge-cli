@@ -1,7 +1,7 @@
-//! List-variable accessor functions required by move selectors.
-//!
-//! SolverForge list-variable moves take plain fn pointers rather than trait
-//! objects, keeping the hot path fully monomorphized and zero-allocation.
+/* List-variable accessor functions required by move selectors.
+
+   SolverForge list-variable moves take plain fn pointers rather than trait
+   objects, keeping the hot path fully monomorphized and zero-allocation. */
 
 use crate::domain::VrpPlan;
 

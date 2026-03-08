@@ -1,6 +1,6 @@
-//! Demo data for local development.
-//!
-//! Replace this with your own data loading (CSV, JSON, database, …).
+/* Demo data for local development.
+
+   Replace this with your own data loading (CSV, JSON, database, …). */
 
 use crate::domain::{Plan, Resource, Task};
 

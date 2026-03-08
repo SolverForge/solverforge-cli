@@ -1,13 +1,13 @@
-//! Lightweight CSV <-> domain struct conversion.
-//!
-//! Reads and writes simple CSV files without any heavy dependencies.
-//!
-//! employees.csv columns:
-//!   name, skills, unavailable_dates, undesired_dates, desired_dates
-//!   (list columns use comma-separated values within quoted cells)
-//!
-//! shifts.csv columns:
-//!   id, start, end, location, required_skill, employee_name
+/* Lightweight CSV <-> domain struct conversion.
+
+   Reads and writes simple CSV files without any heavy dependencies.
+
+   employees.csv columns:
+     name, skills, unavailable_dates, undesired_dates, desired_dates
+     (list columns use comma-separated values within quoted cells)
+
+   shifts.csv columns:
+     id, start, end, location, required_skill, employee_name */
 
 use crate::domain::{Employee, EmployeeSchedule, Shift};
 use chrono::{NaiveDate, NaiveDateTime};

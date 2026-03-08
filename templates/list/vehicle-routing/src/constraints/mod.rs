@@ -1,8 +1,8 @@
-//! Constraint definitions for vehicle routing.
-//!
-//! Two constraints mirror the CVRP standard:
-//!   - HARD  vehicleCapacity — penalise demand overload per vehicle
-//!   - SOFT  totalDistance   — minimise sum of route distances
+/* Constraint definitions for vehicle routing.
+
+   Two constraints mirror the CVRP standard:
+     - HARD  vehicleCapacity — penalise demand overload per vehicle
+     - SOFT  totalDistance   — minimise sum of route distances */
 
 use crate::domain::{ProblemData, Vehicle, VrpPlan};
 use solverforge::prelude::*;
