@@ -296,7 +296,22 @@ pub(crate) fn add_self_none_init(src: &str, field: &str) -> String {
         return src.to_string();
     }
 
-    if let Some(self_pos) = src.find("Self {") {
+    // Find `Self {` that is a struct literal (has content after `{` on the same line),
+    // not a block opener like `-> Self {` (where `{` is at end of line).
+    let self_pos = src
+        .match_indices("Self {")
+        .find(|(pos, _)| {
+            let after_brace = &src[pos + "Self {".len()..];
+            // It's a struct literal if the char immediately after `{` is not `\n` or `\r`
+            after_brace
+                .chars()
+                .next()
+                .map(|c| c != '\n' && c != '\r')
+                .unwrap_or(false)
+        })
+        .map(|(pos, _)| pos);
+
+    if let Some(self_pos) = self_pos {
         let after_self = &src[self_pos..];
         let mut depth = 0;
         let mut close_pos = None;

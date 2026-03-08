@@ -110,6 +110,39 @@ mod tests {
     }
 
     #[test]
+    fn test_inject_second_planning_variable() {
+        // Reproduces the bug: adding a second planning variable to an entity
+        // that was generated with one variable already.
+        use super::super::wiring::inject_planning_variable;
+
+        let src = generate_entity("Surgery", Some("room_idx"));
+        // Inject a second variable
+        let result =
+            inject_planning_variable(&src, "Surgery", "slot_idx").expect("inject should succeed");
+
+        // The result must be valid Rust — slot_idx must be inside Self { }
+        // and the Self literal must not have a stray field after the closing brace
+        assert!(
+            result.contains("slot_idx: None"),
+            "slot_idx: None not found in output"
+        );
+
+        // The Self { ... } initializer must contain both fields
+        let self_start = result.find("Self {").expect("Self { not found");
+        let self_block = &result[self_start..];
+        let close = self_block.find('}').expect("} not found after Self {");
+        let self_literal = &self_block[..=close];
+        assert!(
+            self_literal.contains("room_idx: None"),
+            "room_idx: None not inside Self {{ }}: got: {self_literal}"
+        );
+        assert!(
+            self_literal.contains("slot_idx: None"),
+            "slot_idx: None not inside Self {{ }}: got:\n{result}"
+        );
+    }
+
+    #[test]
     fn test_update_domain_mod_format() {
         // Verify the mod line format
         let mod_line = format!("mod {};", "shift");

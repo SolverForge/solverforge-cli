@@ -22,7 +22,7 @@ use solverforge::prelude::*;
 
 /// TODO — describe this entity.
 #[planning_entity]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct {pascal} {{
     #[planning_id]
     pub id: String,
