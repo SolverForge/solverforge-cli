@@ -8,3 +8,7 @@ solverforge new my-scheduler --basic=employee-scheduling
 ```
 
 The CLI lives outside `solverforge-rs` and generates projects that depend on the published SolverForge crates.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
