@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::solver::SolverStatus;
+use solverforge::SolverStatus;
 
 /// Input: a CVRP instance with a distance matrix.
 #[derive(Debug, Serialize, Deserialize)]
@@ -13,13 +13,13 @@ pub struct InstanceDto {
     /// Number of vehicles to use (default: 3).
     #[serde(default = "default_vehicles")]
     pub n_vehicles: usize,
-    /// Time limit in seconds (default: 30).
+    /// Time limit in seconds (configured via solver.toml).
     #[serde(default = "default_time_limit")]
     pub time_limit_secs: u64,
 }
 
 fn default_vehicles() -> usize { 3 }
-fn default_time_limit() -> u64 { 30 }
+fn default_time_limit() -> u64 { 60 }
 
 /// Output: solved routes + cost + status.
 #[derive(Debug, Serialize)]

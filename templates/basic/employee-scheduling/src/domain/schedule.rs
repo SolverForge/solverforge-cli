@@ -4,7 +4,13 @@ use solverforge::prelude::*;
 use super::{Employee, Shift};
 
 /// The root planning solution: employees + shifts + score.
-#[planning_solution]
+#[planning_solution(constraints = "crate::constraints::create_constraints")]
+#[basic_variable_config(
+    entity_collection = "shifts",
+    variable_field = "employee_idx",
+    variable_type = "usize",
+    value_range = "employees"
+)]
 #[derive(Serialize, Deserialize)]
 pub struct EmployeeSchedule {
     #[problem_fact_collection]

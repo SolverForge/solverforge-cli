@@ -1,8 +1,7 @@
-// ─── Utilities ────────────────────────────────────────────────────────────────
-
-use owo_colors::OwoColorize;
 use std::fs;
 use std::path::Path;
+
+use crate::error::{CliError, CliResult};
 
 pub(crate) const KNOWN_SCORE_TYPES: &[&str] = &[
     "HardSoftScore",
@@ -47,31 +46,24 @@ pub(crate) fn pluralize(name: &str) -> String {
     }
 }
 
-pub(crate) fn validate_score_type(score: &str) -> Result<(), String> {
+pub(crate) fn validate_score_type(score: &str) -> CliResult {
     if KNOWN_SCORE_TYPES.contains(&score) {
         Ok(())
     } else {
-        Err(format!(
-            "unknown score type '{}'\n\nKnown score types: {}",
-            score,
-            KNOWN_SCORE_TYPES.join(", ")
-        ))
+        Err(CliError::InvalidScoreType {
+            score: score.to_string(),
+            known: KNOWN_SCORE_TYPES,
+        })
     }
 }
 
-pub(crate) fn ensure_domain_dir(domain_dir: &Path) -> Result<(), String> {
+pub(crate) fn ensure_domain_dir(domain_dir: &Path) -> CliResult {
     if !domain_dir.exists() {
-        return Err("not a SolverForge project directory (src/domain/ not found)".to_string());
+        return Err(CliError::NotInProject {
+            missing: "src/domain/",
+        });
     }
     Ok(())
-}
-
-pub(crate) fn print_created(path: &str) {
-    println!("{} Created {}", "▸".bright_green(), path.bright_cyan());
-}
-
-pub(crate) fn print_updated(path: &str) {
-    println!("{} Updated {}", "▸".bright_green(), path.bright_cyan());
 }
 
 /// Finds the `*.rs` file in `domain_dir` that contains `pub struct <TypeName>`.

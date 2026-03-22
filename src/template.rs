@@ -2,19 +2,30 @@ use include_dir::{Dir, DirEntry};
 use std::fs;
 use std::path::Path;
 
-/// Renders a template directory into `dest`, replacing `{{key}}` placeholders.
-pub fn render(dir: &Dir, dest: &Path, vars: &[(&str, &str)]) -> Result<(), String> {
-    render_dir(dir, dest, dest, vars)
+use crate::error::{CliError, CliResult};
+
+// Looks for a custom template override in `.solverforge/templates/<template_name>.rs.tmpl`.
+// Template variables use `{{NAME}}`, `{{SNAKE_NAME}}`, `{{FIELDS}}` style placeholders.
+// Returns the rendered content if a custom template exists, or `None` to use the built-in default.
+pub fn load_custom(template_name: &str, vars: &[(&str, &str)]) -> Option<String> {
+    let path = Path::new(".solverforge")
+        .join("templates")
+        .join(format!("{}.rs.tmpl", template_name));
+
+    let contents = fs::read_to_string(&path).ok()?;
+    Some(apply_vars(&contents, vars))
 }
 
-fn render_dir(
-    dir: &Dir,
-    dest_root: &Path,
-    dest: &Path,
-    vars: &[(&str, &str)],
-) -> Result<(), String> {
-    fs::create_dir_all(dest)
-        .map_err(|e| format!("failed to create directory {:?}: {}", dest, e))?;
+/// Renders a template directory into `dest`, replacing `{{key}}` placeholders.
+pub fn render(dir: &Dir, dest: &Path, vars: &[(&str, &str)]) -> CliResult {
+    render_dir(dir, dest, vars)
+}
+
+fn render_dir(dir: &Dir, dest: &Path, vars: &[(&str, &str)]) -> CliResult {
+    fs::create_dir_all(dest).map_err(|e| CliError::IoError {
+        context: format!("failed to create directory {:?}", dest),
+        source: e,
+    })?;
 
     for entry in dir.entries() {
         match entry {
@@ -26,7 +37,7 @@ fn render_dir(
                     .to_string_lossy()
                     .to_string();
                 let sub_dest = dest.join(&sub_name);
-                render_dir(sub, dest_root, &sub_dest, vars)?;
+                render_dir(sub, &sub_dest, vars)?;
             }
             DirEntry::File(file) => {
                 let file_name_raw = file
@@ -49,15 +60,19 @@ fn render_dir(
 
                 // Binary files (non-UTF-8): copy as-is
                 let Ok(text) = std::str::from_utf8(contents) else {
-                    fs::write(&out_path, contents)
-                        .map_err(|e| format!("failed to write {:?}: {}", out_path, e))?;
+                    fs::write(&out_path, contents).map_err(|e| CliError::IoError {
+                        context: format!("failed to write {:?}", out_path),
+                        source: e,
+                    })?;
                     continue;
                 };
 
                 // Text files: apply placeholder substitution
                 let rendered = apply_vars(text, vars);
-                fs::write(&out_path, rendered)
-                    .map_err(|e| format!("failed to write {:?}: {}", out_path, e))?;
+                fs::write(&out_path, rendered).map_err(|e| CliError::IoError {
+                    context: format!("failed to write {:?}", out_path),
+                    source: e,
+                })?;
             }
         }
     }

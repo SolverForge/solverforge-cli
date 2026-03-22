@@ -10,8 +10,6 @@ path = "src/main.rs"
 
 [dependencies]
 solverforge = { version = "{{solverforge_version}}", features = ["serde"] }
-rand = "0.8"
-
 # Web server
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
@@ -26,6 +24,7 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Utilities
+rand = "0.10"
 uuid = { version = "1", features = ["v4", "serde"] }
 parking_lot = "0.12"
 tracing = "0.1"

@@ -1,10 +1,9 @@
-// ─── Auto-wiring helpers ──────────────────────────────────────────────────────
-
 use std::fs;
 use std::path::Path;
 
-use super::utils::{find_file_for_type, pluralize, print_updated};
+use super::utils::{find_file_for_type, pluralize};
 use crate::commands::generate_constraint::parse_domain;
+use crate::output;
 
 /// Adds `mod <name>; pub use <name>::<Pascal>;` to `src/domain/mod.rs`.
 pub(crate) fn update_domain_mod(mod_name: &str, pascal: &str) -> Result<(), String> {
@@ -64,7 +63,7 @@ pub(crate) fn wire_collection_into_solution(
     fs::write(&solution_file, new_src)
         .map_err(|e| format!("failed to write {}: {}", solution_file.display(), e))?;
 
-    print_updated(solution_file.to_str().unwrap());
+    output::print_update(solution_file.to_str().unwrap());
     Ok(())
 }
 

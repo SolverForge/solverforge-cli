@@ -1,6 +1,6 @@
-// ─── Utilities ────────────────────────────────────────────────────────────────
+use crate::error::{CliError, CliResult};
 
-pub(crate) fn validate_name(name: &str) -> Result<(), String> {
+pub(crate) fn validate_name(name: &str) -> CliResult {
     let valid = name.chars().enumerate().all(|(i, c)| {
         if i == 0 {
             c.is_ascii_lowercase()
@@ -9,10 +9,9 @@ pub(crate) fn validate_name(name: &str) -> Result<(), String> {
         }
     });
     if !valid || name.is_empty() {
-        return Err(format!(
-            "invalid name '{}': use snake_case (e.g. max_hours)",
-            name
-        ));
+        return Err(CliError::InvalidName {
+            name: name.to_string(),
+        });
     }
     Ok(())
 }

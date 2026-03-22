@@ -86,8 +86,7 @@ async fn create_schedule(
 ) -> String {
     let id = Uuid::new_v4().to_string();
     let schedule = dto.to_domain();
-    let job = state.solver.create_job(id.clone(), schedule);
-    state.solver.start_solving(job);
+    state.solver.start_solving(id.clone(), schedule);
     id
 }
 
@@ -99,11 +98,13 @@ async fn get_schedule(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<ScheduleDto>, StatusCode> {
-    match state.solver.get_job(&id) {
-        Some(job) => {
-            let g = job.read();
-            Ok(Json(ScheduleDto::from_schedule(&g.schedule, Some(g.status))))
-        }
+    if !state.solver.has_job(&id) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    match state.solver.with_snapshot(&id, |schedule, _score, status| {
+        ScheduleDto::from_schedule(schedule, Some(status))
+    }) {
+        Some(dto) => Ok(Json(dto)),
         None => Err(StatusCode::NOT_FOUND),
     }
 }
@@ -119,14 +120,14 @@ async fn get_schedule_status(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<StatusResponse>, StatusCode> {
-    match state.solver.get_job(&id) {
-        Some(job) => {
-            let g = job.read();
-            Ok(Json(StatusResponse {
-                score: g.schedule.score.map(|s| format!("{}", s)),
-                solver_status: g.status,
-            }))
-        }
+    if !state.solver.has_job(&id) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    match state.solver.with_snapshot(&id, |schedule, _score, status| StatusResponse {
+        score: schedule.score.map(|s| format!("{}", s)),
+        solver_status: status,
+    }) {
+        Some(resp) => Ok(Json(resp)),
         None => Err(StatusCode::NOT_FOUND),
     }
 }
@@ -136,7 +137,7 @@ async fn stop_solving(
     Path(id): Path<String>,
 ) -> StatusCode {
     state.solver.stop_solving(&id);
-    if state.solver.remove_job(&id).is_some() {
+    if state.solver.remove_job(&id) {
         StatusCode::NO_CONTENT
     } else {
         StatusCode::NOT_FOUND
@@ -145,12 +146,12 @@ async fn stop_solving(
 
 async fn analyze_schedule(Json(dto): Json<ScheduleDto>) -> Json<AnalyzeResponse> {
     use crate::constraints::create_constraints;
-    use solverforge::TypedScoreDirector;
+    use solverforge::ScoreDirector;
     use solverforge::ConstraintSet;
 
     let schedule = dto.to_domain();
     let constraints = create_constraints();
-    let mut director = TypedScoreDirector::new(schedule, constraints);
+    let mut director = ScoreDirector::new(schedule, constraints);
     let score = director.calculate_score();
 
     let analyses = director.constraints().evaluate_detailed(director.working_solution());

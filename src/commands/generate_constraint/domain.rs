@@ -1,7 +1,7 @@
-// ─── Domain model parser ──────────────────────────────────────────────────────
-
 use std::fs;
 use std::path::Path;
+
+type CollectionPair = (Vec<(String, String)>, Vec<(String, String)>);
 
 #[derive(Debug)]
 pub(crate) struct EntityInfo {
@@ -120,9 +120,12 @@ pub(crate) fn find_annotated_struct(src: &str, attr: &str) -> Option<String> {
     for (i, line) in lines.iter().enumerate() {
         let t = line.trim();
         if t.contains(&format!("#[{}]", attr)) || t.contains(&format!("#[{}(", attr)) {
-            // Look ahead for struct definition
-            for j in (i + 1)..lines.len().min(i + 4) {
-                let next = lines[j].trim();
+            // Look ahead past any additional attributes until the struct definition.
+            for next_line in lines.iter().skip(i + 1) {
+                let next = next_line.trim();
+                if next.is_empty() {
+                    continue;
+                }
                 if next.starts_with("pub struct ") || next.starts_with("struct ") {
                     let after = next
                         .trim_start_matches("pub ")
@@ -181,10 +184,7 @@ pub(crate) fn find_score_type(src: &str, solution_type: &str) -> Option<String> 
 }
 
 /// Returns (entity_collections, fact_collections) as Vec<(field_name, item_type)>
-fn find_collections(
-    src: &str,
-    solution_type: &str,
-) -> (Vec<(String, String)>, Vec<(String, String)>) {
+fn find_collections(src: &str, solution_type: &str) -> CollectionPair {
     let lines: Vec<&str> = src.lines().collect();
     let mut in_solution_struct = false;
     let mut brace_depth = 0i32;

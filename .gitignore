@@ -1,21 +1,4 @@
-# Rust / Cargo
-/target/
-**/*.rs.bk
-*.pdb
+target/
 Cargo.lock
+*.rs.bk
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Claude
-CLAUDE.md
-.claude/
-
-# Environment
-.env
-.env.*

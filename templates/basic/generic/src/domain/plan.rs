@@ -6,7 +6,13 @@ use super::{Resource, Task};
 /// The root planning solution: resources + tasks + score.
 ///
 /// Rename this to something domain-specific (Schedule, Roster, Timetable, …).
-#[planning_solution]
+#[planning_solution(constraints = "crate::constraints::create_constraints")]
+#[basic_variable_config(
+    entity_collection = "tasks",
+    variable_field = "resource_idx",
+    variable_type = "usize",
+    value_range = "resources"
+)]
 #[derive(Serialize, Deserialize)]
 pub struct Plan {
     #[problem_fact_collection]

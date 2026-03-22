@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use crate::domain::{Employee, EmployeeSchedule, Shift};
-use crate::solver::SolverStatus;
+use solverforge::SolverStatus;
 
 /// Employee as seen by the API (camelCase JSON, flat lists).
 #[derive(Debug, Clone, Serialize, Deserialize)]

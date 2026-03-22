@@ -1,5 +1,3 @@
-// ─── mod.rs rewriting ─────────────────────────────────────────────────────────
-
 /// Extracts `SolutionType` and `ScoreType` from `impl ConstraintSet<S, T>` in mod.rs.
 /// Falls back to `Plan` / `HardSoftScore` on failure.
 pub(crate) fn extract_types(src: &str) -> (String, String) {

@@ -1,5 +1,3 @@
-// ─── Pattern + hardness resolution ───────────────────────────────────────────
-
 use dialoguer::{theme::ColorfulTheme, Select};
 use owo_colors::OwoColorize;
 
@@ -112,9 +110,7 @@ fn run_wizard(soft_flag: bool, domain: &Option<DomainModel>) -> Result<(Pattern,
     let pattern = pattern_options[pattern_idx].1;
 
     // Hard/soft selection (skip if pattern implies soft)
-    let is_soft = if matches!(pattern, Pattern::Balance | Pattern::Reward) {
-        true
-    } else if soft_flag {
+    let is_soft = if matches!(pattern, Pattern::Balance | Pattern::Reward) || soft_flag {
         true
     } else {
         let hardness_idx = Select::with_theme(&ColorfulTheme::default())

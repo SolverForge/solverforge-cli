@@ -1,6 +1,3 @@
-// ─── Public entry point ───────────────────────────────────────────────────────
-
-use owo_colors::OwoColorize;
 use std::fs;
 use std::path::Path;
 
@@ -9,8 +6,24 @@ use super::mod_rewriter::{extract_types, rewrite_mod};
 use super::skeleton::generate_skeleton;
 use super::utils::{snake_to_title, validate_name};
 use super::wizard::resolve_pattern_and_hardness;
+use crate::error::{CliError, CliResult};
+use crate::output;
+
+// Print lines present in `after` but not in `before`, prefixed with '+', when --verbose.
+fn print_diff_verbose(before: &str, after: &str) {
+    if !output::is_verbose() {
+        return;
+    }
+    let before_lines: Vec<&str> = before.lines().collect();
+    for line in after.lines() {
+        if !before_lines.contains(&line) {
+            println!("+ {}", line);
+        }
+    }
+}
 
 /// Runs `solverforge generate constraint <name> [pattern flags] [--hard|--soft]`.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     name: &str,
     soft: bool,
@@ -19,7 +32,9 @@ pub fn run(
     join: bool,
     balance: bool,
     reward: bool,
-) -> Result<(), String> {
+    force: bool,
+    pretend: bool,
+) -> CliResult {
     validate_name(name)?;
 
     let constraints_dir = Path::new("src/constraints");
@@ -27,17 +42,26 @@ pub fn run(
     let new_file = constraints_dir.join(format!("{}.rs", name));
 
     if !constraints_dir.exists() {
-        return Err("not a SolverForge project directory (src/constraints/ not found)".to_string());
+        return Err(CliError::NotInProject {
+            missing: "src/constraints/",
+        });
     }
     if !mod_path.exists() {
-        return Err("src/constraints/mod.rs not found".to_string());
+        return Err(CliError::NotInProject {
+            missing: "src/constraints/mod.rs",
+        });
     }
-    if new_file.exists() {
-        return Err(format!("constraint '{}' already exists", name));
+    if new_file.exists() && !force {
+        return Err(CliError::ResourceExists {
+            kind: "constraint",
+            name: name.to_string(),
+        });
     }
 
-    let mod_src = fs::read_to_string(&mod_path)
-        .map_err(|e| format!("failed to read src/constraints/mod.rs: {}", e))?;
+    let mod_src = fs::read_to_string(&mod_path).map_err(|e| CliError::IoError {
+        context: "failed to read src/constraints/mod.rs".to_string(),
+        source: e,
+    })?;
 
     // Parse domain model; fall back gracefully
     let domain = parse_domain();
@@ -55,7 +79,7 @@ pub fn run(
     let (pattern, is_soft) =
         resolve_pattern_and_hardness(soft, unary, pair, join, balance, reward, &domain)?;
 
-    // Generate and write the new constraint file
+    // Generate the new constraint file
     let skeleton = generate_skeleton(
         name,
         pattern,
@@ -65,42 +89,39 @@ pub fn run(
         &constraint_name,
         domain.as_ref(),
     );
-    fs::write(&new_file, skeleton)
-        .map_err(|e| format!("failed to write {}: {}", new_file.display(), e))?;
+
+    if pretend {
+        println!("Would create src/constraints/{}.rs", name);
+        println!("Would update src/constraints/mod.rs");
+        return Ok(());
+    }
+
+    fs::write(&new_file, &skeleton).map_err(|e| CliError::IoError {
+        context: format!("failed to write {}", new_file.display()),
+        source: e,
+    })?;
 
     // Rewrite mod.rs
     let new_mod = rewrite_mod(&mod_src, name);
-    fs::write(&mod_path, new_mod)
-        .map_err(|e| format!("failed to write src/constraints/mod.rs: {}", e))?;
+    fs::write(&mod_path, &new_mod).map_err(|e| CliError::IoError {
+        context: "failed to write src/constraints/mod.rs".to_string(),
+        source: e,
+    })?;
 
-    // Success output
-    println!(
-        "{} Created {}",
-        "▸".bright_green(),
-        format!("src/constraints/{}.rs", name).bright_cyan()
-    );
-    println!(
-        "{} Updated {}",
-        "▸".bright_green(),
-        "src/constraints/mod.rs".bright_cyan()
-    );
+    crate::commands::sf_config::add_constraint(name)?;
+
+    output::print_create(&format!("src/constraints/{}.rs", name));
+    print_diff_verbose("", &skeleton);
+    output::print_update("src/constraints/mod.rs");
+    print_diff_verbose(&mod_src, &new_mod);
     println!();
-    println!("  Next steps:");
-    println!(
-        "    1. Open {}",
-        format!("src/constraints/{}.rs", name).bright_cyan()
-    );
-    println!(
-        "    2. {}",
-        "Replace the TODO placeholders with your domain logic".bright_black()
-    );
-    println!(
-        "    {} {}  {}",
-        "$".bright_black(),
-        "solverforge server".bright_cyan(),
-        "# test your constraint".bright_black()
-    );
-    println!();
+    if !output::is_quiet() {
+        println!("  Next steps:");
+        println!("    1. Open src/constraints/{}.rs", name);
+        println!("    2. Replace the TODO placeholders with your domain logic");
+        println!("    solverforge server  # test your constraint");
+        println!();
+    }
 
     Ok(())
 }

@@ -1,102 +1,80 @@
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::oneshot;
+use tokio::sync::mpsc;
 
-use super::config::SolverConfig;
-use super::engine::solve_blocking;
+use solverforge::{HardSoftDecimalScore, SolverManager, SolverStatus};
+
 use crate::domain::EmployeeSchedule;
 
-/// Status of a solving job.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum SolverStatus {
-    NotSolving,
-    Solving,
+// Static manager — must be 'static for SolverManager::solve.
+static MANAGER: SolverManager<EmployeeSchedule> = SolverManager::new();
+
+struct JobState {
+    slot_id: usize,
+    latest: Option<EmployeeSchedule>,
+    score: Option<HardSoftDecimalScore>,
+    receiver: mpsc::UnboundedReceiver<(EmployeeSchedule, HardSoftDecimalScore)>,
+    status: SolverStatus,
 }
 
-impl SolverStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            SolverStatus::NotSolving => "NOT_SOLVING",
-            SolverStatus::Solving => "SOLVING",
-        }
-    }
-}
-
-/// A solving job with its current state.
-pub struct SolveJob {
-    pub id: String,
-    pub status: SolverStatus,
-    pub schedule: EmployeeSchedule,
-    pub config: SolverConfig,
-    stop_signal: Option<oneshot::Sender<()>>,
-}
-
-impl SolveJob {
-    pub fn new(id: String, schedule: EmployeeSchedule) -> Self {
-        Self {
-            id,
-            status: SolverStatus::NotSolving,
-            schedule,
-            config: SolverConfig::default_config(),
-            stop_signal: None,
-        }
-    }
-}
-
-/// Manages solving jobs.
+/// Manages solving jobs using the framework SolverManager.
 pub struct SolverService {
-    jobs: RwLock<HashMap<String, Arc<RwLock<SolveJob>>>>,
+    jobs: RwLock<HashMap<String, JobState>>,
 }
 
 impl SolverService {
     pub fn new() -> Self {
-        Self {
-            jobs: RwLock::new(HashMap::new()),
+        Self { jobs: RwLock::new(HashMap::new()) }
+    }
+
+    pub fn start_solving(&self, id: String, schedule: EmployeeSchedule) {
+        let (slot_id, receiver) = MANAGER.solve(schedule);
+        let state = JobState {
+            slot_id,
+            latest: None,
+            score: None,
+            receiver,
+            status: SolverStatus::Solving,
+        };
+        self.jobs.write().insert(id, state);
+    }
+
+    // Polls the channel and calls `f` with the latest schedule.
+    pub fn with_snapshot<R>(
+        &self,
+        id: &str,
+        f: impl FnOnce(&EmployeeSchedule, Option<HardSoftDecimalScore>, SolverStatus) -> R,
+    ) -> Option<R> {
+        let mut jobs = self.jobs.write();
+        let state = jobs.get_mut(id)?;
+        while let Ok((solution, score)) = state.receiver.try_recv() {
+            state.latest = Some(solution);
+            state.score = Some(score);
         }
+        state.status = MANAGER.get_status(state.slot_id);
+        Some(f(state.latest.as_ref()?, state.score, state.status))
     }
 
-    pub fn create_job(&self, id: String, schedule: EmployeeSchedule) -> Arc<RwLock<SolveJob>> {
-        let job = Arc::new(RwLock::new(SolveJob::new(id.clone(), schedule)));
-        self.jobs.write().insert(id, job.clone());
-        job
-    }
-
-    pub fn get_job(&self, id: &str) -> Option<Arc<RwLock<SolveJob>>> {
-        self.jobs.read().get(id).cloned()
+    pub fn has_job(&self, id: &str) -> bool {
+        self.jobs.read().contains_key(id)
     }
 
     pub fn list_jobs(&self) -> Vec<String> {
         self.jobs.read().keys().cloned().collect()
     }
 
-    pub fn remove_job(&self, id: &str) -> Option<Arc<RwLock<SolveJob>>> {
-        self.jobs.write().remove(id)
-    }
-
-    pub fn start_solving(&self, job: Arc<RwLock<SolveJob>>) {
-        let (tx, rx) = oneshot::channel();
-        let config = job.read().config.clone();
-        {
-            let mut g = job.write();
-            g.status = SolverStatus::Solving;
-            g.stop_signal = Some(tx);
-        }
-        let job_clone = job.clone();
-        tokio::task::spawn_blocking(move || {
-            solve_blocking(job_clone, rx, config);
-        });
-    }
-
     pub fn stop_solving(&self, id: &str) -> bool {
-        if let Some(job) = self.get_job(id) {
-            let mut g = job.write();
-            if let Some(tx) = g.stop_signal.take() {
-                let _ = tx.send(());
-                g.status = SolverStatus::NotSolving;
-                return true;
-            }
+        let jobs = self.jobs.read();
+        if let Some(state) = jobs.get(id) {
+            return MANAGER.terminate_early(state.slot_id);
+        }
+        false
+    }
+
+    pub fn remove_job(&self, id: &str) -> bool {
+        if let Some(state) = self.jobs.write().remove(id) {
+            MANAGER.free_slot(state.slot_id);
+            return true;
         }
         false
     }

@@ -7,6 +7,9 @@
    use nested tuples for more. */
 
 mod all_assigned;
+mod affinity_match;
+mod balanced_load;
+mod capacity_limit;
 
 pub use self::assemble::create_constraints;
 
@@ -16,6 +19,11 @@ mod assemble {
     use solverforge::prelude::*;
 
     pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        (all_assigned::constraint(),)
+        (
+            all_assigned::constraint(),
+            capacity_limit::constraint(),
+            affinity_match::constraint(),
+            balanced_load::constraint(),
+        )
     }
 }

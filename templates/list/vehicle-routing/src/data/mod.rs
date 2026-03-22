@@ -7,7 +7,7 @@ use crate::domain::ProblemData;
 /// Returns a small demo instance: 1 depot + 10 customers, capacity 50.
 pub fn demo_instance() -> (Box<ProblemData>, usize) {
     // Node 0 is the depot; nodes 1-10 are customers.
-    let demands = vec![0, 10, 15, 20, 10, 15, 10, 20, 15, 10, 20];
+    let demands = vec![0i32, 10, 15, 20, 10, 15, 10, 20, 15, 10, 20];
     let n = demands.len();
 
     // Coordinates for distance computation: (x, y)
@@ -17,7 +17,7 @@ pub fn demo_instance() -> (Box<ProblemData>, usize) {
         (70, 40), (10, 50), (90, 30), (50, 10), (30, 90),
     ];
 
-    let distance_matrix = (0..n)
+    let distance_matrix: Vec<Vec<i64>> = (0..n)
         .map(|i| {
             (0..n)
                 .map(|j| {
@@ -34,8 +34,12 @@ pub fn demo_instance() -> (Box<ProblemData>, usize) {
     let data = Box::new(ProblemData {
         capacity: 50,
         depot: 0,
-        demands,
-        distance_matrix,
+        demands: demands.iter().map(|&d| d as i32).collect(),
+        distance_matrix: distance_matrix.clone(),
+        time_windows: vec![(0, i64::MAX); n],
+        service_durations: vec![0; n],
+        travel_times: distance_matrix,
+        vehicle_departure_time: 0,
     });
 
     (data, n_vehicles)

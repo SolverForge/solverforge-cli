@@ -3,175 +3,222 @@ use std::path::Path;
 
 use crate::commands::generate_constraint::parse_domain;
 use crate::commands::generate_domain::{find_file_for_type, snake_to_pascal};
+use crate::error::{CliError, CliResult};
+use crate::output;
 
-// ─── Solution ──────────────────────────────────────────────────────────────────
+fn confirm_destroy(kind: &str, name: &str, skip_confirm: bool) -> CliResult<bool> {
+    if skip_confirm {
+        return Ok(true);
+    }
 
-pub fn run_solution() -> Result<(), String> {
-    let domain =
-        parse_domain().ok_or_else(|| "No planning solution found in src/domain/".to_string())?;
+    let prompt = format!("Remove {} '{}'?", kind, name);
+    let confirmed = dialoguer::Confirm::new()
+        .with_prompt(prompt)
+        .default(false)
+        .interact()
+        .map_err(|e| CliError::general(format!("prompt failed: {}", e)))?;
+
+    Ok(confirmed)
+}
+
+pub fn run_solution(skip_confirm: bool) -> CliResult {
+    let domain = parse_domain().ok_or(CliError::NotInProject {
+        missing: "src/domain/ (no planning solution found)",
+    })?;
+
+    if !confirm_destroy("solution", &domain.solution_type, skip_confirm)? {
+        output::print_skip(&format!("solution {}", domain.solution_type));
+        return Ok(());
+    }
 
     let domain_dir = Path::new("src/domain");
     let solution_file = find_file_for_type(domain_dir, &domain.solution_type)?;
 
-    // Extract the filename without extension
     let file_name = solution_file
         .file_stem()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| "Invalid solution file name".to_string())?;
+        .ok_or_else(|| CliError::general("invalid solution file name"))?
+        .to_string();
 
-    // Delete the solution file
-    fs::remove_file(&solution_file)
-        .map_err(|e| format!("Failed to delete {}: {}", solution_file.display(), e))?;
+    fs::remove_file(&solution_file).map_err(|e| CliError::IoError {
+        context: format!("failed to delete {}", solution_file.display()),
+        source: e,
+    })?;
 
-    // Remove from domain/mod.rs
-    remove_from_domain_mod(file_name)?;
+    remove_from_domain_mod(&file_name)?;
 
-    println!("✓ Removed solution: {}", domain.solution_type);
+    output::print_remove(&format!("src/domain/{}.rs", file_name));
+    output::print_update("src/domain/mod.rs");
     Ok(())
 }
 
-// ─── Entity ────────────────────────────────────────────────────────────────────
-
-pub fn run_entity(name: &str) -> Result<(), String> {
-    let domain = parse_domain().ok_or_else(|| "No domain model found".to_string())?;
+pub fn run_entity(name: &str, skip_confirm: bool) -> CliResult {
+    let domain = parse_domain().ok_or(CliError::NotInProject {
+        missing: "src/domain/",
+    })?;
 
     let snake = name.to_lowercase().replace('-', "_");
     let pascal = snake_to_pascal(&snake);
 
-    // Check if entity exists by looking for it in the entities list
     let entity = domain
         .entities
         .iter()
         .find(|e| e.item_type == pascal)
-        .ok_or_else(|| format!("Entity '{}' not found", name))?;
+        .ok_or_else(|| CliError::ResourceNotFound {
+            kind: "entity",
+            name: name.to_string(),
+        })?;
 
-    // Try to find the file
+    if !confirm_destroy("entity", &pascal, skip_confirm)? {
+        output::print_skip(&format!("entity {}", pascal));
+        return Ok(());
+    }
+
     let domain_dir = Path::new("src/domain");
     let file_path = find_file_for_type(domain_dir, &pascal).or_else(|_| {
-        // Fallback to snake_case filename
         let path = domain_dir.join(format!("{}.rs", snake));
         if path.exists() {
             Ok(path)
         } else {
-            Err(format!("Entity file for {} not found", pascal))
+            Err(CliError::ResourceNotFound {
+                kind: "entity file",
+                name: pascal.clone(),
+            })
         }
     })?;
 
-    // Extract the filename without extension
     let file_name = file_path
         .file_stem()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| "Invalid entity file name".to_string())?;
+        .ok_or_else(|| CliError::general("invalid entity file name"))?
+        .to_string();
 
-    // Delete the entity file
-    fs::remove_file(&file_path)
-        .map_err(|e| format!("Failed to delete {}: {}", file_path.display(), e))?;
+    fs::remove_file(&file_path).map_err(|e| CliError::IoError {
+        context: format!("failed to delete {}", file_path.display()),
+        source: e,
+    })?;
 
-    // Remove from domain/mod.rs
-    remove_from_domain_mod(file_name)?;
-
-    // Unwire from solution
+    remove_from_domain_mod(&file_name)?;
     unwire_collection_from_solution(&entity.field_name, &entity.item_type, &domain.solution_type)?;
+    crate::commands::sf_config::remove_entity(&snake)?;
 
-    println!("✓ Removed entity: {}", pascal);
+    output::print_remove(&format!("src/domain/{}.rs", file_name));
+    output::print_update("src/domain/mod.rs");
     Ok(())
 }
 
-// ─── Fact ──────────────────────────────────────────────────────────────────────
-
-pub fn run_fact(name: &str) -> Result<(), String> {
-    let domain = parse_domain().ok_or_else(|| "No domain model found".to_string())?;
+pub fn run_fact(name: &str, skip_confirm: bool) -> CliResult {
+    let domain = parse_domain().ok_or(CliError::NotInProject {
+        missing: "src/domain/",
+    })?;
 
     let snake = name.to_lowercase().replace('-', "_");
     let pascal = snake_to_pascal(&snake);
 
-    // Check if fact exists by looking for it in the facts list
     let fact = domain
         .facts
         .iter()
         .find(|f| f.item_type == pascal)
-        .ok_or_else(|| format!("Fact '{}' not found", name))?;
+        .ok_or_else(|| CliError::ResourceNotFound {
+            kind: "fact",
+            name: name.to_string(),
+        })?;
 
-    // Try to find the file
+    if !confirm_destroy("fact", &pascal, skip_confirm)? {
+        output::print_skip(&format!("fact {}", pascal));
+        return Ok(());
+    }
+
     let domain_dir = Path::new("src/domain");
     let file_path = find_file_for_type(domain_dir, &pascal).or_else(|_| {
-        // Fallback to snake_case filename
         let path = domain_dir.join(format!("{}.rs", snake));
         if path.exists() {
             Ok(path)
         } else {
-            Err(format!("Fact file for {} not found", pascal))
+            Err(CliError::ResourceNotFound {
+                kind: "fact file",
+                name: pascal.clone(),
+            })
         }
     })?;
 
-    // Extract the filename without extension
     let file_name = file_path
         .file_stem()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| "Invalid fact file name".to_string())?;
+        .ok_or_else(|| CliError::general("invalid fact file name"))?
+        .to_string();
 
-    // Delete the fact file
-    fs::remove_file(&file_path)
-        .map_err(|e| format!("Failed to delete {}: {}", file_path.display(), e))?;
+    fs::remove_file(&file_path).map_err(|e| CliError::IoError {
+        context: format!("failed to delete {}", file_path.display()),
+        source: e,
+    })?;
 
-    // Remove from domain/mod.rs
-    remove_from_domain_mod(file_name)?;
-
-    // Unwire from solution
+    remove_from_domain_mod(&file_name)?;
     unwire_collection_from_solution(&fact.field_name, &fact.item_type, &domain.solution_type)?;
+    crate::commands::sf_config::remove_fact(&snake)?;
 
-    println!("✓ Removed fact: {}", pascal);
+    output::print_remove(&format!("src/domain/{}.rs", file_name));
+    output::print_update("src/domain/mod.rs");
     Ok(())
 }
 
-// ─── Constraint ────────────────────────────────────────────────────────────────
-
-pub fn run_constraint(name: &str) -> Result<(), String> {
+pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
     let snake = name.to_lowercase().replace('-', "_");
     let file_path = format!("src/constraints/{}.rs", snake);
 
     if !Path::new(&file_path).exists() {
-        return Err(format!("Constraint file {} does not exist", file_path));
+        return Err(CliError::ResourceNotFound {
+            kind: "constraint",
+            name: name.to_string(),
+        });
     }
 
-    // Delete the constraint file
-    fs::remove_file(&file_path).map_err(|e| format!("Failed to delete {}: {}", file_path, e))?;
+    if !confirm_destroy("constraint", name, skip_confirm)? {
+        output::print_skip(&format!("constraint {}", name));
+        return Ok(());
+    }
 
-    // Remove from constraints/mod.rs
+    fs::remove_file(&file_path).map_err(|e| CliError::IoError {
+        context: format!("failed to delete {}", file_path),
+        source: e,
+    })?;
+
     remove_constraint_from_mod(&snake)?;
+    crate::commands::sf_config::remove_constraint(&snake)?;
 
-    println!("✓ Removed constraint: {}", name);
+    output::print_remove(&file_path);
+    output::print_update("src/constraints/mod.rs");
     Ok(())
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-fn remove_from_domain_mod(mod_name: &str) -> Result<(), String> {
+fn remove_from_domain_mod(mod_name: &str) -> CliResult {
     let mod_path = Path::new("src/domain/mod.rs");
     if !mod_path.exists() {
-        return Ok(()); // Nothing to remove from
+        return Ok(());
     }
 
-    let content = fs::read_to_string(mod_path)
-        .map_err(|e| format!("Failed to read src/domain/mod.rs: {}", e))?;
+    let content = fs::read_to_string(mod_path).map_err(|e| CliError::IoError {
+        context: "failed to read src/domain/mod.rs".to_string(),
+        source: e,
+    })?;
 
-    // Remove mod declaration and pub use statement
     let lines: Vec<&str> = content.lines().collect();
-    let mut new_lines = Vec::new();
+    let mut new_lines: Vec<String> = Vec::new();
 
     for line in lines {
-        // Skip lines that declare or use this module
         if line.trim() == format!("mod {};", mod_name)
             || line.trim().starts_with(&format!("pub use {}::", mod_name))
         {
             continue;
         }
-        new_lines.push(line);
+        new_lines.push(line.to_string());
     }
 
     let new_content = new_lines.join("\n");
-    fs::write(mod_path, new_content)
-        .map_err(|e| format!("Failed to update src/domain/mod.rs: {}", e))?;
+    fs::write(mod_path, new_content).map_err(|e| CliError::IoError {
+        context: "failed to update src/domain/mod.rs".to_string(),
+        source: e,
+    })?;
 
     Ok(())
 }
@@ -180,12 +227,14 @@ fn unwire_collection_from_solution(
     field_name: &str,
     type_name: &str,
     solution_type: &str,
-) -> Result<(), String> {
+) -> CliResult {
     let domain_dir = Path::new("src/domain");
     let solution_file = find_file_for_type(domain_dir, solution_type)?;
 
-    let content = fs::read_to_string(&solution_file)
-        .map_err(|e| format!("Failed to read {}: {}", solution_file.display(), e))?;
+    let content = fs::read_to_string(&solution_file).map_err(|e| CliError::IoError {
+        context: format!("failed to read {}", solution_file.display()),
+        source: e,
+    })?;
 
     let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
     let mut i = 0;
@@ -193,9 +242,7 @@ fn unwire_collection_from_solution(
     while i < lines.len() {
         let line = &lines[i];
 
-        // Remove field declaration (looking for the field_name as used in entities/facts)
         if line.contains(&format!("{}: Vec<{}>", field_name, type_name)) {
-            // Also remove any annotations above it
             let mut start = i;
             while start > 0 && lines[start - 1].trim().starts_with('#') {
                 start -= 1;
@@ -205,13 +252,11 @@ fn unwire_collection_from_solution(
             continue;
         }
 
-        // Remove from constructor
         if line.contains(&format!("{}: Vec::new()", field_name)) {
             lines.remove(i);
             continue;
         }
 
-        // Remove use statement
         if line.trim() == format!("use super::{};", type_name) {
             lines.remove(i);
             continue;
@@ -221,61 +266,114 @@ fn unwire_collection_from_solution(
     }
 
     let new_content = lines.join("\n");
-    fs::write(&solution_file, new_content)
-        .map_err(|e| format!("Failed to update {}: {}", solution_file.display(), e))?;
+    fs::write(&solution_file, new_content).map_err(|e| CliError::IoError {
+        context: format!("failed to update {}", solution_file.display()),
+        source: e,
+    })?;
 
     Ok(())
 }
 
-fn remove_constraint_from_mod(name: &str) -> Result<(), String> {
+fn remove_constraint_from_mod(name: &str) -> CliResult {
     let mod_path = Path::new("src/constraints/mod.rs");
     if !mod_path.exists() {
-        return Ok(()); // Nothing to remove from
+        return Ok(());
     }
 
-    let content = fs::read_to_string(mod_path)
-        .map_err(|e| format!("Failed to read src/constraints/mod.rs: {}", e))?;
+    let content = fs::read_to_string(mod_path).map_err(|e| CliError::IoError {
+        context: "failed to read src/constraints/mod.rs".to_string(),
+        source: e,
+    })?;
 
     let lines: Vec<&str> = content.lines().collect();
-    let mut new_lines = Vec::new();
-    let mut in_tuple = false;
-    let mut removed_item = false;
+    let mut new_lines: Vec<String> = Vec::new();
 
     for line in lines {
-        // Skip module declaration
         if line.trim() == format!("mod {};", name) {
             continue;
         }
 
-        // Track if we're inside the tuple
-        if line.contains("pub fn all() ->") || line.contains("impl Constraint") {
-            in_tuple = true;
-            new_lines.push(line);
-        } else if in_tuple && line.contains(')') {
-            // Clean up trailing comma if we removed the last item
-            if removed_item && !new_lines.is_empty() {
-                let last_idx = new_lines.len() - 1;
-                if let Some(last) = new_lines.get_mut(last_idx) {
-                    if last.trim().ends_with(',') {
-                        *last = last.trim().trim_end_matches(',');
-                    }
-                }
+        if let Some(updated_line) = remove_constraint_call_from_line(line, name) {
+            if updated_line.trim().is_empty() {
+                continue;
             }
-            in_tuple = false;
-            new_lines.push(line);
-        } else if in_tuple && line.contains(&format!("{}::", name)) {
-            // Skip lines that reference this module in the tuple
-            removed_item = true;
+            new_lines.push(updated_line);
             continue;
-        } else {
-            new_lines.push(line);
         }
+        new_lines.push(line.to_string());
     }
 
     let result = new_lines.join("\n");
 
-    fs::write(mod_path, result)
-        .map_err(|e| format!("Failed to update src/constraints/mod.rs: {}", e))?;
+    fs::write(mod_path, result).map_err(|e| CliError::IoError {
+        context: "failed to update src/constraints/mod.rs".to_string(),
+        source: e,
+    })?;
 
     Ok(())
+}
+
+fn remove_constraint_call_from_line(line: &str, name: &str) -> Option<String> {
+    let needle = format!("{name}::constraint()");
+    if !line.contains(&needle) {
+        return None;
+    }
+
+    let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+    let trimmed = line.trim();
+    let had_trailing_comma = trimmed.ends_with(',');
+    let without_trailing_comma = trimmed.trim_end_matches(',');
+    let has_tuple_wrapper =
+        without_trailing_comma.starts_with('(') && without_trailing_comma.ends_with(')');
+    let inner = if has_tuple_wrapper {
+        &without_trailing_comma[1..without_trailing_comma.len() - 1]
+    } else {
+        without_trailing_comma
+    };
+
+    let kept_parts: Vec<&str> = inner
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty() && *part != needle)
+        .collect();
+
+    if kept_parts.is_empty() {
+        return Some(String::new());
+    }
+
+    let mut rebuilt = if has_tuple_wrapper {
+        format!("({})", kept_parts.join(", "))
+    } else {
+        kept_parts.join(", ")
+    };
+
+    if had_trailing_comma {
+        rebuilt.push(',');
+    }
+
+    Some(format!("{indent}{rebuilt}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::remove_constraint_call_from_line;
+
+    #[test]
+    fn removes_constraint_from_multiline_tuple_entry() {
+        let line = "            all_assigned::constraint(),";
+        let updated = remove_constraint_call_from_line(line, "all_assigned")
+            .expect("line should be rewritten");
+        assert!(updated.is_empty());
+    }
+
+    #[test]
+    fn removes_constraint_from_flat_tuple_line() {
+        let line = "    (capacity::constraint(), extra::constraint(), distance::constraint())";
+        let updated =
+            remove_constraint_call_from_line(line, "extra").expect("line should be rewritten");
+        assert_eq!(
+            updated,
+            "    (capacity::constraint(), distance::constraint())"
+        );
+    }
 }

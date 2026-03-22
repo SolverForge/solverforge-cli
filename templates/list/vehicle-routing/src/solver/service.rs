@@ -1,57 +1,25 @@
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::oneshot;
+use tokio::sync::mpsc;
 
-use crate::domain::{ProblemData, Vehicle, VrpPlan};
+use solverforge::{HardSoftScore, SolverManager, SolverStatus};
 
-use super::engine::{compute_cost, solve};
+use crate::domain::VrpPlan;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum SolverStatus {
-    NotSolving,
-    Solving,
+// Static manager — must be 'static for SolverManager::solve.
+static MANAGER: SolverManager<VrpPlan> = SolverManager::new();
+
+struct JobState {
+    slot_id: usize,
+    latest: Option<VrpPlan>,
+    score: Option<HardSoftScore>,
+    receiver: mpsc::UnboundedReceiver<(VrpPlan, HardSoftScore)>,
+    status: SolverStatus,
 }
 
-/// A solving job: holds the `Box<ProblemData>` that backs all vehicle pointers.
-pub struct SolveJob {
-    pub id: String,
-    pub status: SolverStatus,
-    /// The latest best plan (updated periodically during solving).
-    pub routes: Vec<Vec<usize>>,
-    pub cost: i64,
-    pub score: Option<String>,
-    /// Owned problem data — must outlive all vehicle raw pointers.
-    pub problem: Box<ProblemData>,
-    pub n_vehicles: usize,
-    pub time_limit_secs: u64,
-    stop_signal: Option<oneshot::Sender<()>>,
-}
-
-impl SolveJob {
-    pub fn new(
-        id: String,
-        problem: Box<ProblemData>,
-        n_vehicles: usize,
-        time_limit_secs: u64,
-    ) -> Self {
-        Self {
-            id,
-            status: SolverStatus::NotSolving,
-            routes: Vec::new(),
-            cost: 0,
-            score: None,
-            problem,
-            n_vehicles,
-            time_limit_secs,
-            stop_signal: None,
-        }
-    }
-}
-
+/// Manages solving jobs using the framework SolverManager.
 pub struct SolverService {
-    jobs: RwLock<HashMap<String, Arc<RwLock<SolveJob>>>>,
+    jobs: RwLock<HashMap<String, JobState>>,
 }
 
 impl SolverService {
@@ -59,70 +27,60 @@ impl SolverService {
         Self { jobs: RwLock::new(HashMap::new()) }
     }
 
-    pub fn create_job(&self, id: String, job: SolveJob) -> Arc<RwLock<SolveJob>> {
-        let job = Arc::new(RwLock::new(job));
-        self.jobs.write().insert(id, job.clone());
-        job
+    pub fn start_solving(&self, id: String, plan: VrpPlan) {
+        let (slot_id, receiver) = MANAGER.solve(plan);
+        let state = JobState {
+            slot_id,
+            latest: None,
+            score: None,
+            receiver,
+            status: SolverStatus::Solving,
+        };
+        self.jobs.write().insert(id, state);
     }
 
-    pub fn get_job(&self, id: &str) -> Option<Arc<RwLock<SolveJob>>> {
-        self.jobs.read().get(id).cloned()
+    // Polls the channel for updates, then calls `f` with the latest plan.
+    pub fn with_snapshot<R>(&self, id: &str, f: impl FnOnce(&VrpPlan, Option<HardSoftScore>, SolverStatus) -> R) -> Option<R> {
+        let mut jobs = self.jobs.write();
+        let state = jobs.get_mut(id)?;
+        while let Ok((solution, score)) = state.receiver.try_recv() {
+            state.latest = Some(solution);
+            state.score = Some(score);
+        }
+        state.status = MANAGER.get_status(state.slot_id);
+        let plan = state.latest.as_ref()?;
+        Some(f(plan, state.score, state.status))
+    }
+
+    pub fn get_status(&self, id: &str) -> Option<SolverStatus> {
+        let mut jobs = self.jobs.write();
+        let state = jobs.get_mut(id)?;
+        while let Ok((solution, score)) = state.receiver.try_recv() {
+            state.latest = Some(solution);
+            state.score = Some(score);
+        }
+        state.status = MANAGER.get_status(state.slot_id);
+        Some(state.status)
     }
 
     pub fn list_jobs(&self) -> Vec<String> {
         self.jobs.read().keys().cloned().collect()
     }
 
-    pub fn remove_job(&self, id: &str) -> Option<Arc<RwLock<SolveJob>>> {
-        self.jobs.write().remove(id)
+    pub fn stop_solving(&self, id: &str) -> bool {
+        let jobs = self.jobs.read();
+        if let Some(state) = jobs.get(id) {
+            return MANAGER.terminate_early(state.slot_id);
+        }
+        false
     }
 
-    pub fn start_solving(&self, job: Arc<RwLock<SolveJob>>) {
-        let (tx, _rx) = oneshot::channel::<()>();
-        let time_limit_secs = job.read().time_limit_secs;
-        let n_vehicles = job.read().n_vehicles;
-        {
-            let mut g = job.write();
-            g.status = SolverStatus::Solving;
-            g.stop_signal = Some(tx);
+    pub fn remove_job(&self, id: &str) -> bool {
+        if let Some(state) = self.jobs.write().remove(id) {
+            MANAGER.free_slot(state.slot_id);
+            return true;
         }
-
-        let job_clone = job.clone();
-        tokio::task::spawn_blocking(move || {
-            // Build a fresh VrpPlan borrowing the stable Box pointer.
-            let data_ptr: *const ProblemData = &*job_clone.read().problem;
-            let vehicles: Vec<Vehicle> = (0..n_vehicles)
-                .map(|id| Vehicle { id, visits: Vec::new(), data: data_ptr })
-                .collect();
-            let plan = VrpPlan { vehicles, score: None };
-
-            let solved = solve(plan, time_limit_secs);
-
-            let routes: Vec<Vec<usize>> = solved
-                .vehicles
-                .iter()
-                .filter(|v| !v.visits.is_empty())
-                .map(|v| v.visits.clone())
-                .collect();
-            let cost = compute_cost(&solved);
-            let score = solved.score.map(|s| s.to_string());
-
-            let mut g = job_clone.write();
-            g.routes = routes;
-            g.cost = cost;
-            g.score = score;
-            g.status = SolverStatus::NotSolving;
-        });
-    }
-
-    pub fn stop_solving(&self, id: &str) {
-        if let Some(job) = self.get_job(id) {
-            let mut g = job.write();
-            if let Some(tx) = g.stop_signal.take() {
-                let _ = tx.send(());
-                g.status = SolverStatus::NotSolving;
-            }
-        }
+        false
     }
 }
 
