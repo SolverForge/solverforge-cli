@@ -12,10 +12,8 @@ mod test_support;
 use error::CliResult;
 
 const EXAMPLES: &str = "\x1b[1mExamples:\x1b[0m
-  solverforge new my-scheduler --basic=employee-scheduling
-  solverforge new my-planner --basic
+  solverforge new my-scheduler --standard
   solverforge new my-sorter --list
-  solverforge new my-router --list=vehicle-routing
   solverforge generate entity shift --planning-variable employee_idx
   solverforge generate constraint no_overlap --pair --hard
   solverforge generate scaffold shift employee_idx:usize --entity --constraint no_overlap --pair
@@ -57,32 +55,22 @@ enum Command {
     ///
     /// Variable class (required, mutually exclusive):
     ///
-    ///   --basic     Standard variable — each entity holds one assigned value
+    ///   --standard  Standard variable — each entity holds one assigned value
     ///   --list      List variable     — each entity owns an ordered sequence
-    ///
-    /// Specializations (append after the flag with =):
-    ///
-    ///   --basic=employee-scheduling
-    ///   --list=vehicle-routing
     #[command(
-        after_help = "Examples:\n  solverforge new my-scheduler --basic=employee-scheduling\n  solverforge new my-planner --basic\n  solverforge new my-sorter --list\n  solverforge new my-router --list=vehicle-routing"
+        after_help = "Examples:\n  solverforge new my-scheduler --standard\n  solverforge new my-sorter --list"
     )]
     New {
         /// Project name (directory that will be created)
         name: String,
 
-        /// Scaffold a standard-variable project (optionally: --basic=employee-scheduling)
-        #[arg(long = "basic", value_name = "SPECIALIZATION", num_args = 0..=1, require_equals = true)]
-        basic: Option<Option<String>>,
+        /// Scaffold a standard-variable project
+        #[arg(long = "standard")]
+        standard: bool,
 
-        /// Scaffold a list-variable project (optionally: --list=vehicle-routing)
-        #[arg(
-            long = "list",
-            value_name = "SPECIALIZATION",
-            num_args = 0..=1,
-            require_equals = true
-        )]
-        list: Option<Option<String>>,
+        /// Scaffold a list-variable project
+        #[arg(long = "list")]
+        list: bool,
 
         /// Skip running `git init` and initial commit
         #[arg(long)]
@@ -370,22 +358,14 @@ fn main() {
     let result: CliResult = match cli.command {
         Command::New {
             name,
-            basic,
+            standard,
             list,
             skip_git,
             skip_readme,
-        } => {
-            let is_basic = basic.is_some();
-            let is_list = list.is_some();
-            let specialization: Option<String> = basic.flatten().or_else(|| list.flatten());
-
-            match commands::new::Template::parse(is_basic, is_list, specialization.as_deref()) {
-                Ok(template) => {
-                    commands::new::run(&name, template, skip_git, skip_readme, cli.quiet)
-                }
-                Err(e) => Err(e),
-            }
-        }
+        } => match commands::new::Template::parse(standard, list) {
+            Ok(template) => commands::new::run(&name, template, skip_git, skip_readme, cli.quiet),
+            Err(e) => Err(e),
+        },
         Command::Generate {
             resource:
                 GenerateResource::Constraint {

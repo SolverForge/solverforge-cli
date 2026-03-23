@@ -6,24 +6,16 @@ use crate::error::{is_rust_keyword, CliError, CliResult};
 use crate::output;
 use crate::template;
 
-static BASIC_GENERIC_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/basic/generic");
-
-static EMPLOYEE_SCHEDULING_TEMPLATE: Dir =
-    include_dir!("$CARGO_MANIFEST_DIR/templates/basic/employee-scheduling");
+static STANDARD_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/basic/generic");
 
 static LIST_GENERIC_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/list/generic");
 
-static VEHICLE_ROUTING_TEMPLATE: Dir =
-    include_dir!("$CARGO_MANIFEST_DIR/templates/list/vehicle-routing");
-
 const AVAILABLE_TEMPLATES: &str = "
   Standard Variable (each entity holds one value):
-    --basic                         — generic standard-variable skeleton
-    --basic=employee-scheduling     — assign employees to shifts
+    --standard                      — generic standard-variable skeleton
 
   List Variable (each entity owns an ordered sequence):
-    --list                          — generic list-variable skeleton
-    --list=vehicle-routing          — capacitated vehicle routing (CVRP)";
+    --list                          — generic list-variable skeleton";
 
 pub fn run(
     name: &str,
@@ -38,20 +30,11 @@ pub fn run(
     validate_project_name(name, &crate_name)?;
 
     match template {
-        Template::Basic => scaffold(
+        Template::Standard => scaffold(
             name,
             &crate_name,
-            &BASIC_GENERIC_TEMPLATE,
-            "basic",
-            skip_git,
-            skip_readme,
-            quiet,
-        ),
-        Template::BasicEmployeeScheduling => scaffold(
-            name,
-            &crate_name,
-            &EMPLOYEE_SCHEDULING_TEMPLATE,
-            "basic/employee-scheduling",
+            &STANDARD_TEMPLATE,
+            "standard",
             skip_git,
             skip_readme,
             quiet,
@@ -61,15 +44,6 @@ pub fn run(
             &crate_name,
             &LIST_GENERIC_TEMPLATE,
             "list",
-            skip_git,
-            skip_readme,
-            quiet,
-        ),
-        Template::ListVehicleRouting => scaffold(
-            name,
-            &crate_name,
-            &VEHICLE_ROUTING_TEMPLATE,
-            "list/vehicle-routing",
             skip_git,
             skip_readme,
             quiet,
@@ -254,32 +228,16 @@ fn print_template_guidance(project_name: &str, label: &str) {
     println!("    cd {}", project_name);
 
     match label {
-        "basic/employee-scheduling" => {
+        "standard" => {
             println!("    solverforge server");
             println!();
             println!("  This template includes:");
-            println!(
-                "    - 7 real constraints (skill matching, no overlap, 10h gap, balance, etc.)"
-            );
-            println!("    - Web UI at http://localhost:7860 with timeline visualization");
-            println!("    - CSV data loading (employees.csv, shifts.csv)");
-            println!("    - Console output with phase timing");
-        }
-        "list/vehicle-routing" => {
-            println!("    solverforge server");
-            println!();
-            println!("  This template includes:");
-            println!("    - 2-phase solver (Clarke-Wright construction + late acceptance)");
-            println!("    - Capacity constraint (hard) and total distance (soft)");
-            println!("    - Web UI at http://localhost:7860 with route visualization");
-            println!("    - Built-in CVRP demo instance");
-        }
-        "basic" => {
-            println!("    solverforge generate solution schedule");
+            println!("    - Standard-variable domain skeleton with demo data");
+            println!("    - Assignment-board UI composed from solverforge-ui primitives");
+            println!("    - REST API with SSE live updates and score analysis");
             println!("    solverforge generate entity task --planning-variable resource_idx");
             println!("    solverforge generate fact resource");
             println!("    solverforge generate constraint all_assigned --unary --hard");
-            println!("    solverforge server");
         }
         "list" => {
             println!("    solverforge server");
@@ -287,8 +245,8 @@ fn print_template_guidance(project_name: &str, label: &str) {
             println!("  This template includes:");
             println!("    - 2-phase solver (cheapest insertion + late acceptance)");
             println!("    - Balanced load constraint (soft)");
-            println!("    - Sequence view at http://localhost:7860");
-            println!("    - REST API with SSE live updates");
+            println!("    - Sequence view composed from solverforge-ui primitives");
+            println!("    - REST API with SSE live updates and score analysis");
         }
         _ => {
             println!("    solverforge server");
@@ -364,29 +322,21 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
 }
 
 pub enum Template {
-    Basic,
-    BasicEmployeeScheduling,
+    Standard,
     List,
-    ListVehicleRouting,
 }
 
 impl Template {
-    pub fn parse(basic: bool, list: bool, specialization: Option<&str>) -> CliResult<Self> {
-        match (basic, list, specialization) {
-            (true, false, None) => Ok(Template::Basic),
-            (true, false, Some("employee-scheduling")) => Ok(Template::BasicEmployeeScheduling),
-            (false, true, None) => Ok(Template::List),
-            (false, true, Some("vehicle-routing")) => Ok(Template::ListVehicleRouting),
-            (false, false, None) => Err(CliError::with_hint(
+    pub fn parse(standard: bool, list: bool) -> CliResult<Self> {
+        match (standard, list) {
+            (true, false) => Ok(Template::Standard),
+            (false, true) => Ok(Template::List),
+            (false, false) => Err(CliError::with_hint(
                 "specify a template flag",
                 format!("Available templates:{AVAILABLE_TEMPLATES}"),
             )),
-            (true, true, _) => Err(CliError::general(
-                "--basic and --list are mutually exclusive",
-            )),
-            (_, _, Some(s)) => Err(CliError::with_hint(
-                format!("unknown specialization: '{}'", s),
-                format!("Available templates:{AVAILABLE_TEMPLATES}"),
+            (true, true) => Err(CliError::general(
+                "--standard and --list are mutually exclusive",
             )),
         }
     }

@@ -6,7 +6,7 @@ use crate::error::CliResult;
 // Project root takes precedence over home directory.
 #[derive(Debug, Default)]
 pub struct RcConfig {
-    // Default template name (e.g. "basic", "basic/employee-scheduling")
+    // Default template name (e.g. "standard" or "list")
     pub default_template: Option<String>,
     // Default server port
     pub port: Option<u16>,
@@ -100,16 +100,13 @@ mod tests {
     #[test]
     fn test_parse_rc_full() {
         let toml = r#"
-default_template = "basic/employee-scheduling"
+default_template = "standard"
 port = 8080
 no_color = true
 quiet = false
 "#;
         let cfg = parse_rc(toml).unwrap();
-        assert_eq!(
-            cfg.default_template.as_deref(),
-            Some("basic/employee-scheduling")
-        );
+        assert_eq!(cfg.default_template.as_deref(), Some("standard"));
         assert_eq!(cfg.port, Some(8080));
         assert!(cfg.no_color);
         assert!(!cfg.quiet);
