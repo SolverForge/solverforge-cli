@@ -1,9 +1,7 @@
 // Integration tests for project scaffolding.
 //
-// Tests marked `#[ignore]` invoke `cargo check` inside a temp directory which requires a full
-// Rust toolchain and network access (to fetch crate dependencies). Run them explicitly with:
-//
-//   cargo test -p solverforge-cli -- --ignored
+// Some tests invoke `cargo check` inside a temp directory and therefore require a full Rust
+// toolchain plus dependency resolution access.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -34,7 +32,6 @@ fn pin_generated_project_to_local_solverforge(project_dir: &std::path::Path) {
     let manifest =
         std::fs::read_to_string(&cargo_toml).expect("failed to read scaffold Cargo.toml");
     let solverforge_path = workspace_root()
-        .join("..")
         .join("solverforge-rs")
         .join("crates")
         .join("solverforge");
@@ -127,12 +124,35 @@ fn test_new_standard_creates_project_files() {
     );
 
     let app_js = std::fs::read_to_string(project_dir.join("static").join("app.js")).unwrap();
+    let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
+    let solver_service =
+        std::fs::read_to_string(project_dir.join("src").join("solver").join("service.rs")).unwrap();
+    let routes_rs =
+        std::fs::read_to_string(project_dir.join("src").join("api").join("routes.rs")).unwrap();
     assert!(
         app_js.contains("SF.createHeader")
             && app_js.contains("SF.createStatusBar")
             && app_js.contains("SF.createSolver"),
         "standard scaffold should compose the app from solverforge-ui primitives: {}",
         app_js
+    );
+    assert!(
+        cargo_toml.contains("solverforge-ui = \"0.3.0\""),
+        "standard scaffold should pin solverforge-ui 0.3.0: {}",
+        cargo_toml
+    );
+    assert!(
+        solver_service.contains("mpsc::UnboundedReceiver<(Plan, HardSoftScore)>")
+            && solver_service.contains("\"movesPerSecond\"")
+            && solver_service.contains("\"id\""),
+        "standard scaffold should align solver SSE payloads with the current backend contract: {}",
+        solver_service
+    );
+    assert!(
+        routes_rs.contains("Json<CreateScheduleResponse>")
+            && routes_rs.contains("Json(CreateScheduleResponse { id })"),
+        "standard scaffold should return create schedule responses as JSON ids: {}",
+        routes_rs
     );
     assert!(
         app_js.contains("renderAssignmentBoard"),
@@ -172,12 +192,35 @@ fn test_new_list_creates_project_files() {
     );
 
     let app_js = std::fs::read_to_string(project_dir.join("static").join("app.js")).unwrap();
+    let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
+    let solver_service =
+        std::fs::read_to_string(project_dir.join("src").join("solver").join("service.rs")).unwrap();
+    let routes_rs =
+        std::fs::read_to_string(project_dir.join("src").join("api").join("routes.rs")).unwrap();
     assert!(
         app_js.contains("SF.createHeader")
             && app_js.contains("SF.createStatusBar")
             && app_js.contains("SF.createSolver"),
         "list scaffold should compose the app from solverforge-ui primitives: {}",
         app_js
+    );
+    assert!(
+        cargo_toml.contains("solverforge-ui = \"0.3.0\""),
+        "list scaffold should pin solverforge-ui 0.3.0: {}",
+        cargo_toml
+    );
+    assert!(
+        solver_service.contains("mpsc::UnboundedReceiver<(Plan, HardSoftScore)>")
+            && solver_service.contains("\"movesPerSecond\"")
+            && solver_service.contains("\"id\""),
+        "list scaffold should align solver SSE payloads with the current backend contract: {}",
+        solver_service
+    );
+    assert!(
+        routes_rs.contains("Json<CreateScheduleResponse>")
+            && routes_rs.contains("Json(CreateScheduleResponse { id })"),
+        "list scaffold should return create schedule responses as JSON ids: {}",
+        routes_rs
     );
     assert!(
         app_js.contains("renderSequences"),
@@ -214,7 +257,6 @@ fn test_new_removed_specializations_fail_with_guidance() {
 }
 
 #[test]
-#[ignore = "invokes cargo check in a temp dir; requires network + toolchain; run with --ignored"]
 fn test_new_standard_cargo_check_passes() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let project_name = "test_cargo_check_standard";
@@ -249,7 +291,6 @@ fn test_new_standard_cargo_check_passes() {
 }
 
 #[test]
-#[ignore = "invokes cargo check in a temp dir; requires network + toolchain; run with --ignored"]
 fn test_new_list_cargo_check_passes() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let project_name = "test_cargo_check_list";
@@ -281,7 +322,6 @@ fn test_new_list_cargo_check_passes() {
 }
 
 #[test]
-#[ignore = "invokes cargo check in a temp dir; requires network + toolchain; run with --ignored"]
 fn test_generate_constraint_workflow_cargo_check_passes() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let project_name = "test_generated_constraint_workflow";

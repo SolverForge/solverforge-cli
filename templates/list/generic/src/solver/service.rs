@@ -1,6 +1,6 @@
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 use tokio::sync::{broadcast, mpsc};
 
 use solverforge::{HardSoftScore, SolverManager, SolverStatus};
@@ -10,15 +10,21 @@ use crate::domain::Plan;
 // Static manager — must be 'static for SolverManager::solve.
 static MANAGER: SolverManager<Plan> = SolverManager::new();
 
-fn sse_payload(score: Option<HardSoftScore>, status: SolverStatus, mps: u64) -> String {
+fn sse_payload(id: &str, score: Option<HardSoftScore>, status: SolverStatus, mps: u64) -> String {
     let score_str = score.map(|s| format!("{}", s));
     let status_str = match status {
         SolverStatus::Solving => "SOLVING",
         SolverStatus::NotSolving => "NOT_SOLVING",
     };
     match score_str {
-        Some(s) => format!(r#"{{"score":"{}","solverStatus":"{}","movesPerSecond":{}}}"#, s, status_str, mps),
-        None => format!(r#"{{"score":null,"solverStatus":"{}","movesPerSecond":{}}}"#, status_str, mps),
+        Some(s) => format!(
+            r#"{{"id":"{}","score":"{}","solverStatus":"{}","movesPerSecond":{}}}"#,
+            id, s, status_str, mps
+        ),
+        None => format!(
+            r#"{{"id":"{}","score":null,"solverStatus":"{}","movesPerSecond":{}}}"#,
+            id, status_str, mps
+        ),
     }
 }
 
@@ -37,7 +43,9 @@ pub struct SolverService {
 
 impl SolverService {
     pub fn new() -> Self {
-        Self { jobs: Arc::new(RwLock::new(HashMap::new())) }
+        Self {
+            jobs: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 
     pub fn start_solving(&self, id: String, plan: Plan) {
@@ -75,7 +83,7 @@ impl SolverService {
     pub fn sse_snapshot(&self, id: &str) -> Option<String> {
         let jobs = self.jobs.read();
         let state = jobs.get(id)?;
-        Some(sse_payload(state.score, state.status, 0))
+        Some(sse_payload(id, state.score, state.status, 0))
     }
 
     pub fn has_job(&self, id: &str) -> bool {
@@ -112,7 +120,12 @@ async fn drain_receiver(
 ) {
     let last_mps = 0u64;
     while let Some((solution, score)) = receiver.recv().await {
-        let _ = sse_tx.send(sse_payload(Some(score), SolverStatus::Solving, last_mps));
+        let _ = sse_tx.send(sse_payload(
+            &id,
+            Some(score),
+            SolverStatus::Solving,
+            last_mps,
+        ));
         let mut jobs = jobs.write();
         if let Some(state) = jobs.get_mut(&id) {
             state.latest = Some(solution);
@@ -120,6 +133,7 @@ async fn drain_receiver(
         }
     }
     let _ = sse_tx.send(sse_payload(
+        &id,
         jobs.read().get(&id).and_then(|s| s.score),
         SolverStatus::NotSolving,
         last_mps,

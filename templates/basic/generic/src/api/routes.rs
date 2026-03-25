@@ -20,12 +20,16 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
-        Self { solver: SolverService::new() }
+        Self {
+            solver: SolverService::new(),
+        }
     }
 }
 
 impl Default for AppState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Creates the API router.
@@ -51,7 +55,9 @@ pub fn router(state: Arc<AppState>) -> Router {
 // ============================================================================
 
 #[derive(Serialize)]
-struct HealthResponse { status: &'static str }
+struct HealthResponse {
+    status: &'static str,
+}
 
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse { status: "UP" })
@@ -86,11 +92,17 @@ async fn get_demo_data(Path(id): Path<String>) -> Result<Json<PlanDto>, StatusCo
 async fn create_schedule(
     State(state): State<Arc<AppState>>,
     Json(dto): Json<PlanDto>,
-) -> String {
+) -> Json<CreateScheduleResponse> {
     let id = Uuid::new_v4().to_string();
     let plan = dto.to_domain();
     state.solver.start_solving(id.clone(), plan);
-    id
+    Json(CreateScheduleResponse { id })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateScheduleResponse {
+    id: String,
 }
 
 async fn list_schedules(State(state): State<Arc<AppState>>) -> Json<Vec<String>> {
@@ -126,19 +138,18 @@ async fn get_schedule_status(
     if !state.solver.has_job(&id) {
         return Err(StatusCode::NOT_FOUND);
     }
-    match state.solver.with_snapshot(&id, |plan, _score, status| StatusResponse {
-        score: plan.score.map(|s| s.to_string()),
-        solver_status: status,
-    }) {
+    match state
+        .solver
+        .with_snapshot(&id, |plan, _score, status| StatusResponse {
+            score: plan.score.map(|s| s.to_string()),
+            solver_status: status,
+        }) {
         Some(resp) => Ok(Json(resp)),
         None => Err(StatusCode::NOT_FOUND),
     }
 }
 
-async fn stop_solving(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-) -> StatusCode {
+async fn stop_solving(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> StatusCode {
     state.solver.stop_solving(&id);
     if state.solver.remove_job(&id) {
         StatusCode::NO_CONTENT
@@ -156,7 +167,9 @@ async fn analyze_schedule(Json(dto): Json<PlanDto>) -> Json<AnalyzeResponse> {
     let constraints = create_constraints();
     let mut director = ScoreDirector::new(plan, constraints);
     let score = director.calculate_score();
-    let analyses = director.constraints().evaluate_detailed(director.working_solution());
+    let analyses = director
+        .constraints()
+        .evaluate_detailed(director.working_solution());
 
     let constraints_dto: Vec<ConstraintAnalysisDto> = analyses
         .into_iter()
@@ -198,7 +211,9 @@ async fn analyze_by_id(
     let constraints = create_constraints();
     let mut director = ScoreDirector::new(plan, constraints);
     let score = director.calculate_score();
-    let analyses = director.constraints().evaluate_detailed(director.working_solution());
+    let analyses = director
+        .constraints()
+        .evaluate_detailed(director.working_solution());
 
     let constraints_dto: Vec<ConstraintAnalysisDto> = analyses
         .into_iter()

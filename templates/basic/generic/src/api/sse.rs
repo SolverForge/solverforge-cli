@@ -16,9 +16,12 @@ pub async fn events(
 ) -> Result<Response<Body>, StatusCode> {
     let rx = state.solver.subscribe(&id).ok_or(StatusCode::NOT_FOUND)?;
 
-    let bootstrap_json = state.solver.sse_snapshot(&id).unwrap_or_else(||
-        r#"{"solverStatus":"SOLVING"}"#.to_string()
-    );
+    let bootstrap_json = state.solver.sse_snapshot(&id).unwrap_or_else(|| {
+        format!(
+            r#"{{"id":"{}","solverStatus":"SOLVING","movesPerSecond":0}}"#,
+            id
+        )
+    });
     let bootstrap = tokio_stream::iter(std::iter::once(Ok::<_, std::convert::Infallible>(
         format!("data: {}\n\n", bootstrap_json).into_bytes(),
     )));

@@ -109,7 +109,7 @@
     var html = '<p><strong>Score:</strong> ' + SF.escHtml(analysis.score) + '</p>';
     html += '<table class="sf-table"><thead><tr><th>Constraint</th><th>Type</th><th>Score</th><th>Matches</th></tr></thead><tbody>';
     analysis.constraints.forEach(function (c) {
-      html += '<tr><td>' + SF.escHtml(c.name) + '</td><td>' + SF.escHtml(c.type) + '</td><td>' + SF.escHtml(c.score) + '</td><td>' + (c.matches ? c.matches.length : 0) + '</td></tr>';
+      html += '<tr><td>' + SF.escHtml(c.name) + '</td><td>' + SF.escHtml(c.constraintType || c.type || '') + '</td><td>' + SF.escHtml(c.score) + '</td><td>' + (c.matches ? c.matches.length : 0) + '</td></tr>';
     });
     html += '</tbody></table>';
     return html;
