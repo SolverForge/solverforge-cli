@@ -240,6 +240,14 @@ fn test_new_list_creates_project_files() {
         "list scaffold should keep sequence-specific rendering: {}",
         app_js
     );
+    assert!(
+        app_js.contains("SF.rail.createHeader")
+            && app_js.contains("SF.rail.createCard")
+            && app_js.contains("buildSequenceCard")
+            && !app_js.contains("Item Sequence"),
+        "list scaffold should render a sequence board from solverforge-ui rail primitives: {}",
+        app_js
+    );
 }
 
 #[test]

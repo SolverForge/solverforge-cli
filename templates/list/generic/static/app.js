@@ -119,16 +119,134 @@
     sequencesContainer.innerHTML = '';
     var containers = data.containers || [];
     if (!containers.length) return;
+    var itemsByName = buildItemsByName(data);
+    var metrics = deriveSequenceMetrics(containers);
+    var sortedContainers = containers.slice().sort(compareContainers);
+    var horizon = Math.max(metrics.longestSequence, 1);
 
-    var cols = ['Container', 'Item Sequence', 'Count'];
-    var rows = containers.map(function (c) {
-      var seq = (c.items || []).join(' → ') || '—';
-      return [c.name, seq, String((c.items || []).length)];
+    sequencesContainer.appendChild(buildSequenceOverview(metrics));
+    sequencesContainer.appendChild(SF.rail.createHeader({
+      label: config.entities[0] ? config.entities[0].label : 'Container',
+      labelWidth: 220,
+      columns: Array.from({ length: horizon }, function (_, i) { return String(i + 1); }),
+    }));
+
+    sortedContainers.forEach(function (container) {
+      sequencesContainer.appendChild(buildSequenceCard(container, itemsByName, metrics, horizon).el);
+    });
+  }
+
+  function buildItemsByName(data) {
+    var items = data.items || data.itemFacts || data.item_facts || [];
+    return items.reduce(function (map, item) {
+      if (item && item.name) map[item.name] = item;
+      return map;
+    }, {});
+  }
+
+  function deriveSequenceMetrics(containers) {
+    var lengths = containers.map(function (container) {
+      return (container.items || []).length;
+    });
+    var totalItems = lengths.reduce(function (sum, count) { return sum + count; }, 0);
+    var longestSequence = lengths.reduce(function (maxCount, count) {
+      return Math.max(maxCount, count);
+    }, 0);
+    var emptyContainers = lengths.filter(function (count) { return count === 0; }).length;
+    return {
+      totalContainers: containers.length,
+      totalItems: totalItems,
+      longestSequence: longestSequence,
+      emptyContainers: emptyContainers,
+      averageItems: containers.length ? (totalItems / containers.length).toFixed(1) : '0.0',
+    };
+  }
+
+  function compareContainers(a, b) {
+    var aCount = (a.items || []).length;
+    var bCount = (b.items || []).length;
+    if (bCount !== aCount) return bCount - aCount;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  }
+
+  function buildSequenceOverview(metrics) {
+    var section = SF.el('div', { className: 'sf-section' });
+    section.appendChild(SF.createTable({
+      columns: ['Containers', 'Items', 'Longest sequence', 'Empty containers', 'Average items / container'],
+      rows: [[
+        String(metrics.totalContainers),
+        String(metrics.totalItems),
+        String(metrics.longestSequence),
+        String(metrics.emptyContainers),
+        String(metrics.averageItems),
+      ]],
+    }));
+    return section;
+  }
+
+  function buildSequenceCard(container, itemsByName, metrics, horizon) {
+    var sequence = container.items || [];
+    var firstItem = sequence.length ? describeItem(sequence[0], itemsByName).name : '—';
+    var lastItem = sequence.length ? describeItem(sequence[sequence.length - 1], itemsByName).name : '—';
+    var length = sequence.length;
+    var fullnessPct = metrics.longestSequence > 0
+      ? Math.round((length / metrics.longestSequence) * 100)
+      : 0;
+    var card = SF.rail.createCard({
+      id: 'container-' + String(container.id != null ? container.id : container.name),
+      name: container.name || 'Unnamed container',
+      labelWidth: 220,
+      columns: horizon,
+      type: 'Sequence',
+      badges: containerBadges(length, metrics.longestSequence),
+      gauges: [
+        {
+          label: 'Length',
+          pct: Math.min(fullnessPct, 100),
+          style: length === 0 ? 'heat' : 'load',
+          text: String(length) + '/' + String(Math.max(metrics.longestSequence, 1)),
+        },
+      ],
+      stats: [
+        { label: 'Items', value: length },
+        { label: 'First', value: firstItem },
+        { label: 'Last', value: lastItem },
+      ],
     });
 
-    var section = SF.el('div', { className: 'sf-section' });
-    section.appendChild(SF.createTable({ columns: cols, rows: rows }));
-    sequencesContainer.appendChild(section);
+    sequence.forEach(function (itemName, index) {
+      var item = describeItem(itemName, itemsByName);
+      card.addBlock({
+        id: 'container-' + String(container.id || container.name) + '-item-' + String(index),
+        label: item.name,
+        meta: 'Pos ' + String(index + 1),
+        start: index,
+        end: index + 1,
+        horizon: horizon,
+        color: SF.colors.pick(String(item.key)),
+      });
+    });
+
+    return card;
+  }
+
+  function containerBadges(length, longestSequence) {
+    if (length === 0) return ['Empty'];
+    var badges = [];
+    if (length === longestSequence) badges.push('Longest');
+    if (length === 1) badges.push('Single');
+    return badges;
+  }
+
+  function describeItem(itemName, itemsByName) {
+    var item = itemsByName[itemName];
+    if (!item) {
+      return { key: itemName || 'item', name: itemName || 'Unnamed' };
+    }
+    return {
+      key: item.index != null ? item.index : item.name,
+      name: item.name || itemName || 'Unnamed',
+    };
   }
 
   function renderTables(data) {
