@@ -199,7 +199,7 @@ fn solverforge_dep_spec() -> String {
 }
 
 fn solverforge_ui_dep_spec() -> String {
-    "\"0.3.0\"".to_string()
+    "\"0.3.1\"".to_string()
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {

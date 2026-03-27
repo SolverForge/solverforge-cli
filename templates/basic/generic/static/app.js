@@ -19,7 +19,7 @@
 
   // Header
   var header = SF.createHeader({
-    logo: '/sf/img/solverforge-horizontal.svg',
+    logo: '/sf/img/ouroboros.svg',
     title: config.title,
     subtitle: config.subtitle,
     tabs: [

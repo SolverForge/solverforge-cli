@@ -138,9 +138,15 @@ fn test_new_standard_creates_project_files() {
         app_js
     );
     assert!(
+        app_js.contains("logo: '/sf/img/ouroboros.svg'")
+            && !app_js.contains("solverforge-horizontal.svg"),
+        "standard scaffold should use the ouroboros SVG as the header logo: {}",
+        app_js
+    );
+    assert!(
         cargo_toml.contains(
             "solverforge = { version = \"0.6.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
-        ) && cargo_toml.contains("solverforge-ui = \"0.3.0\""),
+        ) && cargo_toml.contains("solverforge-ui = \"0.3.1\""),
         "standard scaffold should pin release-safe SolverForge dependencies: {}",
         cargo_toml
     );
@@ -216,9 +222,15 @@ fn test_new_list_creates_project_files() {
         app_js
     );
     assert!(
+        app_js.contains("logo: '/sf/img/ouroboros.svg'")
+            && !app_js.contains("solverforge-horizontal.svg"),
+        "list scaffold should use the ouroboros SVG as the header logo: {}",
+        app_js
+    );
+    assert!(
         cargo_toml.contains(
             "solverforge = { version = \"0.6.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
-        ) && cargo_toml.contains("solverforge-ui = \"0.3.0\""),
+        ) && cargo_toml.contains("solverforge-ui = \"0.3.1\""),
         "list scaffold should pin release-safe SolverForge dependencies: {}",
         cargo_toml
     );
