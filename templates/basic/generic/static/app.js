@@ -190,65 +190,42 @@
     var resources = data.resources || [];
     var tasks = data.tasks || [];
     var assignedByResource = {};
-    var totalDemand = 0;
-    var assignedDemand = 0;
-    var affinityMatches = 0;
+    var unassigned = [];
 
     resources.forEach(function (res) {
       assignedByResource[res.name] = [];
     });
 
     tasks.forEach(function (task) {
-      totalDemand += Number(task.demand || 0);
       var resourceName = task.resource && task.resource.name;
       if (resourceName && assignedByResource[resourceName]) {
         assignedByResource[resourceName].push(task);
-        assignedDemand += Number(task.demand || 0);
-        if (task.resource.affinityGroup === task.preferredGroup) affinityMatches += 1;
+      } else {
+        unassigned.push(task);
       }
     });
 
-    var totalCapacity = resources.reduce(function (sum, resource) {
-      return sum + Number(resource.capacity || 0);
-    }, 0);
+    if (!resources.length && !unassigned.length) return;
 
-    var summary = SF.el('div', { className: 'sf-section' });
-    summary.appendChild(SF.el('h3', null, 'Assignment Overview'));
-    summary.appendChild(SF.createTable({
-      columns: ['Metric', 'Value'],
-      rows: [
-        ['Resources', String(resources.length)],
-        ['Tasks', String(tasks.length)],
-        ['Total capacity', String(totalCapacity)],
-        ['Total demand', String(totalDemand)],
-        ['Assigned', String(tasks.filter(function (task) { return !!task.resource; }).length)],
-        ['Assigned demand', String(assignedDemand)],
-        ['Affinity matches', String(affinityMatches)],
-        ['Unassigned', String(tasks.filter(function (task) { return !task.resource; }).length)],
-      ],
-    }));
-    heroContainer.appendChild(summary);
-
-    resources
+    var sortedResources = resources
       .slice()
       .sort(function (a, b) {
         return resourceLoad(assignedByResource[b.name]) - resourceLoad(assignedByResource[a.name]);
-      })
-      .forEach(function (res) {
-      heroContainer.appendChild(buildAssignmentSection(
-        res,
-        assignedByResource[res.name],
-        'Tasks'
-      ));
+      });
+    var horizon = Math.max(maxAssignedTasks(sortedResources, assignedByResource), unassigned.length, 1);
+
+    heroContainer.appendChild(SF.rail.createHeader({
+      label: config.facts[0] ? config.facts[0].label : 'Resource',
+      labelWidth: 220,
+      columns: Array.from({ length: horizon }, function (_, i) { return 'Slot ' + (i + 1); }),
+    }));
+
+    sortedResources.forEach(function (res) {
+      heroContainer.appendChild(buildAssignmentCard(res, assignedByResource[res.name], horizon).el);
     });
 
-    var unassigned = tasks.filter(function (task) { return !task.resource; });
     if (unassigned.length) {
-      heroContainer.appendChild(buildAssignmentSection({
-        name: 'Unassigned',
-        capacity: 0,
-        affinityGroup: '—',
-      }, unassigned, 'Tasks'));
+      heroContainer.appendChild(buildUnassignedCard(unassigned, horizon).el);
     }
   }
 
@@ -258,48 +235,105 @@
     }, 0);
   }
 
-  function buildAssignmentSection(resource, tasks, statLabel) {
-    var section = SF.el('div', { className: 'sf-section' });
+  function maxAssignedTasks(resources, assignedByResource) {
+    return resources.reduce(function (maxCount, resource) {
+      return Math.max(maxCount, (assignedByResource[resource.name] || []).length);
+    }, 0);
+  }
+
+  function buildAssignmentCard(resource, tasks, horizon) {
     var load = resourceLoad(tasks);
-    var title = resource.name;
-    if (resource.capacity) {
-      title += ' (' + load + '/' + resource.capacity + ' load)';
-    } else {
-      title += ' (' + tasks.length + ')';
-    }
-    section.appendChild(SF.el('h3', null, title));
-    if (!tasks.length) {
-      section.appendChild(SF.el('p', null, 'No assigned entities.'));
-      return section;
-    }
     var matches = tasks.filter(function (task) {
       return task.preferredGroup === resource.affinityGroup;
     }).length;
-    section.appendChild(SF.createTable({
-      columns: ['Affinity group', 'Capacity', 'Load', 'Preference matches'],
-      rows: [[
-        resource.affinityGroup || '—',
-        String(resource.capacity || 0),
-        String(load),
-        String(matches),
-      ]],
-    }));
-    section.appendChild(SF.createTable({
-      columns: ['Entity', 'Id', 'Demand', 'Preferred group', statLabel],
-      rows: tasks
-        .slice()
-        .sort(function (a, b) { return Number(b.demand || 0) - Number(a.demand || 0); })
-        .map(function (task, index) {
-        return [
-          task.name || 'Unnamed',
-          task.id || '—',
-          String(task.demand || 0),
-          task.preferredGroup || '—',
-          String(index + 1),
-        ];
-      }),
-    }));
-    return section;
+    var capacity = Number(resource.capacity || 0);
+    var loadPct = capacity > 0 ? Math.round((load / capacity) * 100) : 0;
+    var card = SF.rail.createCard({
+      id: 'resource-' + String(resource.index != null ? resource.index : resource.name),
+      name: resource.name || 'Unnamed resource',
+      labelWidth: 220,
+      columns: horizon,
+      type: 'Affinity',
+      badges: [resource.affinityGroup || '—'],
+      gauges: [
+        {
+          label: 'Load',
+          pct: Math.min(loadPct, 100),
+          style: loadPct > 100 ? 'heat' : 'load',
+          text: capacity > 0 ? String(load) + '/' + String(capacity) : String(load),
+        },
+      ],
+      stats: [
+        { label: 'Tasks', value: tasks.length },
+        { label: 'Assigned demand', value: load },
+        { label: 'Preference matches', value: matches },
+      ],
+    });
+    tasks
+      .slice()
+      .sort(function (a, b) { return Number(b.demand || 0) - Number(a.demand || 0); })
+      .forEach(function (task, index) {
+        card.addBlock({
+          id: 'task-' + String(task.id || index),
+          label: task.name || 'Unnamed',
+          meta: 'Demand ' + String(task.demand || 0),
+          start: index,
+          end: index + 1,
+          horizon: horizon,
+          color: SF.colors.pick(String(task.preferredGroup || task.id || task.name || index)),
+        });
+      });
+    return card;
+  }
+
+  function buildUnassignedCard(tasks, horizon) {
+    var totalDemand = resourceLoad(tasks);
+    var card = SF.rail.createCard({
+      id: 'resource-unassigned',
+      name: 'Unassigned',
+      labelWidth: 220,
+      columns: horizon,
+      type: 'Attention',
+      badges: ['Needs assignment'],
+      gauges: [
+        { label: 'Demand', pct: 100, style: 'heat', text: String(totalDemand) },
+      ],
+      stats: [
+        { label: 'Tasks', value: tasks.length },
+        { label: 'Demand', value: totalDemand },
+        {
+          label: 'Top preference',
+          value: mostCommonGroup(tasks),
+        },
+      ],
+    });
+    tasks
+      .slice()
+      .sort(function (a, b) { return Number(b.demand || 0) - Number(a.demand || 0); })
+      .forEach(function (task, index) {
+        card.addBlock({
+          id: 'task-unassigned-' + String(task.id || index),
+          label: task.name || 'Unnamed',
+          meta: (task.preferredGroup || '—') + ' · demand ' + String(task.demand || 0),
+          start: index,
+          end: index + 1,
+          horizon: horizon,
+          color: SF.colors.pick('unassigned-' + String(task.preferredGroup || task.id || index)),
+        });
+      });
+    return card;
+  }
+
+  function mostCommonGroup(tasks) {
+    if (!tasks.length) return '—';
+    var counts = {};
+    tasks.forEach(function (task) {
+      var key = task.preferredGroup || '—';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.keys(counts).sort(function (a, b) {
+      return counts[b] - counts[a];
+    })[0];
   }
 
   function renderTables(data) {

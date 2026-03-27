@@ -43,7 +43,10 @@ fn pin_generated_project_to_local_solverforge(project_dir: &std::path::Path) {
         "solverforge = {{ path = {:?}, features = [\"serde\"] }}",
         solverforge_path
     );
-    let updated = if manifest.contains(
+    let updated = if manifest.contains(&standard_replacement) || manifest.contains(&basic_replacement)
+    {
+        manifest.clone()
+    } else if manifest.contains(
         "solverforge = { version = \"0.6.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }",
     ) {
         manifest.replacen(
@@ -58,11 +61,9 @@ fn pin_generated_project_to_local_solverforge(project_dir: &std::path::Path) {
             1,
         )
     };
-    assert_ne!(
-        manifest, updated,
-        "failed to rewrite scaffold dependency to local solverforge path"
-    );
-    std::fs::write(&cargo_toml, updated).expect("failed to update scaffold Cargo.toml");
+    if manifest != updated {
+        std::fs::write(&cargo_toml, updated).expect("failed to update scaffold Cargo.toml");
+    }
 }
 
 #[test]
@@ -137,8 +138,10 @@ fn test_new_standard_creates_project_files() {
         app_js
     );
     assert!(
-        cargo_toml.contains("solverforge-ui = \"0.3.0\""),
-        "standard scaffold should pin solverforge-ui 0.3.0: {}",
+        cargo_toml.contains(
+            "solverforge = { version = \"0.6.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+        ) && cargo_toml.contains("solverforge-ui = \"0.3.0\""),
+        "standard scaffold should pin release-safe SolverForge dependencies: {}",
         cargo_toml
     );
     assert!(
@@ -157,6 +160,14 @@ fn test_new_standard_creates_project_files() {
     assert!(
         app_js.contains("renderAssignmentBoard"),
         "standard scaffold should keep assignment-board-specific rendering: {}",
+        app_js
+    );
+    assert!(
+        app_js.contains("SF.rail.createHeader")
+            && app_js.contains("SF.rail.createCard")
+            && app_js.contains("buildAssignmentCard")
+            && !app_js.contains("buildAssignmentSection"),
+        "standard scaffold should render assignment cards from solverforge-ui rail primitives: {}",
         app_js
     );
 }
@@ -205,8 +216,10 @@ fn test_new_list_creates_project_files() {
         app_js
     );
     assert!(
-        cargo_toml.contains("solverforge-ui = \"0.3.0\""),
-        "list scaffold should pin solverforge-ui 0.3.0: {}",
+        cargo_toml.contains(
+            "solverforge = { version = \"0.6.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+        ) && cargo_toml.contains("solverforge-ui = \"0.3.0\""),
+        "list scaffold should pin release-safe SolverForge dependencies: {}",
         cargo_toml
     );
     assert!(

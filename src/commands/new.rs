@@ -108,6 +108,8 @@ fn scaffold(
     output::print_heading(&format!("Creating {} project '{}'", label, project_name));
 
     let vars: &[(&str, &str)] = &[
+        ("solverforge_dep", &solverforge_dep_spec()),
+        ("solverforge_ui_dep", &solverforge_ui_dep_spec()),
         ("project_name", project_name),
         ("crate_name", crate_name),
         ("solverforge_version", env!("CARGO_PKG_VERSION")),
@@ -187,6 +189,17 @@ fn scaffold(
     }
 
     Ok(())
+}
+
+fn solverforge_dep_spec() -> String {
+    format!(
+        "{{ version = \"{}\", features = [\"serde\", \"console\", \"verbose-logging\"] }}",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+fn solverforge_ui_dep_spec() -> String {
+    "\"0.3.0\"".to_string()
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {

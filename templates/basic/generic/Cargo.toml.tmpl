@@ -9,8 +9,8 @@ name = "{{crate_name}}"
 path = "src/main.rs"
 
 [dependencies]
-solverforge = { version = "{{solverforge_version}}", features = ["serde", "console", "verbose-logging"] }
-solverforge-ui = "0.3.0"
+solverforge = {{solverforge_dep}}
+solverforge-ui = {{solverforge_ui_dep}}
 # Web server
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
