@@ -1,21 +1,15 @@
 use serde::{Deserialize, Serialize};
-use solverforge::prelude::*;
 use solverforge::CrossEntityDistanceMeter;
+use solverforge::prelude::*;
 
 use super::{Container, Item};
 
 /// The root planning solution: items + containers + score.
 ///
 /// Rename this to something domain-specific (Route, Schedule, Assignment, …).
+/// The list field on `Container` declares what is solvable; this root type
+/// groups the sample data and score for the starter.
 #[planning_solution(constraints = "crate::constraints::create_constraints")]
-#[shadow_variable_updates(
-    list_owner = "containers",
-    list_field = "items",
-    element_type = "usize",
-    element_collection = "all_item_indices",
-    distance_meter = "crate::domain::ItemIndexDistanceMeter",
-    intra_distance_meter = "crate::domain::ItemIndexDistanceMeter",
-)]
 #[derive(Serialize, Deserialize)]
 pub struct Plan {
     #[problem_fact_collection]
@@ -30,7 +24,12 @@ pub struct Plan {
 impl Plan {
     pub fn new(item_facts: Vec<Item>, containers: Vec<Container>) -> Self {
         let all_item_indices = (0..item_facts.len()).collect();
-        Self { item_facts, containers, all_item_indices, score: None }
+        Self {
+            item_facts,
+            containers,
+            all_item_indices,
+            score: None,
+        }
     }
 }
 

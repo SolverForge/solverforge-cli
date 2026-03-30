@@ -1,6 +1,6 @@
 /* Demo data for local development.
 
-   Replace this with your own data loading (CSV, JSON, database, …). */
+Replace this with your own data loading (CSV, JSON, database, …). */
 
 use std::str::FromStr;
 

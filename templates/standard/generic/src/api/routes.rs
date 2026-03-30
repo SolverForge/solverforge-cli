@@ -1,8 +1,8 @@
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{delete, get, post, put},
-    Json, Router,
 };
 use serde::Serialize;
 use std::sync::Arc;
@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use super::dto::{AnalyzeResponse, ConstraintAnalysisDto, ConstraintMatchDto, PlanDto};
 use super::sse;
-use crate::data::{generate, DemoData};
+use crate::data::{DemoData, generate};
 use crate::solver::{SolverService, SolverStatus};
 
 /// Shared application state.

@@ -17,9 +17,11 @@ pub struct Task {
     pub preferred_group: String,
     /// Index into `Plan.resources`. `None` means unassigned.
     ///
-    /// This is the planning variable the solver optimizes.
+    /// This field declares what the solver may change.
+    /// `solver.toml` controls how the search runs; the starter template only
+    /// provides the sample app shape.
     /// Rename to match your domain (e.g. `employee_idx`, `machine_idx`).
-    #[planning_variable(allows_unassigned = true)]
+    #[planning_variable(value_range = "resources", allows_unassigned = true)]
     pub resource_idx: Option<usize>,
 }
 

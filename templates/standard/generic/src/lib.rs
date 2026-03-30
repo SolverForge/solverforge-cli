@@ -1,7 +1,7 @@
-/* {{project_name}} — list variable constraint optimizer built with SolverForge
+/* {{project_name}} — standard variable constraint optimizer built with SolverForge
 
 Structure:
-  domain/      — Item (problem fact), Container (planning entity), Plan (solution)
+  domain/      — Resource (problem fact), Task (planning entity), Plan (solution)
   constraints/ — Scoring rules
   solver/      — Engine, service, termination config
   api/         — HTTP API (axum)

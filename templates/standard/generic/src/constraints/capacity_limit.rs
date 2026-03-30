@@ -1,6 +1,6 @@
 use crate::domain::Plan;
-use solverforge::prelude::*;
 use solverforge::IncrementalConstraint;
+use solverforge::prelude::*;
 
 /// HARD: Assigned demand must not exceed resource capacity.
 ///
@@ -35,12 +35,7 @@ impl CapacityLimitConstraint {
             .sum()
     }
 
-    fn update_load(
-        &mut self,
-        solution: &Plan,
-        entity_index: usize,
-        delta: i64,
-    ) -> HardSoftScore {
+    fn update_load(&mut self, solution: &Plan, entity_index: usize, delta: i64) -> HardSoftScore {
         self.ensure_shape(solution);
         let Some(task) = solution.tasks.get(entity_index) else {
             return HardSoftScore::ZERO;

@@ -28,13 +28,27 @@ pub fn run() -> CliResult {
             if !domain.entities.is_empty() {
                 println!("  Entities:");
                 for entity in &domain.entities {
-                    if entity.planning_vars.is_empty() {
+                    let mut solvable_fields = Vec::new();
+                    solvable_fields.extend(
+                        entity
+                            .planning_vars
+                            .iter()
+                            .map(|field| format!("{field} [standard]")),
+                    );
+                    solvable_fields.extend(
+                        entity
+                            .list_vars
+                            .iter()
+                            .map(|field| format!("{field} [list]")),
+                    );
+
+                    if solvable_fields.is_empty() {
                         println!("    - {}", entity.item_type);
                     } else {
                         println!(
-                            "    - {} (variables: {})",
+                            "    - {} (solvable fields: {})",
                             entity.item_type,
-                            entity.planning_vars.join(", ")
+                            solvable_fields.join(", ")
                         );
                     }
                 }

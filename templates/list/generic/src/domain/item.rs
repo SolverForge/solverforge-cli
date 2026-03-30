@@ -14,7 +14,10 @@ pub struct Item {
 
 impl Item {
     pub fn new(index: usize, name: impl Into<String>) -> Self {
-        Self { index, name: name.into() }
+        Self {
+            index,
+            name: name.into(),
+        }
     }
 
     pub fn finalize(&mut self) {}

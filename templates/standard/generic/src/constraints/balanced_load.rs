@@ -1,6 +1,6 @@
 use crate::domain::{Plan, Task};
-use solverforge::prelude::*;
 use solverforge::IncrementalConstraint;
+use solverforge::prelude::*;
 use solverforge::stream::vec;
 
 /// SOFT: Minimize variance in resource load (balanced assignment).

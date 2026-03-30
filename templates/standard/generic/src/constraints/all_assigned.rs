@@ -1,6 +1,6 @@
 use crate::domain::{Plan, Task};
-use solverforge::prelude::*;
 use solverforge::IncrementalConstraint;
+use solverforge::prelude::*;
 use solverforge::stream::vec;
 
 /// HARD: Every task must be assigned to a resource.

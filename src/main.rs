@@ -53,10 +53,10 @@ struct Cli {
 enum Command {
     /// Scaffold a new SolverForge project
     ///
-    /// Variable class (required, mutually exclusive):
+    /// Starter template (required, mutually exclusive):
     ///
-    ///   --standard  Standard variable — each entity holds one assigned value
-    ///   --list      List variable     — each entity owns an ordered sequence
+    ///   --standard  Standard starter — sample app with field-declared standard variables
+    ///   --list      List starter     — sample app with field-declared list variables
     #[command(
         after_help = "Examples:\n  solverforge new my-scheduler --standard\n  solverforge new my-sorter --list"
     )]

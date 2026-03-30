@@ -25,12 +25,7 @@ impl From<&Resource> for ResourceDto {
 
 impl ResourceDto {
     pub fn to_resource(&self) -> Resource {
-        Resource::new(
-            self.index,
-            &self.name,
-            self.capacity,
-            &self.affinity_group,
-        )
+        Resource::new(self.index, &self.name, self.capacity, &self.affinity_group)
     }
 }
 
@@ -107,10 +102,15 @@ impl PlanDto {
     }
 
     pub fn to_domain(&self) -> Plan {
-        let resources: Vec<Resource> =
-            self.resources.iter().map(ResourceDto::to_resource).collect();
-        let name_to_idx: std::collections::HashMap<&str, usize> =
-            resources.iter().map(|r| (r.name.as_str(), r.index)).collect();
+        let resources: Vec<Resource> = self
+            .resources
+            .iter()
+            .map(ResourceDto::to_resource)
+            .collect();
+        let name_to_idx: std::collections::HashMap<&str, usize> = resources
+            .iter()
+            .map(|r| (r.name.as_str(), r.index))
+            .collect();
         let tasks: Vec<Task> = self
             .tasks
             .iter()

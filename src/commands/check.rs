@@ -23,9 +23,9 @@ pub fn run() -> CliResult {
 
             // Verify entities have planning variables
             for entity in &domain.entities {
-                if entity.planning_vars.is_empty() {
+                if entity.planning_vars.is_empty() && entity.list_vars.is_empty() {
                     warnings.push(format!(
-                        "Entity '{}' has no planning variables — solver cannot optimize it",
+                        "Entity '{}' has no solvable fields — solver cannot optimize it",
                         entity.item_type
                     ));
                 }

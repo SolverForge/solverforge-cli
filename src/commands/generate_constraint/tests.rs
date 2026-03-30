@@ -104,12 +104,6 @@ fn test_find_annotated_struct() {
 #[test]
 fn test_find_annotated_struct_skips_multiline_attrs() {
     let src = r#"#[planning_solution(constraints = "crate::constraints::create_constraints")]
-#[basic_variable_config(
-    entity_collection = "shifts",
-    variable_field = "employee_idx",
-    variable_type = "usize",
-    value_range = "employees"
-)]
 pub struct EmployeeSchedule {
     pub score: Option<HardSoftDecimalScore>,
 }
@@ -138,6 +132,7 @@ fn test_generate_skeleton_unary_hard() {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             planning_vars: vec!["employee_idx".to_string()],
+            list_vars: vec![],
         }],
         facts: vec![],
     };
@@ -167,6 +162,7 @@ fn test_generate_skeleton_pair_hard() {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             planning_vars: vec!["employee_idx".to_string()],
+            list_vars: vec![],
         }],
         facts: vec![],
     };
@@ -196,6 +192,7 @@ fn test_generate_skeleton_join_hard() {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             planning_vars: vec!["employee_idx".to_string()],
+            list_vars: vec![],
         }],
         facts: vec![FactInfo {
             field_name: "employees".to_string(),
@@ -231,6 +228,7 @@ fn test_generate_skeleton_balance_soft() {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             planning_vars: vec!["employee_idx".to_string()],
+            list_vars: vec![],
         }],
         facts: vec![],
     };
@@ -256,6 +254,7 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             planning_vars: vec!["employee_idx".to_string()],
+            list_vars: vec![],
         }],
         facts: vec![],
     };

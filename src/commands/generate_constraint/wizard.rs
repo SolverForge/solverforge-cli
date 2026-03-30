@@ -45,10 +45,17 @@ fn run_wizard(soft_flag: bool, domain: &Option<DomainModel>) -> Result<(Pattern,
         println!();
         println!("  Found: {}", d.solution_type.bright_white().bold());
         for e in &d.entities {
-            let var_info = if e.planning_vars.is_empty() {
+            let mut solvable_fields = Vec::new();
+            solvable_fields.extend(
+                e.planning_vars
+                    .iter()
+                    .map(|field| format!("{field} [standard]")),
+            );
+            solvable_fields.extend(e.list_vars.iter().map(|field| format!("{field} [list]")));
+            let var_info = if solvable_fields.is_empty() {
                 String::new()
             } else {
-                format!("  — planning variable: {}", e.planning_vars.join(", "))
+                format!("  — solvable fields: {}", solvable_fields.join(", "))
             };
             println!(
                 "    Entities:  {} ({}){}",

@@ -13,12 +13,19 @@ pub struct Container {
     pub name: String,
     /// Ordered sequence of item indices assigned to this container.
     ///
-    /// This is the list variable the solver optimizes.
+    /// This field declares the list variable the solver may reorder.
+    /// `solver.toml` still controls search strategy; the list starter only
+    /// changes the sample app shape and example domain.
+    #[planning_list_variable]
     pub items: Vec<usize>,
 }
 
 impl Container {
     pub fn new(id: usize, name: impl Into<String>) -> Self {
-        Self { id, name: name.into(), items: Vec::new() }
+        Self {
+            id,
+            name: name.into(),
+            items: Vec::new(),
+        }
     }
 }

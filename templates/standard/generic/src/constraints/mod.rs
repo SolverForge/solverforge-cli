@@ -1,13 +1,13 @@
 /* Constraint definitions.
 
-   Each constraint is a separate function returning an `IncrementalConstraint`.
-   Assemble them into a tuple — the solver scores the solution against all of them.
+Each constraint is a separate function returning an `IncrementalConstraint`.
+Assemble them into a tuple — the solver scores the solution against all of them.
 
-   Add as many constraints as your problem needs. The tuple supports up to 12 elements;
-   use nested tuples for more. */
+Add as many constraints as your problem needs. The tuple supports up to 12 elements;
+use nested tuples for more. */
 
-mod all_assigned;
 mod affinity_match;
+mod all_assigned;
 mod balanced_load;
 mod capacity_limit;
 

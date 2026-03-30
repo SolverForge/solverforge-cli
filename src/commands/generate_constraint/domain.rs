@@ -8,6 +8,7 @@ pub(crate) struct EntityInfo {
     pub field_name: String,
     pub item_type: String,
     pub planning_vars: Vec<String>,
+    pub list_vars: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -70,10 +71,12 @@ pub(crate) fn parse_domain() -> Option<DomainModel> {
         .into_iter()
         .map(|(field_name, item_type)| {
             let planning_vars = find_planning_vars_for_type(&file_contents, &item_type);
+            let list_vars = find_list_vars_for_type(&file_contents, &item_type);
             EntityInfo {
                 field_name,
                 item_type,
                 planning_vars,
+                list_vars,
             }
         })
         .collect();
@@ -277,6 +280,15 @@ fn find_planning_vars_for_type(file_contents: &[(String, String)], type_name: &s
     Vec::new()
 }
 
+fn find_list_vars_for_type(file_contents: &[(String, String)], type_name: &str) -> Vec<String> {
+    for (struct_name, src) in file_contents {
+        if struct_name == type_name {
+            return find_list_vars_in_src(src);
+        }
+    }
+    Vec::new()
+}
+
 fn find_planning_vars_in_src(src: &str) -> Vec<String> {
     let lines: Vec<&str> = src.lines().collect();
     let mut vars = Vec::new();
@@ -298,5 +310,29 @@ fn find_planning_vars_in_src(src: &str) -> Vec<String> {
             }
         }
     }
+    vars
+}
+
+fn find_list_vars_in_src(src: &str) -> Vec<String> {
+    let lines: Vec<&str> = src.lines().collect();
+    let mut vars = Vec::new();
+    let mut next_is_var = false;
+
+    for line in &lines {
+        let t = line.trim();
+        if t.contains("#[planning_list_variable]") || t.contains("#[planning_list_variable(") {
+            next_is_var = true;
+        } else if next_is_var {
+            next_is_var = false;
+            let t = t.trim_start_matches("pub ").trim_end_matches(',');
+            if let Some(colon) = t.find(':') {
+                let field = t[..colon].trim().to_string();
+                if !field.is_empty() {
+                    vars.push(field);
+                }
+            }
+        }
+    }
+
     vars
 }

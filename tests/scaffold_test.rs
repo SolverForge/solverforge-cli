@@ -39,11 +39,12 @@ fn pin_generated_project_to_local_solverforge(project_dir: &std::path::Path) {
         "solverforge = {{ path = {:?}, features = [\"serde\", \"console\", \"verbose-logging\"] }}",
         solverforge_path
     );
-    let basic_replacement = format!(
+    let minimal_replacement = format!(
         "solverforge = {{ path = {:?}, features = [\"serde\"] }}",
         solverforge_path
     );
-    let updated = if manifest.contains(&standard_replacement) || manifest.contains(&basic_replacement)
+    let updated =
+        if manifest.contains(&standard_replacement) || manifest.contains(&minimal_replacement)
     {
         manifest.clone()
     } else if manifest.contains(
@@ -57,7 +58,7 @@ fn pin_generated_project_to_local_solverforge(project_dir: &std::path::Path) {
     } else {
         manifest.replacen(
             "solverforge = { version = \"0.6.0\", features = [\"serde\"] }",
-            &basic_replacement,
+            &minimal_replacement,
             1,
         )
     };
@@ -126,6 +127,10 @@ fn test_new_standard_creates_project_files() {
 
     let app_js = std::fs::read_to_string(project_dir.join("static").join("app.js")).unwrap();
     let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
+    let task_rs =
+        std::fs::read_to_string(project_dir.join("src").join("domain").join("task.rs")).unwrap();
+    let plan_rs =
+        std::fs::read_to_string(project_dir.join("src").join("domain").join("plan.rs")).unwrap();
     let solver_service =
         std::fs::read_to_string(project_dir.join("src").join("solver").join("service.rs")).unwrap();
     let routes_rs =
@@ -151,7 +156,12 @@ fn test_new_standard_creates_project_files() {
         cargo_toml
     );
     assert!(
-        solver_service.contains("mpsc::UnboundedReceiver<(Plan, HardSoftScore)>")
+        task_rs.contains("#[planning_variable(value_range = \"resources\", allows_unassigned = true)]")
+            && !plan_rs.contains("#[standard_variable_config"),
+        "standard scaffold should declare stock solving on fields instead of the solution: task.rs={task_rs}\nplan.rs={plan_rs}"
+    );
+    assert!(
+        solver_service.contains("mpsc::UnboundedReceiver<SolverEvent<Plan>>")
             && solver_service.contains("\"movesPerSecond\"")
             && solver_service.contains("\"id\""),
         "standard scaffold should align solver SSE payloads with the current backend contract: {}",
@@ -210,6 +220,11 @@ fn test_new_list_creates_project_files() {
 
     let app_js = std::fs::read_to_string(project_dir.join("static").join("app.js")).unwrap();
     let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
+    let container_rs =
+        std::fs::read_to_string(project_dir.join("src").join("domain").join("container.rs"))
+            .unwrap();
+    let plan_rs =
+        std::fs::read_to_string(project_dir.join("src").join("domain").join("plan.rs")).unwrap();
     let solver_service =
         std::fs::read_to_string(project_dir.join("src").join("solver").join("service.rs")).unwrap();
     let routes_rs =
@@ -235,7 +250,12 @@ fn test_new_list_creates_project_files() {
         cargo_toml
     );
     assert!(
-        solver_service.contains("mpsc::UnboundedReceiver<(Plan, HardSoftScore)>")
+        container_rs.contains("#[planning_list_variable]")
+            && !plan_rs.contains("#[shadow_variable_updates"),
+        "list scaffold should declare stock list solving on the field instead of the solution: container.rs={container_rs}\nplan.rs={plan_rs}"
+    );
+    assert!(
+        solver_service.contains("mpsc::UnboundedReceiver<SolverEvent<Plan>>")
             && solver_service.contains("\"movesPerSecond\"")
             && solver_service.contains("\"id\""),
         "list scaffold should align solver SSE payloads with the current backend contract: {}",

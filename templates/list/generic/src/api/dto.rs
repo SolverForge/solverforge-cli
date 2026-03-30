@@ -12,7 +12,10 @@ pub struct ItemDto {
 
 impl From<&Item> for ItemDto {
     fn from(i: &Item) -> Self {
-        Self { index: i.index, name: i.name.clone() }
+        Self {
+            index: i.index,
+            name: i.name.clone(),
+        }
     }
 }
 
@@ -95,8 +98,10 @@ impl PlanDto {
 
     pub fn to_domain(&self) -> Plan {
         let item_facts: Vec<Item> = self.items.iter().map(ItemDto::to_item).collect();
-        let name_to_idx: std::collections::HashMap<&str, usize> =
-            item_facts.iter().map(|i| (i.name.as_str(), i.index)).collect();
+        let name_to_idx: std::collections::HashMap<&str, usize> = item_facts
+            .iter()
+            .map(|i| (i.name.as_str(), i.index))
+            .collect();
         let containers: Vec<Container> = self
             .containers
             .iter()
@@ -106,7 +111,11 @@ impl PlanDto {
                     .iter()
                     .filter_map(|name| name_to_idx.get(name.as_str()).copied())
                     .collect();
-                Container { id: c.id, name: c.name.clone(), items }
+                Container {
+                    id: c.id,
+                    name: c.name.clone(),
+                    items,
+                }
             })
             .collect();
         Plan::new(item_facts, containers)

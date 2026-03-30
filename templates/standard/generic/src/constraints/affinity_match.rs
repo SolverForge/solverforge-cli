@@ -1,6 +1,6 @@
 use crate::domain::Plan;
-use solverforge::prelude::*;
 use solverforge::IncrementalConstraint;
+use solverforge::prelude::*;
 
 /// SOFT: Prefer assignments whose affinity group matches the task preference.
 pub struct AffinityMatchConstraint {

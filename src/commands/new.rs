@@ -6,16 +6,16 @@ use crate::error::{is_rust_keyword, CliError, CliResult};
 use crate::output;
 use crate::template;
 
-static STANDARD_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/basic/generic");
+static STANDARD_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/standard/generic");
 
 static LIST_GENERIC_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/list/generic");
 
 const AVAILABLE_TEMPLATES: &str = "
-  Standard Variable (each entity holds one value):
-    --standard                      — generic standard-variable skeleton
+  Standard Starter (sample app with standard variables):
+    --standard                      — generic standard starter skeleton
 
-  List Variable (each entity owns an ordered sequence):
-    --list                          — generic list-variable skeleton";
+  List Starter (sample app with list variables):
+    --list                          — generic list starter skeleton";
 
 pub fn run(
     name: &str,
@@ -245,9 +245,10 @@ fn print_template_guidance(project_name: &str, label: &str) {
             println!("    solverforge server");
             println!();
             println!("  This template includes:");
-            println!("    - Standard-variable domain skeleton with demo data");
+            println!("    - Standard starter domain skeleton with field-declared variables");
             println!("    - Assignment-board UI composed from solverforge-ui primitives");
             println!("    - REST API with SSE live updates and score analysis");
+            println!("    - solver.toml as the search-strategy layer");
             println!("    solverforge generate entity task --planning-variable resource_idx");
             println!("    solverforge generate fact resource");
             println!("    solverforge generate constraint all_assigned --unary --hard");
@@ -256,10 +257,11 @@ fn print_template_guidance(project_name: &str, label: &str) {
             println!("    solverforge server");
             println!();
             println!("  This template includes:");
-            println!("    - 2-phase solver (cheapest insertion + late acceptance)");
+            println!("    - List starter domain skeleton with field-declared list variables");
             println!("    - Balanced load constraint (soft)");
             println!("    - Sequence view composed from solverforge-ui primitives");
             println!("    - REST API with SSE live updates and score analysis");
+            println!("    - solver.toml as the search-strategy layer");
         }
         _ => {
             println!("    solverforge server");
