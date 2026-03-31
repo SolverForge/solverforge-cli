@@ -16,7 +16,7 @@ pub struct Container {
     /// This field declares the list variable the solver may reorder.
     /// `solver.toml` still controls search strategy; the list starter only
     /// changes the sample app shape and example domain.
-    #[planning_list_variable]
+    #[planning_list_variable(element_collection = "item_facts")]
     pub items: Vec<usize>,
 }
 

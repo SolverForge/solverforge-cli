@@ -250,7 +250,8 @@ fn test_new_list_creates_project_files() {
         cargo_toml
     );
     assert!(
-        container_rs.contains("#[planning_list_variable]")
+        container_rs.contains("#[planning_list_variable(element_collection = \"item_facts\")]")
+            && !plan_rs.contains("#[planning_list_element_collection")
             && !plan_rs.contains("#[shadow_variable_updates"),
         "list scaffold should declare stock list solving on the field instead of the solution: container.rs={container_rs}\nplan.rs={plan_rs}"
     );

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use solverforge::CrossEntityDistanceMeter;
 use solverforge::prelude::*;
+use solverforge::CrossEntityDistanceMeter;
 
 use super::{Container, Item};
 
@@ -16,18 +16,15 @@ pub struct Plan {
     pub item_facts: Vec<Item>,
     #[planning_entity_collection]
     pub containers: Vec<Container>,
-    pub all_item_indices: Vec<usize>,
     #[planning_score]
     pub score: Option<HardSoftScore>,
 }
 
 impl Plan {
     pub fn new(item_facts: Vec<Item>, containers: Vec<Container>) -> Self {
-        let all_item_indices = (0..item_facts.len()).collect();
         Self {
             item_facts,
             containers,
-            all_item_indices,
             score: None,
         }
     }
