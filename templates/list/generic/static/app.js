@@ -13,7 +13,8 @@
   var solver = SF.createSolver({
     backend: backend,
     statusBar: statusBar,
-    onUpdate: function (data) { renderSequences(data); renderTables(data); },
+    onProgress: function (meta) { void meta; },
+    onSolution: function (data) { renderSequences(data); renderTables(data); },
     onComplete: function (data) { renderSequences(data); renderTables(data); },
   });
 

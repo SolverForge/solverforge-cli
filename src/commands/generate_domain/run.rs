@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 
+use crate::app_spec;
 use crate::commands::generate_constraint::parse_domain;
 use crate::commands::generate_constraint::validate_name;
 use crate::error::{CliError, CliResult};
@@ -9,7 +10,8 @@ use crate::output;
 use super::generators::{generate_entity, generate_fact, generate_solution};
 use super::utils::{ensure_domain_dir, find_file_for_type, snake_to_pascal, validate_score_type};
 use super::wiring::{
-    inject_planning_variable, replace_score_type, update_domain_mod, wire_collection_into_solution,
+    inject_list_variable, inject_standard_variable, remove_variable_field, replace_score_type,
+    update_domain_mod, wire_collection_into_solution,
 };
 
 pub fn run_entity(
@@ -60,6 +62,7 @@ pub fn run_entity(
     output::print_create(file_path.to_str().unwrap());
     print_diff_verbose("", &src);
     output::print_update("src/domain/mod.rs");
+    sync_project_metadata()?;
     Ok(())
 }
 
@@ -102,6 +105,7 @@ pub fn run_fact(name: &str, fields: &[String], force: bool, pretend: bool) -> Cl
     output::print_create(file_path.to_str().unwrap());
     print_diff_verbose("", &src);
     output::print_update("src/domain/mod.rs");
+    sync_project_metadata()?;
     Ok(())
 }
 
@@ -184,10 +188,18 @@ pub fn run_solution(name: &str, score: &str) -> CliResult {
 
     output::print_create(file_path.to_str().unwrap());
     output::print_update("src/domain/mod.rs");
+    sync_project_metadata()?;
     Ok(())
 }
 
-pub fn run_variable(field: &str, entity: &str) -> CliResult {
+pub fn run_variable(
+    field: &str,
+    entity: &str,
+    kind: &str,
+    range: Option<&str>,
+    elements: Option<&str>,
+    allows_unassigned: bool,
+) -> CliResult {
     validate_name(field)?;
 
     let domain_dir = Path::new("src/domain");
@@ -204,13 +216,53 @@ pub fn run_variable(field: &str, entity: &str) -> CliResult {
         source: e,
     })?;
 
-    let new_src = inject_planning_variable(&src, entity, field)?;
+    let new_src = match kind {
+        "standard" => {
+            let range = range.ok_or_else(|| {
+                CliError::general("standard variables require --range <fact_collection>")
+            })?;
+            inject_standard_variable(&src, entity, field, range, allows_unassigned)?
+        }
+        "list" => {
+            let elements = elements.ok_or_else(|| {
+                CliError::general("list variables require --elements <fact_collection>")
+            })?;
+            inject_list_variable(&src, entity, field, elements)?
+        }
+        _ => return Err(CliError::general("unsupported variable kind")),
+    };
     fs::write(&entity_file, new_src).map_err(|e| CliError::IoError {
         context: format!("failed to write {}", entity_file.display()),
         source: e,
     })?;
 
     output::print_update(entity_file.to_str().unwrap());
+    sync_project_metadata()?;
+    Ok(())
+}
+
+pub fn destroy_variable(field: &str, entity: &str) -> CliResult {
+    validate_name(field)?;
+
+    let domain_dir = Path::new("src/domain");
+    if !domain_dir.exists() {
+        return Err(CliError::NotInProject {
+            missing: "src/domain/",
+        });
+    }
+
+    let entity_file = find_file_for_type(domain_dir, entity)?;
+    let src = fs::read_to_string(&entity_file).map_err(|e| CliError::IoError {
+        context: format!("failed to read {}", entity_file.display()),
+        source: e,
+    })?;
+    let new_src = remove_variable_field(&src, field).map_err(CliError::general)?;
+    fs::write(&entity_file, new_src).map_err(|e| CliError::IoError {
+        context: format!("failed to write {}", entity_file.display()),
+        source: e,
+    })?;
+    output::print_update(entity_file.to_str().unwrap());
+    sync_project_metadata()?;
     Ok(())
 }
 
@@ -241,6 +293,7 @@ pub fn run_score(score_type: &str) -> CliResult {
     })?;
 
     output::print_update(solution_file.to_str().unwrap());
+    sync_project_metadata()?;
     Ok(())
 }
 
@@ -328,4 +381,97 @@ pub fn load() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 "#
+}
+
+fn sync_project_metadata() -> CliResult {
+    app_spec::sync_from_project().and_then(|_| sync_demo_data_module())
+}
+
+fn sync_demo_data_module() -> CliResult {
+    let domain = match parse_domain() {
+        Some(domain) => domain,
+        None => return Ok(()),
+    };
+
+    let data_mod = Path::new("src/data/mod.rs");
+    if !data_mod.exists() {
+        return Ok(());
+    }
+
+    let domain_dir = Path::new("src/domain");
+    let solution_file = find_file_for_type(domain_dir, &domain.solution_type)?;
+    let solution_src = fs::read_to_string(&solution_file).map_err(|e| CliError::IoError {
+        context: format!("failed to read {}", solution_file.display()),
+        source: e,
+    })?;
+
+    let constructor_args = solution_src
+        .lines()
+        .filter_map(parse_solution_vec_field)
+        .map(|_| "vec![]".to_string())
+        .collect::<Vec<_>>();
+    let replacement = if constructor_args.is_empty() {
+        "Plan::new()".to_string()
+    } else {
+        format!("Plan::new({})", constructor_args.join(", "))
+    };
+
+    let data_src = fs::read_to_string(data_mod).map_err(|e| CliError::IoError {
+        context: "failed to read src/data/mod.rs".to_string(),
+        source: e,
+    })?;
+    let updated = replace_plan_constructor_call(&data_src, &replacement);
+    if updated == data_src {
+        return Ok(());
+    }
+
+    fs::write(data_mod, updated).map_err(|e| CliError::IoError {
+        context: "failed to update src/data/mod.rs".to_string(),
+        source: e,
+    })?;
+
+    output::print_update("src/data/mod.rs");
+    Ok(())
+}
+
+fn parse_solution_vec_field(line: &str) -> Option<()> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with("pub ") || trimmed.contains("score:") {
+        return None;
+    }
+    let trimmed = trimmed.trim_start_matches("pub ").trim_end_matches(',');
+    let colon = trimmed.find(':')?;
+    let type_part = trimmed[colon + 1..].trim();
+    (type_part.starts_with("Vec<") && type_part.ends_with('>')).then_some(())
+}
+
+fn replace_plan_constructor_call(src: &str, replacement: &str) -> String {
+    let marker = "Plan::new(";
+    let Some(start) = src.find(marker) else {
+        return src.to_string();
+    };
+    let mut depth = 0i32;
+    let mut end = None;
+    for (offset, ch) in src[start..].char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = Some(start + offset + 1);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let Some(end) = end else {
+        return src.to_string();
+    };
+
+    let mut out = String::with_capacity(src.len() + replacement.len());
+    out.push_str(&src[..start]);
+    out.push_str(replacement);
+    out.push_str(&src[end..]);
+    out
 }

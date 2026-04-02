@@ -1,8 +1,8 @@
 use axum::{
-    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{delete, get, post, put},
+    Json, Router,
 };
 use serde::Serialize;
 use std::sync::Arc;
@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use super::dto::{AnalyzeResponse, ConstraintAnalysisDto, ConstraintMatchDto, PlanDto};
 use super::sse;
-use crate::data::{DemoData, generate};
+use crate::data::{generate, DemoData};
 use crate::solver::{SolverService, SolverStatus};
 
 /// Shared application state.
@@ -116,9 +116,11 @@ async fn get_schedule(
     if !state.solver.has_job(&id) {
         return Err(StatusCode::NOT_FOUND);
     }
-    match state.solver.with_snapshot(&id, |plan, _score, status| {
-        PlanDto::from_plan(plan, Some(status))
-    }) {
+    match state
+        .solver
+        .with_snapshot(&id, |plan, _current_score, _best_score, status| {
+            PlanDto::from_plan(plan, Some(status))
+        }) {
         Some(dto) => Ok(Json(dto)),
         None => Err(StatusCode::NOT_FOUND),
     }
@@ -127,7 +129,8 @@ async fn get_schedule(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StatusResponse {
-    score: Option<String>,
+    current_score: Option<String>,
+    best_score: Option<String>,
     solver_status: SolverStatus,
 }
 
@@ -140,9 +143,12 @@ async fn get_schedule_status(
     }
     match state
         .solver
-        .with_snapshot(&id, |plan, _score, status| StatusResponse {
-            score: plan.score.map(|s| s.to_string()),
-            solver_status: status,
+        .with_snapshot(&id, |_plan, current_score, best_score, status| {
+            StatusResponse {
+                current_score: current_score.map(|s| s.to_string()),
+                best_score: best_score.map(|s| s.to_string()),
+                solver_status: status,
+            }
         }) {
         Some(resp) => Ok(Json(resp)),
         None => Err(StatusCode::NOT_FOUND),
@@ -205,7 +211,9 @@ async fn analyze_by_id(
 
     let plan = state
         .solver
-        .with_snapshot(&id, |plan, _score, _status| plan.clone())
+        .with_snapshot(&id, |plan, _current_score, _best_score, _status| {
+            plan.clone()
+        })
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let constraints = create_constraints();

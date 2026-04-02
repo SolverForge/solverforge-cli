@@ -49,9 +49,13 @@ fn run_wizard(soft_flag: bool, domain: &Option<DomainModel>) -> Result<(Pattern,
             solvable_fields.extend(
                 e.planning_vars
                     .iter()
-                    .map(|field| format!("{field} [standard]")),
+                    .map(|field| format!("{} [standard]", field.field)),
             );
-            solvable_fields.extend(e.list_vars.iter().map(|field| format!("{field} [list]")));
+            solvable_fields.extend(
+                e.list_vars
+                    .iter()
+                    .map(|field| format!("{} [list]", field.field)),
+            );
             let var_info = if solvable_fields.is_empty() {
                 String::new()
             } else {

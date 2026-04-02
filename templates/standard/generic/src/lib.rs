@@ -1,7 +1,7 @@
-/* {{project_name}} — standard variable constraint optimizer built with SolverForge
+/* {{project_name}} — neutral constraint optimizer built with SolverForge
 
 Structure:
-  domain/      — Resource (problem fact), Task (planning entity), Plan (solution)
+  domain/      — Plan (solution) plus CLI-generated entities and facts
   constraints/ — Scoring rules
   solver/      — Engine, service, termination config
   api/         — HTTP API (axum)

@@ -17,7 +17,7 @@ VERSION := $(shell grep -m1 '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1
 BIN := solverforge
 
 .PHONY: banner help build build-release run install test test-ignored test-unit test-one \
-        lint fmt fmt-check clippy ci-local pre-release clean version
+        test-runtime test-e2e install-e2e test-full lint fmt fmt-check clippy ci-local pre-release clean version
 
 .DEFAULT_GOAL := help
 
@@ -32,6 +32,10 @@ help: banner
 	@printf -- "  $(YELLOW)run$(RESET)            Run the CLI locally; pass args with ARGS=\"...\"\n"
 	@printf -- "  $(YELLOW)install$(RESET)        Install the CLI with cargo install --path .\n"
 	@printf -- "  $(YELLOW)test$(RESET)           Run the default test suite\n"
+	@printf -- "  $(YELLOW)test-runtime$(RESET)   Run phase-marked generated-app runtime pipeline tests\n"
+	@printf -- "  $(YELLOW)test-e2e$(RESET)       Run Playwright browser tests against ephemeral generated apps\n"
+	@printf -- "  $(YELLOW)install-e2e$(RESET)    Install Playwright Chromium browser support\n"
+	@printf -- "  $(YELLOW)test-full$(RESET)      Run Rust tests, runtime pipeline tests, and Playwright\n"
 	@printf -- "  $(YELLOW)test-ignored$(RESET)   Run ignored scaffold tests requiring network/toolchain access\n"
 	@printf -- "  $(YELLOW)test-unit$(RESET)      Run unit tests in the $(BIN) binary target\n"
 	@printf -- "  $(YELLOW)test-one$(RESET)       Run one test, e.g. make test-one TEST=scaffold_test\n"
@@ -66,6 +70,33 @@ test: banner
 	@cargo test && \
 		printf -- "\n$(GREEN)$(CHECK) Tests passed$(RESET)\n\n" || \
 		(printf -- "\n$(RED)$(CROSS) Tests failed$(RESET)\n\n" && exit 1)
+
+test-runtime: banner
+	@printf -- "$(ARROW) Running generated-app runtime pipeline tests...\n"
+	@cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1 && \
+		printf -- "\n$(GREEN)$(CHECK) Runtime pipeline tests passed$(RESET)\n\n" || \
+		(printf -- "\n$(RED)$(CROSS) Runtime pipeline tests failed$(RESET)\n\n" && exit 1)
+
+install-e2e:
+	@printf -- "$(PROGRESS) Installing Playwright Chromium...\n"
+	@npm run install:e2e && \
+		printf -- "$(GREEN)$(CHECK) Playwright Chromium installed$(RESET)\n" || \
+		(printf -- "$(RED)$(CROSS) Playwright install failed$(RESET)\n" && exit 1)
+
+test-e2e: banner
+	@printf -- "$(ARROW) Running Playwright browser pipeline tests...\n"
+	@npm run test:e2e && \
+		printf -- "\n$(GREEN)$(CHECK) Playwright tests passed$(RESET)\n\n" || \
+		(printf -- "\n$(RED)$(CROSS) Playwright tests failed$(RESET)\n\n" && exit 1)
+
+test-full: banner
+	@printf -- "$(PROGRESS) Phase 1/3: cargo test...\n"
+	@cargo test
+	@printf -- "$(PROGRESS) Phase 2/3: runtime pipeline tests...\n"
+	@cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1
+	@printf -- "$(PROGRESS) Phase 3/3: Playwright browser pipeline tests...\n"
+	@npm run test:e2e
+	@printf -- "\n$(GREEN)$(CHECK) Full end-to-end validation passed$(RESET)\n\n"
 
 test-ignored:
 	@printf -- "$(PROGRESS) Running ignored scaffold tests...\n"
@@ -119,6 +150,10 @@ pre-release: banner
 	@$(MAKE) clippy --no-print-directory
 	@printf -- "$(PROGRESS) Running cargo test...\n"
 	@cargo test --quiet
+	@printf -- "$(PROGRESS) Running generated-app runtime pipeline tests...\n"
+	@cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1
+	@printf -- "$(PROGRESS) Running Playwright browser tests...\n"
+	@npm run test:e2e
 	@printf -- "$(PROGRESS) Running cargo publish --dry-run...\n"
 	@cargo publish --dry-run --allow-dirty
 	@printf -- "\n$(GREEN)$(CHECK) Release checks passed for v$(VERSION)$(RESET)\n\n"

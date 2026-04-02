@@ -1,12 +1,12 @@
 use axum::{
     body::Body,
     extract::{Path, State},
-    http::{StatusCode, header},
+    http::{header, StatusCode},
     response::Response,
 };
 use std::sync::Arc;
-use tokio_stream::StreamExt;
 use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 
 use super::routes::AppState;
 
@@ -18,7 +18,7 @@ pub async fn events(
 
     let bootstrap_json = state.solver.sse_snapshot(&id).unwrap_or_else(|| {
         format!(
-            r#"{{"id":"{}","solverStatus":"SOLVING","movesPerSecond":0}}"#,
+            r#"{{"id":"{}","eventType":"progress","solverStatus":"SOLVING","currentScore":null,"bestScore":null,"movesPerSecond":0,"solution":null}}"#,
             id
         )
     });

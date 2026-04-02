@@ -7,6 +7,7 @@ Add as many constraints as your problem needs. The tuple supports up to 12 eleme
 use nested tuples for more. */
 
 mod balanced_load;
+mod sequence_cohesion;
 
 pub use self::assemble::create_constraints;
 
@@ -16,6 +17,6 @@ mod assemble {
     use solverforge::prelude::*;
 
     pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        (balanced_load::constraint(),)
+        (balanced_load::constraint(), sequence_cohesion::constraint())
     }
 }

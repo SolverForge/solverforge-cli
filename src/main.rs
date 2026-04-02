@@ -1,19 +1,23 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 
+mod app_spec;
 mod commands;
 mod error;
 mod output;
 mod rc;
+mod scaffold_target;
 mod template;
 #[cfg(test)]
 mod test_support;
 
 use error::CliResult;
+use scaffold_target::LONG_VERSION_TEXT;
+
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const EXAMPLES: &str = "\x1b[1mExamples:\x1b[0m
-  solverforge new my-scheduler --standard
-  solverforge new my-sorter --list
+  solverforge new my-optimizer
   solverforge generate entity shift --planning-variable employee_idx
   solverforge generate constraint no_overlap --pair --hard
   solverforge generate scaffold shift employee_idx:usize --entity --constraint no_overlap --pair
@@ -27,8 +31,9 @@ const EXAMPLES: &str = "\x1b[1mExamples:\x1b[0m
 #[derive(Parser)]
 #[command(
     name = "solverforge",
-    about = "CLI for SolverForge — a zero-erasure constraint solver in Rust",
-    version,
+    about = "CLI for scaffolding and managing SolverForge projects",
+    version = CLI_VERSION,
+    long_version = LONG_VERSION_TEXT,
     infer_subcommands = true,
     after_help = EXAMPLES,
 )]
@@ -52,25 +57,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Scaffold a new SolverForge project
-    ///
-    /// Starter template (required, mutually exclusive):
-    ///
-    ///   --standard  Standard starter — sample app with field-declared standard variables
-    ///   --list      List starter     — sample app with field-declared list variables
-    #[command(
-        after_help = "Examples:\n  solverforge new my-scheduler --standard\n  solverforge new my-sorter --list"
-    )]
+    #[command(after_help = "Examples:\n  solverforge new my-optimizer")]
     New {
         /// Project name (directory that will be created)
         name: String,
-
-        /// Scaffold a standard-variable project
-        #[arg(long = "standard")]
-        standard: bool,
-
-        /// Scaffold a list-variable project
-        #[arg(long = "list")]
-        list: bool,
 
         /// Skip running `git init` and initial commit
         #[arg(long)]
@@ -269,7 +259,7 @@ enum GenerateResource {
     },
     /// Add a planning variable field to an existing entity
     #[command(
-        after_help = "Examples:\n  solverforge generate variable employee_idx --entity Shift"
+        after_help = "Examples:\n  solverforge generate variable employee_idx --entity Shift --kind standard --range employees --allows-unassigned\n  solverforge generate variable stops --entity Route --kind list --elements visits"
     )]
     Variable {
         /// Field name in snake_case (e.g. preferred_shift)
@@ -278,6 +268,22 @@ enum GenerateResource {
         /// Entity struct name (e.g. Shift)
         #[arg(long, value_name = "ENTITY_TYPE")]
         entity: String,
+
+        /// Variable kind
+        #[arg(long, value_parser = ["standard", "list"])]
+        kind: String,
+
+        /// Standard-variable value range collection (e.g. employees)
+        #[arg(long, value_name = "FACT_COLLECTION")]
+        range: Option<String>,
+
+        /// List-variable element collection (e.g. visits)
+        #[arg(long, value_name = "FACT_COLLECTION")]
+        elements: Option<String>,
+
+        /// Allow leaving the standard variable unassigned
+        #[arg(long, default_value_t = false)]
+        allows_unassigned: bool,
     },
     /// Change the score type in the existing planning solution
     #[command(after_help = "Examples:\n  solverforge generate score HardSoftDecimalScore")]
@@ -327,6 +333,15 @@ enum DestroyResource {
         /// Entity name to remove
         name: String,
     },
+    /// Remove a planning variable field from an entity
+    Variable {
+        /// Variable field to remove
+        field: String,
+
+        /// Entity struct name (e.g. Shift)
+        #[arg(long, value_name = "ENTITY_TYPE")]
+        entity: String,
+    },
     /// Remove a problem fact struct
     Fact {
         /// Fact name to remove
@@ -358,14 +373,9 @@ fn main() {
     let result: CliResult = match cli.command {
         Command::New {
             name,
-            standard,
-            list,
             skip_git,
             skip_readme,
-        } => match commands::new::Template::parse(standard, list) {
-            Ok(template) => commands::new::run(&name, template, skip_git, skip_readme, cli.quiet),
-            Err(e) => Err(e),
-        },
+        } => commands::new::run(&name, skip_git, skip_readme, cli.quiet),
         Command::Generate {
             resource:
                 GenerateResource::Constraint {
@@ -412,8 +422,23 @@ fn main() {
             resource: GenerateResource::Solution { name, score },
         } => commands::generate_domain::run_solution(&name, &score),
         Command::Generate {
-            resource: GenerateResource::Variable { field, entity },
-        } => commands::generate_domain::run_variable(&field, &entity),
+            resource:
+                GenerateResource::Variable {
+                    field,
+                    entity,
+                    kind,
+                    range,
+                    elements,
+                    allows_unassigned,
+                },
+        } => commands::generate_domain::run_variable(
+            &field,
+            &entity,
+            &kind,
+            range.as_deref(),
+            elements.as_deref(),
+            allows_unassigned,
+        ),
         Command::Generate {
             resource: GenerateResource::Score { score_type },
         } => commands::generate_domain::run_score(&score_type),
@@ -425,6 +450,10 @@ fn main() {
             yes,
             resource: DestroyResource::Entity { name },
         } => commands::destroy::run_entity(&name, yes),
+        Command::Destroy {
+            yes,
+            resource: DestroyResource::Variable { field, entity },
+        } => commands::destroy::run_variable(&field, &entity, yes),
         Command::Destroy {
             yes,
             resource: DestroyResource::Fact { name },

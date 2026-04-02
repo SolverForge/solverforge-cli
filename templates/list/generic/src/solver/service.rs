@@ -1,37 +1,65 @@
 use parking_lot::RwLock;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 
 use solverforge::{HardSoftScore, SolverEvent, SolverManager, SolverStatus};
 
+use crate::api::PlanDto;
 use crate::domain::Plan;
 
 // Static manager — must be 'static for SolverManager::solve.
 static MANAGER: SolverManager<Plan> = SolverManager::new();
 
-fn sse_payload(id: &str, score: Option<HardSoftScore>, status: SolverStatus, mps: u64) -> String {
-    let score_str = score.map(|s| format!("{}", s));
-    let status_str = match status {
-        SolverStatus::Solving => "SOLVING",
-        SolverStatus::NotSolving => "NOT_SOLVING",
-    };
-    match score_str {
-        Some(s) => format!(
-            r#"{{"id":"{}","score":"{}","solverStatus":"{}","movesPerSecond":{}}}"#,
-            id, s, status_str, mps
-        ),
-        None => format!(
-            r#"{{"id":"{}","score":null,"solverStatus":"{}","movesPerSecond":{}}}"#,
-            id, status_str, mps
-        ),
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SsePayload {
+    id: String,
+    event_type: &'static str,
+    solver_status: SolverStatus,
+    current_score: Option<String>,
+    best_score: Option<String>,
+    moves_per_second: u64,
+    solution: Option<PlanDto>,
+}
+
+fn sse_payload(
+    id: &str,
+    event_type: &'static str,
+    current_score: Option<HardSoftScore>,
+    best_score: Option<HardSoftScore>,
+    status: SolverStatus,
+    mps: u64,
+    solution: Option<&Plan>,
+) -> String {
+    serde_json::to_string(&SsePayload {
+        id: id.to_string(),
+        event_type,
+        solver_status: status,
+        current_score: current_score.map(|s| s.to_string()),
+        best_score: best_score.map(|s| s.to_string()),
+        moves_per_second: mps,
+        solution: solution.map(|plan| PlanDto::from_plan(plan, Some(status))),
+    })
+    .expect("failed to serialize solver SSE payload")
+}
+
+fn snapshot_event(state: &JobState) -> (&'static str, Option<&Plan>) {
+    if state.status == SolverStatus::NotSolving && state.latest_best.is_some() {
+        ("finished", state.latest_best.as_ref())
+    } else if state.best_score.is_some() && state.latest_best.is_some() {
+        ("best_solution", state.latest_best.as_ref())
+    } else {
+        ("progress", None)
     }
 }
 
 struct JobState {
     slot_id: usize,
-    latest: Option<Plan>,
-    score: Option<HardSoftScore>,
+    latest_best: Option<Plan>,
+    current_score: Option<HardSoftScore>,
+    best_score: Option<HardSoftScore>,
     moves_per_second: u64,
     status: SolverStatus,
     sse_tx: broadcast::Sender<String>,
@@ -54,8 +82,9 @@ impl SolverService {
         let (sse_tx, _) = broadcast::channel(64);
         let state = JobState {
             slot_id,
-            latest: Some(plan),
-            score: None,
+            latest_best: Some(plan),
+            current_score: None,
+            best_score: None,
             moves_per_second: 0,
             status: SolverStatus::Solving,
             sse_tx: sse_tx.clone(),
@@ -71,11 +100,16 @@ impl SolverService {
     pub fn with_snapshot<R>(
         &self,
         id: &str,
-        f: impl FnOnce(&Plan, Option<HardSoftScore>, SolverStatus) -> R,
+        f: impl FnOnce(&Plan, Option<HardSoftScore>, Option<HardSoftScore>, SolverStatus) -> R,
     ) -> Option<R> {
         let jobs = self.jobs.read();
         let state = jobs.get(id)?;
-        Some(f(state.latest.as_ref()?, state.score, state.status))
+        Some(f(
+            state.latest_best.as_ref()?,
+            state.current_score,
+            state.best_score,
+            state.status,
+        ))
     }
 
     pub fn subscribe(&self, id: &str) -> Option<broadcast::Receiver<String>> {
@@ -85,11 +119,15 @@ impl SolverService {
     pub fn sse_snapshot(&self, id: &str) -> Option<String> {
         let jobs = self.jobs.read();
         let state = jobs.get(id)?;
+        let (event_type, solution) = snapshot_event(state);
         Some(sse_payload(
             id,
-            state.score,
+            event_type,
+            state.current_score,
+            state.best_score,
             state.status,
             state.moves_per_second,
+            solution,
         ))
     }
 
@@ -127,17 +165,25 @@ async fn drain_receiver(
 ) {
     while let Some(event) = receiver.recv().await {
         match event {
-            SolverEvent::Progress { score, telemetry } => {
+            SolverEvent::Progress {
+                current_score,
+                best_score,
+                telemetry,
+            } => {
                 let payload = {
                     let mut jobs = jobs.write();
                     if let Some(state) = jobs.get_mut(&id) {
-                        state.score = score;
+                        state.current_score = current_score;
+                        state.best_score = best_score.or(state.best_score);
                         state.moves_per_second = telemetry.moves_per_second;
                         Some(sse_payload(
                             &id,
-                            state.score,
+                            "progress",
+                            state.current_score,
+                            state.best_score,
                             SolverStatus::Solving,
                             state.moves_per_second,
+                            None,
                         ))
                     } else {
                         None
@@ -155,14 +201,18 @@ async fn drain_receiver(
                 let payload = {
                     let mut jobs = jobs.write();
                     if let Some(state) = jobs.get_mut(&id) {
-                        state.latest = Some(solution);
-                        state.score = Some(score);
+                        state.latest_best = Some(solution);
+                        state.current_score = Some(score);
+                        state.best_score = Some(score);
                         state.moves_per_second = telemetry.moves_per_second;
                         Some(sse_payload(
                             &id,
-                            state.score,
+                            "best_solution",
+                            state.current_score,
+                            state.best_score,
                             SolverStatus::Solving,
                             state.moves_per_second,
+                            state.latest_best.as_ref(),
                         ))
                     } else {
                         None
@@ -180,15 +230,19 @@ async fn drain_receiver(
                 let payload = {
                     let mut jobs = jobs.write();
                     if let Some(state) = jobs.get_mut(&id) {
-                        state.latest = Some(solution);
-                        state.score = Some(score);
+                        state.latest_best = Some(solution);
+                        state.current_score = Some(score);
+                        state.best_score = Some(score);
                         state.moves_per_second = telemetry.moves_per_second;
                         state.status = SolverStatus::NotSolving;
                         Some(sse_payload(
                             &id,
-                            state.score,
+                            "finished",
+                            state.current_score,
+                            state.best_score,
                             SolverStatus::NotSolving,
                             state.moves_per_second,
+                            state.latest_best.as_ref(),
                         ))
                     } else {
                         None
@@ -208,9 +262,12 @@ async fn drain_receiver(
             state.status = SolverStatus::NotSolving;
             Some(sse_payload(
                 &id,
-                state.score,
+                "finished",
+                state.current_score,
+                state.best_score,
                 SolverStatus::NotSolving,
                 state.moves_per_second,
+                state.latest_best.as_ref(),
             ))
         } else {
             None

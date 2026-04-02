@@ -1,6 +1,7 @@
 use super::{
     domain::{
         find_annotated_struct, find_score_type, parse_vec_field, DomainModel, EntityInfo, FactInfo,
+        StandardVarInfo,
     },
     mod_rewriter::{extend_tuple, extract_types, insert_mod_decl_assemble},
     skeleton::{generate_skeleton, Pattern},
@@ -131,7 +132,11 @@ fn test_generate_skeleton_unary_hard() {
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
-            planning_vars: vec!["employee_idx".to_string()],
+            planning_vars: vec![StandardVarInfo {
+                field: "employee_idx".to_string(),
+                value_range: "employees".to_string(),
+                allows_unassigned: true,
+            }],
             list_vars: vec![],
         }],
         facts: vec![],
@@ -161,7 +166,11 @@ fn test_generate_skeleton_pair_hard() {
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
-            planning_vars: vec!["employee_idx".to_string()],
+            planning_vars: vec![StandardVarInfo {
+                field: "employee_idx".to_string(),
+                value_range: "employees".to_string(),
+                allows_unassigned: true,
+            }],
             list_vars: vec![],
         }],
         facts: vec![],
@@ -191,7 +200,11 @@ fn test_generate_skeleton_join_hard() {
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
-            planning_vars: vec!["employee_idx".to_string()],
+            planning_vars: vec![StandardVarInfo {
+                field: "employee_idx".to_string(),
+                value_range: "employees".to_string(),
+                allows_unassigned: true,
+            }],
             list_vars: vec![],
         }],
         facts: vec![FactInfo {
@@ -227,7 +240,11 @@ fn test_generate_skeleton_balance_soft() {
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
-            planning_vars: vec!["employee_idx".to_string()],
+            planning_vars: vec![StandardVarInfo {
+                field: "employee_idx".to_string(),
+                value_range: "employees".to_string(),
+                allows_unassigned: true,
+            }],
             list_vars: vec![],
         }],
         facts: vec![],
@@ -253,7 +270,11 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
-            planning_vars: vec!["employee_idx".to_string()],
+            planning_vars: vec![StandardVarInfo {
+                field: "employee_idx".to_string(),
+                value_range: "employees".to_string(),
+                allows_unassigned: true,
+            }],
             list_vars: vec![],
         }],
         facts: vec![],

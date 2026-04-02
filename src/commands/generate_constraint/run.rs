@@ -6,6 +6,7 @@ use super::mod_rewriter::{extract_types, rewrite_mod};
 use super::skeleton::generate_skeleton;
 use super::utils::{snake_to_title, validate_name};
 use super::wizard::resolve_pattern_and_hardness;
+use crate::app_spec;
 use crate::error::{CliError, CliResult};
 use crate::output;
 
@@ -79,6 +80,33 @@ pub fn run(
     let (pattern, is_soft) =
         resolve_pattern_and_hardness(soft, unary, pair, join, balance, reward, &domain)?;
 
+    if matches!(
+        pattern,
+        super::skeleton::Pattern::Unary
+            | super::skeleton::Pattern::Pair
+            | super::skeleton::Pattern::Balance
+            | super::skeleton::Pattern::Reward
+            | super::skeleton::Pattern::Join
+    ) && domain
+        .as_ref()
+        .map(|d| d.entities.is_empty())
+        .unwrap_or(true)
+    {
+        return Err(CliError::with_hint(
+            "constraint generation needs at least one planning entity collection",
+            "run `solverforge generate entity ...` first",
+        ));
+    }
+
+    if matches!(pattern, super::skeleton::Pattern::Join)
+        && domain.as_ref().map(|d| d.facts.is_empty()).unwrap_or(true)
+    {
+        return Err(CliError::with_hint(
+            "join constraints need at least one problem fact collection",
+            "run `solverforge generate fact ...` first",
+        ));
+    }
+
     // Generate the new constraint file
     let skeleton = generate_skeleton(
         name,
@@ -109,6 +137,7 @@ pub fn run(
     })?;
 
     crate::commands::sf_config::add_constraint(name)?;
+    app_spec::sync_from_project()?;
 
     output::print_create(&format!("src/constraints/{}.rs", name));
     print_diff_verbose("", &skeleton);

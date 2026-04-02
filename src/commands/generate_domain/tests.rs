@@ -134,11 +134,77 @@ fn test_inject_second_planning_variable() {
 }
 
 #[test]
+fn test_inject_list_variable() {
+    use super::wiring::inject_list_variable;
+
+    let src = generate_entity("Route", None, &[]);
+    let result =
+        inject_list_variable(&src, "Route", "stops", "visits").expect("inject should succeed");
+
+    assert!(result.contains("#[planning_list_variable(element_collection = \"visits\")]"));
+    assert!(result.contains("pub stops: Vec<usize>"));
+    assert!(result.contains("stops: Vec::new()"));
+}
+
+#[test]
+fn test_remove_variable_field() {
+    use super::wiring::{inject_list_variable, inject_planning_variable, remove_variable_field};
+
+    let src = generate_entity("Route", Some("driver_idx"), &[]);
+    let src = inject_list_variable(&src, "Route", "stops", "visits").expect("list inject");
+    let src = inject_planning_variable(&src, "Route", "backup_idx").expect("var inject");
+    let result = remove_variable_field(&src, "stops").expect("remove should succeed");
+
+    assert!(!result.contains("pub stops: Vec<usize>"));
+    assert!(!result.contains("#[planning_list_variable"));
+    assert!(!result.contains("stops: Vec::new()"));
+    assert!(result.contains("pub driver_idx: Option<usize>"));
+    assert!(result.contains("pub backup_idx: Option<usize>"));
+}
+
+#[test]
 fn test_update_domain_mod_format() {
     let mod_line = format!("mod {};", "shift");
     let use_line = format!("pub use {}::{};", "shift", "Shift");
     assert_eq!(mod_line, "mod shift;");
     assert_eq!(use_line, "pub use shift::Shift;");
+}
+
+#[test]
+fn test_wire_collection_into_solution_updates_neutral_constructor() {
+    use super::wiring::insert_field_and_import;
+
+    let src = r#"use serde::{Deserialize, Serialize};
+use solverforge::prelude::*;
+
+#[planning_solution]
+#[derive(Serialize, Deserialize)]
+pub struct Plan {
+    #[planning_score]
+    pub score: Option<HardSoftScore>,
+}
+
+impl Plan {
+    pub fn new() -> Self {
+        Self { score: None }
+    }
+}
+"#;
+
+    let result = insert_field_and_import(
+        src,
+        "Plan",
+        "Resource",
+        "resources",
+        "    #[problem_fact_collection]\n    pub resources: Vec<Resource>,",
+    )
+    .expect("insert should succeed");
+
+    assert!(
+        result.contains("pub fn new(resources: Vec<Resource>) -> Self"),
+        "{result}"
+    );
+    assert!(result.contains("resources: resources"), "{result}");
 }
 
 #[test]

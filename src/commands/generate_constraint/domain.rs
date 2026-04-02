@@ -3,12 +3,25 @@ use std::path::Path;
 
 type CollectionPair = (Vec<(String, String)>, Vec<(String, String)>);
 
+#[derive(Debug, Clone)]
+pub(crate) struct StandardVarInfo {
+    pub field: String,
+    pub value_range: String,
+    pub allows_unassigned: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ListVarInfo {
+    pub field: String,
+    pub element_collection: String,
+}
+
 #[derive(Debug)]
 pub(crate) struct EntityInfo {
     pub field_name: String,
     pub item_type: String,
-    pub planning_vars: Vec<String>,
-    pub list_vars: Vec<String>,
+    pub planning_vars: Vec<StandardVarInfo>,
+    pub list_vars: Vec<ListVarInfo>,
 }
 
 #[derive(Debug)]
@@ -88,10 +101,6 @@ pub(crate) fn parse_domain() -> Option<DomainModel> {
             item_type,
         })
         .collect();
-
-    if entities.is_empty() && facts.is_empty() {
-        return None;
-    }
 
     Some(DomainModel {
         solution_type,
@@ -271,7 +280,10 @@ fn extract_vec_inner(s: &str) -> Option<String> {
     }
 }
 
-fn find_planning_vars_for_type(file_contents: &[(String, String)], type_name: &str) -> Vec<String> {
+fn find_planning_vars_for_type(
+    file_contents: &[(String, String)],
+    type_name: &str,
+) -> Vec<StandardVarInfo> {
     for (struct_name, src) in file_contents {
         if struct_name == type_name {
             return find_planning_vars_in_src(src);
@@ -280,7 +292,10 @@ fn find_planning_vars_for_type(file_contents: &[(String, String)], type_name: &s
     Vec::new()
 }
 
-fn find_list_vars_for_type(file_contents: &[(String, String)], type_name: &str) -> Vec<String> {
+fn find_list_vars_for_type(
+    file_contents: &[(String, String)],
+    type_name: &str,
+) -> Vec<ListVarInfo> {
     for (struct_name, src) in file_contents {
         if struct_name == type_name {
             return find_list_vars_in_src(src);
@@ -289,23 +304,26 @@ fn find_list_vars_for_type(file_contents: &[(String, String)], type_name: &str) 
     Vec::new()
 }
 
-fn find_planning_vars_in_src(src: &str) -> Vec<String> {
+fn find_planning_vars_in_src(src: &str) -> Vec<StandardVarInfo> {
     let lines: Vec<&str> = src.lines().collect();
     let mut vars = Vec::new();
-    let mut next_is_var = false;
+    let mut current_attr: Option<&str> = None;
 
     for line in &lines {
         let t = line.trim();
         if t.contains("#[planning_variable]") || t.contains("#[planning_variable(") {
-            next_is_var = true;
-        } else if next_is_var {
-            next_is_var = false;
+            current_attr = Some(t);
+        } else if let Some(attr) = current_attr.take() {
             // Extract field name
             let t = t.trim_start_matches("pub ").trim_end_matches(',');
             if let Some(colon) = t.find(':') {
                 let field = t[..colon].trim().to_string();
                 if !field.is_empty() {
-                    vars.push(field);
+                    vars.push(StandardVarInfo {
+                        field,
+                        value_range: extract_attr_value(attr, "value_range").unwrap_or_default(),
+                        allows_unassigned: attr.contains("allows_unassigned = true"),
+                    });
                 }
             }
         }
@@ -313,26 +331,54 @@ fn find_planning_vars_in_src(src: &str) -> Vec<String> {
     vars
 }
 
-fn find_list_vars_in_src(src: &str) -> Vec<String> {
+fn find_list_vars_in_src(src: &str) -> Vec<ListVarInfo> {
     let lines: Vec<&str> = src.lines().collect();
     let mut vars = Vec::new();
-    let mut next_is_var = false;
+    let mut current_attr: Option<&str> = None;
 
     for line in &lines {
         let t = line.trim();
         if t.contains("#[planning_list_variable]") || t.contains("#[planning_list_variable(") {
-            next_is_var = true;
-        } else if next_is_var {
-            next_is_var = false;
+            current_attr = Some(t);
+        } else if let Some(attr) = current_attr.take() {
             let t = t.trim_start_matches("pub ").trim_end_matches(',');
             if let Some(colon) = t.find(':') {
                 let field = t[..colon].trim().to_string();
                 if !field.is_empty() {
-                    vars.push(field);
+                    vars.push(ListVarInfo {
+                        field,
+                        element_collection: extract_attr_value(attr, "element_collection")
+                            .unwrap_or_default(),
+                    });
                 }
             }
         }
     }
 
     vars
+}
+
+fn extract_attr_value(attr: &str, key: &str) -> Option<String> {
+    let pattern = format!("{key} = \"");
+    let start = attr.find(&pattern)? + pattern.len();
+    let rest = &attr[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+pub(crate) fn list_constraints(dir: &Path) -> Vec<String> {
+    let mut constraints = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                if name != "mod" {
+                    constraints.push(name.to_string());
+                }
+            }
+        }
+    }
+    constraints.sort();
+    constraints
 }

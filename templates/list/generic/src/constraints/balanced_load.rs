@@ -1,7 +1,7 @@
 use crate::domain::{Container, Plan};
-use solverforge::IncrementalConstraint;
 use solverforge::prelude::*;
 use solverforge::stream::vec;
+use solverforge::IncrementalConstraint;
 
 /// SOFT: Minimize variance in container load (balanced distribution).
 ///

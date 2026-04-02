@@ -4,36 +4,51 @@
   'use strict';
 
   var config = await fetch('/sf-config.json').then(function (r) { return r.json(); });
-
+  var uiModel = await fetch('/generated/ui-model.json').then(function (r) { return r.json(); });
   var app = document.getElementById('sf-app');
-
-  // Backend and solver
   var backend = SF.createBackend({ baseUrl: '' });
-  var statusBar = SF.createStatusBar({ constraints: config.constraints });
+  var statusBar = SF.createStatusBar({ constraints: uiModel.constraints || [] });
+  var activeTab = (uiModel.views && uiModel.views.length) ? uiModel.views[0].id : 'overview';
+  var viewPanels = {};
+
   var solver = SF.createSolver({
     backend: backend,
     statusBar: statusBar,
-    onUpdate: function (data) { renderHero(data); renderTables(data); },
-    onComplete: function (data) { renderHero(data); renderTables(data); },
+    onProgress: function (meta) { void meta; },
+    onSolution: function (data) { renderAll(data); },
+    onComplete: function (data) { renderAll(data); },
   });
 
-  // Header
+  var tabs = (uiModel.views || []).map(function (view, index) {
+    return {
+      id: view.id,
+      label: view.label,
+      icon: view.kind === 'list' ? 'fa-list-ol' : 'fa-table-cells-large',
+      active: index === 0,
+    };
+  });
+  if (!tabs.length) {
+    tabs.push({ id: 'overview', label: 'Overview', icon: 'fa-compass', active: true });
+  }
+  tabs.push({ id: 'data', label: 'Data', icon: 'fa-table' });
+  tabs.push({ id: 'api', label: 'REST API', icon: 'fa-book' });
+
   var header = SF.createHeader({
     logo: '/sf/img/ouroboros.svg',
     title: config.title,
     subtitle: config.subtitle,
-    tabs: [
-      { id: 'hero', label: heroLabel(), icon: heroIcon(), active: true },
-      { id: 'data', label: 'Data', icon: 'fa-table' },
-      { id: 'api', label: 'REST API', icon: 'fa-book' },
-    ],
+    tabs: tabs,
     actions: {
       onSolve: function () { loadAndSolve(); },
       onStop: function () { solver.stop(); },
       onAnalyze: function () { openAnalysis(); },
     },
     onTabChange: function (tab) {
-      heroPanel.style.display = tab === 'hero' ? '' : 'none';
+      activeTab = tab;
+      Object.keys(viewPanels).forEach(function (key) {
+        viewPanels[key].style.display = key === tab ? '' : 'none';
+      });
+      overviewPanel.style.display = tab === 'overview' ? '' : 'none';
       dataPanel.style.display = tab === 'data' ? '' : 'none';
       apiPanel.style.display = tab === 'api' ? '' : 'none';
     },
@@ -41,21 +56,25 @@
   app.appendChild(header);
   app.appendChild(statusBar.el);
 
-  // Hero panel
-  var heroPanel = SF.el('div', { className: 'sf-content' });
-  var heroContainer = SF.el('div', { id: 'sf-hero' });
-  heroPanel.appendChild(heroContainer);
-  app.appendChild(heroPanel);
+  var overviewPanel = SF.el('div', { className: 'sf-content', style: { display: activeTab === 'overview' ? '' : 'none' } });
+  var overviewContainer = SF.el('div', { id: 'sf-overview' });
+  overviewPanel.appendChild(overviewContainer);
+  app.appendChild(overviewPanel);
 
-  // Data panel
+  (uiModel.views || []).forEach(function (view) {
+    var panel = SF.el('div', { className: 'sf-content', style: { display: activeTab === view.id ? '' : 'none' } });
+    panel.appendChild(SF.el('div', { id: 'view-' + view.id }));
+    viewPanels[view.id] = panel;
+    app.appendChild(panel);
+  });
+
   var dataPanel = SF.el('div', { className: 'sf-content', style: { display: 'none' } });
   var tablesContainer = SF.el('div', { id: 'sf-tables' });
   dataPanel.appendChild(tablesContainer);
   app.appendChild(dataPanel);
 
-  // API panel
   var apiPanel = SF.el('div', { className: 'sf-content', style: { display: 'none' } });
-  var guide = SF.createApiGuide({
+  apiPanel.appendChild(SF.createApiGuide({
     endpoints: [
       { method: 'GET', path: '/demo-data/STANDARD', description: 'Fetch demo data', curl: 'curl http://localhost:7860/demo-data/STANDARD' },
       { method: 'POST', path: '/schedules', description: 'Submit a plan for solving', curl: 'curl -X POST -H "Content-Type: application/json" http://localhost:7860/schedules -d @plan.json' },
@@ -64,26 +83,21 @@
       { method: 'GET', path: '/schedules/{id}/analyze', description: 'Get constraint analysis', curl: 'curl http://localhost:7860/schedules/{id}/analyze' },
       { method: 'DELETE', path: '/schedules/{id}', description: 'Stop solving and remove job', curl: 'curl -X DELETE http://localhost:7860/schedules/{id}' },
     ],
-  });
-  apiPanel.appendChild(guide);
+  }));
   app.appendChild(apiPanel);
 
-  // Footer
-  var footer = SF.createFooter({
+  app.appendChild(SF.createFooter({
     links: [
       { label: 'SolverForge', url: 'https://www.solverforge.org' },
       { label: 'Docs', url: 'https://www.solverforge.org/docs' },
     ],
-  });
-  app.appendChild(footer);
+  }));
 
-  // Analysis modal
   var analysisModal = SF.createModal({ title: 'Score Analysis', width: '700px' });
 
-  // Load demo data on startup
   fetch('/demo-data/STANDARD')
     .then(function (r) { return r.json(); })
-    .then(function (data) { renderHero(data); renderTables(data); })
+    .then(function (data) { renderAll(data); })
     .catch(function () {});
 
   function loadAndSolve() {
@@ -104,6 +118,188 @@
       .catch(function () {});
   }
 
+  function renderAll(data) {
+    renderOverview(data);
+    renderViews(data);
+    renderTables(data);
+  }
+
+  function renderOverview(data) {
+    overviewContainer.innerHTML = '';
+    if ((uiModel.views || []).length) {
+      overviewContainer.appendChild(SF.el('p', null, 'Add facts, entities, and planning variables in any order. The view tabs are generated from the variables declared in your project.'));
+      overviewContainer.appendChild(SF.createTable({
+        columns: ['Active views', 'Constraints', 'Current score'],
+        rows: [[String(uiModel.views.length), String((uiModel.constraints || []).length), String(data.score || '—')]],
+      }));
+      return;
+    }
+    overviewContainer.appendChild(SF.el('p', null, 'No planning variables are declared yet. Use `solverforge generate entity`, `generate fact`, and `generate variable` to shape the app.'));
+  }
+
+  function renderViews(data) {
+    (uiModel.views || []).forEach(function (view) {
+      var container = document.getElementById('view-' + view.id);
+      if (!container) return;
+      container.innerHTML = '';
+      if (view.kind === 'list') {
+        renderListView(container, data, view);
+      } else {
+        renderStandardView(container, data, view);
+      }
+    });
+  }
+
+  function renderStandardView(container, data, view) {
+    var entities = data[view.entityPlural] || [];
+    var facts = data[view.sourcePlural] || [];
+    if (!entities.length || !facts.length) {
+      container.appendChild(SF.el('p', null, 'This standard-variable view will appear once the referenced facts and entities contain data.'));
+      return;
+    }
+
+    var byIndex = {};
+    facts.forEach(function (fact, index) {
+      var key = fact.index != null ? fact.index : index;
+      byIndex[key] = fact;
+    });
+
+    var assignments = {};
+    facts.forEach(function (fact, index) {
+      assignments[String(factLabel(fact, index))] = [];
+    });
+    var unassigned = [];
+    entities.forEach(function (entity) {
+      var idx = entity[view.variableField];
+      if (idx == null || byIndex[idx] == null) {
+        unassigned.push(entity);
+        return;
+      }
+      assignments[String(factLabel(byIndex[idx], idx))].push(entity);
+    });
+
+    var horizon = Math.max(maxColumns(assignments), unassigned.length, 1);
+    container.appendChild(SF.rail.createHeader({
+      label: title(view.sourcePlural),
+      labelWidth: 220,
+      columns: Array.from({ length: horizon }, function (_, i) { return 'Slot ' + (i + 1); }),
+    }));
+
+    facts.forEach(function (fact, index) {
+      var label = String(factLabel(fact, index));
+      var items = assignments[label] || [];
+      var card = SF.rail.createCard({
+        id: view.id + '-fact-' + index,
+        name: label,
+        labelWidth: 220,
+        columns: horizon,
+        stats: [{ label: title(view.entityPlural), value: items.length }],
+      });
+      items.forEach(function (entity, itemIndex) {
+        card.addBlock({
+          id: view.id + '-entity-' + itemIndex,
+          label: entityLabel(entity, itemIndex),
+          start: itemIndex,
+          end: itemIndex + 1,
+          horizon: horizon,
+          color: SF.colors.pick(String(entityLabel(entity, itemIndex))),
+        });
+      });
+      container.appendChild(card.el);
+    });
+
+    if (unassigned.length && view.allowsUnassigned) {
+      var unassignedCard = SF.rail.createCard({
+        id: view.id + '-unassigned',
+        name: 'Unassigned',
+        labelWidth: 220,
+        columns: horizon,
+        badges: ['Needs assignment'],
+        stats: [{ label: title(view.entityPlural), value: unassigned.length }],
+      });
+      unassigned.forEach(function (entity, itemIndex) {
+        unassignedCard.addBlock({
+          id: view.id + '-unassigned-' + itemIndex,
+          label: entityLabel(entity, itemIndex),
+          start: itemIndex,
+          end: itemIndex + 1,
+          horizon: horizon,
+          color: SF.colors.pick(String(entityLabel(entity, itemIndex))),
+        });
+      });
+      container.appendChild(unassignedCard.el);
+    }
+  }
+
+  function renderListView(container, data, view) {
+    var entities = data[view.entityPlural] || [];
+    var facts = data[view.sourcePlural] || [];
+    if (!entities.length || !facts.length) {
+      container.appendChild(SF.el('p', null, 'This list-variable view will appear once the referenced facts and entities contain data.'));
+      return;
+    }
+    var byIndex = {};
+    facts.forEach(function (fact, index) {
+      var key = fact.index != null ? fact.index : index;
+      byIndex[key] = fact;
+    });
+    var horizon = entities.reduce(function (max, entity) {
+      var list = entity[view.variableField] || [];
+      return Math.max(max, list.length);
+    }, 1);
+
+    container.appendChild(SF.rail.createHeader({
+      label: title(view.entityPlural),
+      labelWidth: 220,
+      columns: Array.from({ length: horizon }, function (_, i) { return String(i + 1); }),
+    }));
+
+    entities.forEach(function (entity, entityIndex) {
+      var sequence = entity[view.variableField] || [];
+      var card = SF.rail.createCard({
+        id: view.id + '-entity-' + entityIndex,
+        name: entityLabel(entity, entityIndex),
+        labelWidth: 220,
+        columns: horizon,
+        stats: [{ label: title(view.sourcePlural), value: sequence.length }],
+      });
+      sequence.forEach(function (itemIndex, seqIndex) {
+        var fact = byIndex[itemIndex];
+        card.addBlock({
+          id: view.id + '-item-' + seqIndex,
+          label: factLabel(fact, itemIndex),
+          start: seqIndex,
+          end: seqIndex + 1,
+          horizon: horizon,
+          color: SF.colors.pick(String(factLabel(fact, itemIndex))),
+        });
+      });
+      container.appendChild(card.el);
+    });
+  }
+
+  function renderTables(data) {
+    tablesContainer.innerHTML = '';
+    (uiModel.entities || []).concat(uiModel.facts || []).forEach(function (entry) {
+      var rows = data[entry.plural] || [];
+      if (!rows.length) return;
+      var cols = Object.keys(rows[0]).filter(function (key) { return key !== 'score' && key !== 'solverStatus'; });
+      var values = rows.map(function (row) {
+        return cols.map(function (key) {
+          var value = row[key];
+          if (value == null) return '—';
+          if (Array.isArray(value)) return value.join(', ');
+          if (typeof value === 'object') return JSON.stringify(value);
+          return String(value);
+        });
+      });
+      var section = SF.el('div', { className: 'sf-section' });
+      section.appendChild(SF.el('h3', null, entry.label));
+      section.appendChild(SF.createTable({ columns: cols, rows: values }));
+      tablesContainer.appendChild(section);
+    });
+  }
+
   function buildAnalysisHtml(analysis) {
     if (!analysis || !analysis.constraints) return '<p>No analysis available.</p>';
     var html = '<p><strong>Score:</strong> ' + SF.escHtml(analysis.score) + '</p>';
@@ -115,265 +311,25 @@
     return html;
   }
 
-  function heroLabel() {
-    return isTimetableView() ? 'Timetable' : 'Assignments';
+  function factLabel(fact, fallback) {
+    if (!fact) return String(fallback);
+    return fact.name || fact.id || fact.index || fallback;
   }
 
-  function heroIcon() {
-    return isTimetableView() ? 'fa-calendar-days' : 'fa-table-cells-large';
+  function entityLabel(entity, fallback) {
+    if (!entity) return String(fallback);
+    return entity.name || entity.id || fallback;
   }
 
-  function isTimetableView() {
-    return config.view && config.view.type === 'timetable';
-  }
-
-  function renderHero(data) {
-    if (isTimetableView()) {
-      renderTimetable(data);
-    } else {
-      renderAssignmentBoard(data);
-    }
-  }
-
-  function renderTimetable(data) {
-    heroContainer.innerHTML = '';
-    var resources = data.resources || [];
-    var tasks = data.tasks || [];
-    if (!resources.length) return;
-
-    var fields = config.view && config.view.fields ? config.view.fields : {};
-    var startField = fields.start;
-    var endField = fields.end;
-    var labelField = fields.label || 'name';
-    var positionedTasks = tasks.filter(function (task) {
-      return typeof task[startField] === 'number' && typeof task[endField] === 'number';
-    });
-    var maxEnd = positionedTasks.reduce(function (maxValue, task) {
-      return Math.max(maxValue, task[endField]);
-    }, 0);
-    var numSlots = Math.max(maxEnd, 1);
-
-    var hdr = SF.rail.createHeader({
-      label: config.facts[0] ? config.facts[0].label : 'Resource',
-      labelWidth: 160,
-      columns: Array.from({ length: numSlots }, function (_, i) { return 'Slot ' + (i + 1); }),
-    });
-    heroContainer.appendChild(hdr);
-
-    resources.forEach(function (res) {
-      var assigned = tasks.filter(function (t) {
-        return t.resource && t.resource.name === res.name;
-      });
-      var card = SF.rail.createCard({
-        id: 'res-' + res.index,
-        name: res.name,
-        labelWidth: 160,
-        columns: numSlots,
-        stats: [{ label: 'Tasks', value: assigned.length }],
-      });
-      assigned.forEach(function (task) {
-        if (typeof task[startField] !== 'number' || typeof task[endField] !== 'number') return;
-        card.addBlock({
-          label: String(task[labelField] || task.name || task.id || 'Item'),
-          start: task[startField],
-          end: task[endField],
-          horizon: numSlots,
-          color: SF.colors.pick(String(task[labelField] || task.name || task.id || 'Item')),
-        });
-      });
-      heroContainer.appendChild(card.el);
-    });
-  }
-
-  function renderAssignmentBoard(data) {
-    heroContainer.innerHTML = '';
-    var resources = data.resources || [];
-    var tasks = data.tasks || [];
-    var assignedByResource = {};
-    var unassigned = [];
-
-    resources.forEach(function (res) {
-      assignedByResource[res.name] = [];
-    });
-
-    tasks.forEach(function (task) {
-      var resourceName = task.resource && task.resource.name;
-      if (resourceName && assignedByResource[resourceName]) {
-        assignedByResource[resourceName].push(task);
-      } else {
-        unassigned.push(task);
-      }
-    });
-
-    if (!resources.length && !unassigned.length) return;
-
-    var sortedResources = resources
-      .slice()
-      .sort(function (a, b) {
-        return resourceLoad(assignedByResource[b.name]) - resourceLoad(assignedByResource[a.name]);
-      });
-    var horizon = Math.max(maxAssignedTasks(sortedResources, assignedByResource), unassigned.length, 1);
-
-    heroContainer.appendChild(SF.rail.createHeader({
-      label: config.facts[0] ? config.facts[0].label : 'Resource',
-      labelWidth: 220,
-      columns: Array.from({ length: horizon }, function (_, i) { return 'Slot ' + (i + 1); }),
-    }));
-
-    sortedResources.forEach(function (res) {
-      heroContainer.appendChild(buildAssignmentCard(res, assignedByResource[res.name], horizon).el);
-    });
-
-    if (unassigned.length) {
-      heroContainer.appendChild(buildUnassignedCard(unassigned, horizon).el);
-    }
-  }
-
-  function resourceLoad(tasks) {
-    return tasks.reduce(function (sum, task) {
-      return sum + Number(task.demand || 0);
+  function maxColumns(assignments) {
+    return Object.keys(assignments).reduce(function (max, key) {
+      return Math.max(max, (assignments[key] || []).length);
     }, 0);
   }
 
-  function maxAssignedTasks(resources, assignedByResource) {
-    return resources.reduce(function (maxCount, resource) {
-      return Math.max(maxCount, (assignedByResource[resource.name] || []).length);
-    }, 0);
+  function title(text) {
+    return String(text || '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, function (match) { return match.toUpperCase(); });
   }
-
-  function buildAssignmentCard(resource, tasks, horizon) {
-    var load = resourceLoad(tasks);
-    var matches = tasks.filter(function (task) {
-      return task.preferredGroup === resource.affinityGroup;
-    }).length;
-    var capacity = Number(resource.capacity || 0);
-    var loadPct = capacity > 0 ? Math.round((load / capacity) * 100) : 0;
-    var card = SF.rail.createCard({
-      id: 'resource-' + String(resource.index != null ? resource.index : resource.name),
-      name: resource.name || 'Unnamed resource',
-      labelWidth: 220,
-      columns: horizon,
-      type: 'Affinity',
-      badges: [resource.affinityGroup || '—'],
-      gauges: [
-        {
-          label: 'Load',
-          pct: Math.min(loadPct, 100),
-          style: loadPct > 100 ? 'heat' : 'load',
-          text: capacity > 0 ? String(load) + '/' + String(capacity) : String(load),
-        },
-      ],
-      stats: [
-        { label: 'Tasks', value: tasks.length },
-        { label: 'Assigned demand', value: load },
-        { label: 'Preference matches', value: matches },
-      ],
-    });
-    tasks
-      .slice()
-      .sort(function (a, b) { return Number(b.demand || 0) - Number(a.demand || 0); })
-      .forEach(function (task, index) {
-        card.addBlock({
-          id: 'task-' + String(task.id || index),
-          label: task.name || 'Unnamed',
-          meta: 'Demand ' + String(task.demand || 0),
-          start: index,
-          end: index + 1,
-          horizon: horizon,
-          color: SF.colors.pick(String(task.preferredGroup || task.id || task.name || index)),
-        });
-      });
-    return card;
-  }
-
-  function buildUnassignedCard(tasks, horizon) {
-    var totalDemand = resourceLoad(tasks);
-    var card = SF.rail.createCard({
-      id: 'resource-unassigned',
-      name: 'Unassigned',
-      labelWidth: 220,
-      columns: horizon,
-      type: 'Attention',
-      badges: ['Needs assignment'],
-      gauges: [
-        { label: 'Demand', pct: 100, style: 'heat', text: String(totalDemand) },
-      ],
-      stats: [
-        { label: 'Tasks', value: tasks.length },
-        { label: 'Demand', value: totalDemand },
-        {
-          label: 'Top preference',
-          value: mostCommonGroup(tasks),
-        },
-      ],
-    });
-    tasks
-      .slice()
-      .sort(function (a, b) { return Number(b.demand || 0) - Number(a.demand || 0); })
-      .forEach(function (task, index) {
-        card.addBlock({
-          id: 'task-unassigned-' + String(task.id || index),
-          label: task.name || 'Unnamed',
-          meta: (task.preferredGroup || '—') + ' · demand ' + String(task.demand || 0),
-          start: index,
-          end: index + 1,
-          horizon: horizon,
-          color: SF.colors.pick('unassigned-' + String(task.preferredGroup || task.id || index)),
-        });
-      });
-    return card;
-  }
-
-  function mostCommonGroup(tasks) {
-    if (!tasks.length) return '—';
-    var counts = {};
-    tasks.forEach(function (task) {
-      var key = task.preferredGroup || '—';
-      counts[key] = (counts[key] || 0) + 1;
-    });
-    return Object.keys(counts).sort(function (a, b) {
-      return counts[b] - counts[a];
-    })[0];
-  }
-
-  function renderTables(data) {
-    tablesContainer.innerHTML = '';
-
-    config.entities.forEach(function (entity) {
-      var items = data[entity.plural] || data[entity.name + 's'] || [];
-      if (!items.length) return;
-      var cols = Object.keys(items[0]);
-      var rows = items.map(function (item) {
-        return cols.map(function (k) {
-          var v = item[k];
-          if (v === null || v === undefined) return '—';
-          if (typeof v === 'object') return JSON.stringify(v);
-          return String(v);
-        });
-      });
-      var section = SF.el('div', { className: 'sf-section' });
-      section.appendChild(SF.el('h3', null, entity.label));
-      section.appendChild(SF.createTable({ columns: cols, rows: rows }));
-      tablesContainer.appendChild(section);
-    });
-
-    config.facts.forEach(function (fact) {
-      var items = data[fact.plural] || data[fact.name + 's'] || [];
-      if (!items.length) return;
-      var cols = Object.keys(items[0]);
-      var rows = items.map(function (item) {
-        return cols.map(function (k) {
-          var v = item[k];
-          if (v === null || v === undefined) return '—';
-          if (typeof v === 'object') return JSON.stringify(v);
-          return String(v);
-        });
-      });
-      var section = SF.el('div', { className: 'sf-section' });
-      section.appendChild(SF.el('h3', null, fact.label));
-      section.appendChild(SF.createTable({ columns: cols, rows: rows }));
-      tablesContainer.appendChild(section);
-    });
-  }
-
 })();

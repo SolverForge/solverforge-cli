@@ -110,7 +110,7 @@ use solverforge::prelude::*;
 
 /// TODO — describe this fact.
 #[problem_fact]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct {pascal} {{
     pub index: usize,
     pub name: String,

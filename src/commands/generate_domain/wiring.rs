@@ -73,7 +73,7 @@ pub(crate) fn insert_field_and_import(
     src: &str,
     solution_type: &str,
     pascal: &str,
-    plural: &str,
+    _plural: &str,
     field_block: &str,
 ) -> Result<String, String> {
     // 1. Add import after last `use` line (or at top of file)
@@ -82,10 +82,77 @@ pub(crate) fn insert_field_and_import(
     // 2. Insert field into struct before `#[planning_score]` or before last field's `}`
     let src = insert_struct_field(&src, solution_type, field_block)?;
 
-    // 3. Patch constructor: add param + field init
-    let src = patch_constructor(&src, solution_type, pascal, plural)?;
+    rebuild_solution_constructor(&src)
+}
 
-    Ok(src)
+fn rebuild_solution_constructor(src: &str) -> Result<String, String> {
+    let collection_fields: Vec<(String, String)> =
+        src.lines().filter_map(parse_solution_vec_field).collect();
+    let new_signature = if collection_fields.is_empty() {
+        "    pub fn new() -> Self {".to_string()
+    } else {
+        format!(
+            "    pub fn new({}) -> Self {{",
+            collection_fields
+                .iter()
+                .map(|(field, ty)| format!("{field}: Vec<{ty}>"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let new_body = if collection_fields.is_empty() {
+        "        Self { score: None }".to_string()
+    } else {
+        format!(
+            "        Self {{ {}, score: None }}",
+            collection_fields
+                .iter()
+                .map(|(field, _)| format!("{field}: {field}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+
+    let lines: Vec<String> = src.lines().map(|line| line.to_string()).collect();
+    let fn_start = lines
+        .iter()
+        .position(|line| line.contains("pub fn new("))
+        .ok_or_else(|| "could not find solution constructor".to_string())?;
+    let mut fn_end = None;
+    let mut depth = 0i32;
+    for (idx, line) in lines.iter().enumerate().skip(fn_start) {
+        depth += line.chars().filter(|&c| c == '{').count() as i32;
+        depth -= line.chars().filter(|&c| c == '}').count() as i32;
+        if idx > fn_start && depth == 0 {
+            fn_end = Some(idx);
+            break;
+        }
+    }
+    let fn_end = fn_end.ok_or_else(|| "could not find constructor end".to_string())?;
+
+    let mut out = Vec::new();
+    out.extend(lines[..fn_start].iter().cloned());
+    out.push(new_signature);
+    out.push(new_body);
+    out.push("    }".to_string());
+    out.extend(lines[fn_end + 1..].iter().cloned());
+    Ok(out.join("\n") + "\n")
+}
+
+fn parse_solution_vec_field(line: &str) -> Option<(String, String)> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with("pub ") || trimmed.contains("score:") {
+        return None;
+    }
+    let trimmed = trimmed.trim_start_matches("pub ").trim_end_matches(',');
+    let colon = trimmed.find(':')?;
+    let field = trimmed[..colon].trim().to_string();
+    let type_part = trimmed[colon + 1..].trim();
+    if type_part.starts_with("Vec<") && type_part.ends_with('>') {
+        Some((field, type_part[4..type_part.len() - 1].to_string()))
+    } else {
+        None
+    }
 }
 
 pub(crate) fn add_import(src: &str, import: &str) -> String {
@@ -151,125 +218,35 @@ pub(crate) fn insert_struct_field(
     Err("could not find insertion point in solution struct".to_string())
 }
 
-fn patch_constructor(
-    src: &str,
-    solution_type: &str,
-    pascal: &str,
-    plural: &str,
-) -> Result<String, String> {
-    // Find `pub fn new(` inside `impl <SolutionType>`
-    // Strategy: add `<plural>: Vec<{pascal}>` param and `<plural>` in Self { ... }
-    let new_fn_marker = "pub fn new(";
-    if !src.contains(new_fn_marker) {
-        return Ok(src.to_string()); // no constructor to patch
-    }
-
-    // Add param: change `pub fn new()` → `pub fn new(<plural>: Vec<PascalType>, )`
-    // and `Self { ... }` to add `<plural>,`
-    let src = add_constructor_param(src, solution_type, pascal, plural);
-    Ok(src)
-}
-
-fn add_constructor_param(src: &str, _solution_type: &str, pascal: &str, plural: &str) -> String {
-    // Insert param into fn new() signature
-    let param = format!("{}: Vec<{}>", plural, pascal);
-    if src.contains(&param) {
-        return src.to_string();
-    }
-
-    // Replace `pub fn new()` with `pub fn new(<param>)` or append to existing params
-    let src = if src.contains("pub fn new()") {
-        src.replacen(
-            "pub fn new()",
-            &format!("pub fn new({}: Vec<{}>)", plural, pascal),
-            1,
-        )
-    } else if src.contains("pub fn new(") {
-        // Find the closing paren of the param list and insert before it
-        let marker = "pub fn new(";
-        if let Some(start) = src.find(marker) {
-            let after = &src[start + marker.len()..];
-            if let Some(end) = after.find(')') {
-                let existing = after[..end].trim();
-                let new_params = if existing.is_empty() {
-                    format!("{}: Vec<{}>", plural, pascal)
-                } else {
-                    format!("{}, {}: Vec<{}>", existing, plural, pascal)
-                };
-                let replace_from = start + marker.len();
-                let replace_to = replace_from + end;
-                format!(
-                    "{}{}{}",
-                    &src[..replace_from],
-                    new_params,
-                    &src[replace_to..]
-                )
-            } else {
-                src.to_string()
-            }
-        } else {
-            src.to_string()
-        }
-    } else {
-        src.to_string()
-    };
-
-    // Now add the field initializer in Self { ... }
-    // Find `Self {` and insert `<plural>,` before the closing `}`
-    add_self_init_field(&src, plural)
-}
-
-pub(crate) fn add_self_init_field(src: &str, plural: &str) -> String {
-    let field_init = format!("{}: {},", plural, plural);
-    if src.contains(&field_init) {
-        return src.to_string();
-    }
-
-    // Find `Self {` and the matching `}`, insert before it
-    if let Some(self_pos) = src.find("Self {") {
-        let after_self = &src[self_pos..];
-        // Find the closing `}` of the Self literal
-        let mut depth = 0;
-        let mut close_pos = None;
-        for (i, ch) in after_self.char_indices() {
-            match ch {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        close_pos = Some(self_pos + i);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        if let Some(close) = close_pos {
-            // Insert `    <plural>: <plural>,\n` before the `}`
-            let indent = "            "; // match typical 3-level indent inside impl block
-            return format!(
-                "{}{}{}: {},\n{}",
-                &src[..close],
-                indent,
-                plural,
-                plural,
-                &src[close..]
-            );
-        }
-    }
-    src.to_string()
-}
-
+#[cfg(test)]
 /// Adds a `#[planning_variable]` field to an existing entity struct and patches `new()`.
 pub(crate) fn inject_planning_variable(
     src: &str,
     entity: &str,
     field: &str,
 ) -> Result<String, String> {
-    let field_block = format!(
-        "    #[planning_variable(allows_unassigned = true)]\n    pub {}: Option<usize>,",
-        field
-    );
+    inject_standard_variable(src, entity, field, "", true)
+}
+
+pub(crate) fn inject_standard_variable(
+    src: &str,
+    entity: &str,
+    field: &str,
+    range: &str,
+    allows_unassigned: bool,
+) -> Result<String, String> {
+    let annotation = if range.is_empty() {
+        format!(
+            "    #[planning_variable(allows_unassigned = {})]",
+            allows_unassigned
+        )
+    } else {
+        format!(
+            "    #[planning_variable(value_range = \"{}\", allows_unassigned = {})]",
+            range, allows_unassigned
+        )
+    };
+    let field_block = format!("{}\n    pub {}: Option<usize>,", annotation, field);
     if src.contains(&format!("pub {}: Option<usize>", field)) {
         return Err(format!("field '{}' already exists in {}", field, entity));
     }
@@ -356,6 +333,125 @@ pub(crate) fn add_self_none_init(src: &str, field: &str) -> String {
             }
         }
     }
+    src.to_string()
+}
+
+pub(crate) fn inject_list_variable(
+    src: &str,
+    entity: &str,
+    field: &str,
+    elements: &str,
+) -> Result<String, String> {
+    let field_block = format!(
+        "    #[planning_list_variable(element_collection = \"{}\")]\n    pub {}: Vec<usize>,",
+        elements, field
+    );
+    if src.contains(&format!("pub {}: Vec<usize>", field)) {
+        return Err(format!("field '{}' already exists in {}", field, entity));
+    }
+
+    let src = insert_struct_field(src, entity, &field_block)?;
+    let field_init = format!("{}: Vec::new(),", field);
+    let src = if src.contains(&field_init) {
+        src
+    } else {
+        add_self_vec_init(&src, field)
+    };
+
+    Ok(src)
+}
+
+pub(crate) fn remove_variable_field(src: &str, field: &str) -> Result<String, String> {
+    if !src.contains(&format!("pub {}", field)) {
+        return Err(format!("field '{}' not found", field));
+    }
+
+    let mut lines: Vec<String> = src.lines().map(|line| line.to_string()).collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let trimmed = lines[i].trim().to_string();
+        if trimmed.starts_with(&format!("pub {}:", field)) {
+            let mut start = i;
+            while start > 0 && lines[start - 1].trim_start().starts_with("#[") {
+                start -= 1;
+            }
+            lines.drain(start..=i);
+            i = start;
+            continue;
+        }
+        if trimmed.contains(&format!("{}: None,", field))
+            || trimmed.contains(&format!("{}: Vec::new(),", field))
+        {
+            lines.remove(i);
+            continue;
+        }
+        i += 1;
+    }
+
+    Ok(lines.join("\n") + "\n")
+}
+
+fn add_self_vec_init(src: &str, field: &str) -> String {
+    let field_init = format!("{}: Vec::new(),", field);
+    if src.contains(&field_init) {
+        return src.to_string();
+    }
+
+    let self_pos = src
+        .match_indices("Self {")
+        .find(|(pos, _)| {
+            let after_brace = &src[pos + "Self {".len()..];
+            after_brace
+                .chars()
+                .next()
+                .map(|c| c != '\n' && c != '\r')
+                .unwrap_or(false)
+        })
+        .map(|(pos, _)| pos);
+
+    if let Some(self_pos) = self_pos {
+        let after_self = &src[self_pos..];
+        let mut depth = 0;
+        let mut close_pos = None;
+        for (i, ch) in after_self.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close_pos = Some(self_pos + i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(close) = close_pos {
+            let indent = "            ";
+            let before_close = &src[..close];
+            let trimmed = before_close.trim_end();
+            let needs_comma = !trimmed.ends_with(',') && !trimmed.ends_with('{');
+            if needs_comma {
+                let content_end = before_close.trim_end().len();
+                let with_comma = format!("{},", &src[..content_end]);
+                return format!(
+                    "{}\n{}{}: Vec::new(),\n{}",
+                    with_comma,
+                    indent,
+                    field,
+                    &src[close..]
+                );
+            }
+            return format!(
+                "{}{}{}: Vec::new(),\n{}",
+                &src[..close],
+                indent,
+                field,
+                &src[close..]
+            );
+        }
+    }
+
     src.to_string()
 }
 

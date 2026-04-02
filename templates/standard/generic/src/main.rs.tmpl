@@ -1,4 +1,4 @@
-/* {{project_name}} — standard variable optimizer with SolverForge
+/* {{project_name}} — unified optimizer with SolverForge
    Run with: solverforge server
    Then open: http://localhost:7860 */
 
@@ -25,9 +25,13 @@ async fn main() {
         .fallback_service(ServeDir::new("static"))
         .layer(cors);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 7860));
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(7860);
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     println!("▸ {{project_name}} listening on http://{}", addr);
-    println!("▸ Open http://localhost:7860 in your browser\n");
+    println!("▸ Open http://localhost:{} in your browser\n", port);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

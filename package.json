@@ -1,0 +1,13 @@
+{
+  "name": "solverforge-cli-e2e",
+  "private": true,
+  "scripts": {
+    "test:e2e": "node tests/e2e/run-playwright.js",
+    "test:e2e:debug": "KEEP_E2E_ARTIFACTS=1 node tests/e2e/run-playwright.js",
+    "test:e2e:list": "playwright test --list",
+    "install:e2e": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}

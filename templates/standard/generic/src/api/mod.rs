@@ -2,4 +2,5 @@ mod dto;
 mod routes;
 mod sse;
 
-pub use routes::{AppState, router};
+pub use dto::PlanDto;
+pub use routes::{router, AppState};

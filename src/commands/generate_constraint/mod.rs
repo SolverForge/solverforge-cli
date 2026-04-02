@@ -1,4 +1,4 @@
-mod domain;
+pub(crate) mod domain;
 mod mod_rewriter;
 mod run;
 mod skeleton;

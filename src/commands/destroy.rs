@@ -5,6 +5,7 @@ use crate::commands::generate_constraint::parse_domain;
 use crate::commands::generate_domain::{find_file_for_type, snake_to_pascal};
 use crate::error::{CliError, CliResult};
 use crate::output;
+use crate::{app_spec, commands::generate_domain};
 
 fn confirm_destroy(kind: &str, name: &str, skip_confirm: bool) -> CliResult<bool> {
     if skip_confirm {
@@ -46,6 +47,7 @@ pub fn run_solution(skip_confirm: bool) -> CliResult {
     })?;
 
     remove_from_domain_mod(&file_name)?;
+    app_spec::sync_from_project()?;
 
     output::print_remove(&format!("src/domain/{}.rs", file_name));
     output::print_update("src/domain/mod.rs");
@@ -101,6 +103,7 @@ pub fn run_entity(name: &str, skip_confirm: bool) -> CliResult {
     remove_from_domain_mod(&file_name)?;
     unwire_collection_from_solution(&entity.field_name, &entity.item_type, &domain.solution_type)?;
     crate::commands::sf_config::remove_entity(&snake)?;
+    app_spec::sync_from_project()?;
 
     output::print_remove(&format!("src/domain/{}.rs", file_name));
     output::print_update("src/domain/mod.rs");
@@ -156,10 +159,20 @@ pub fn run_fact(name: &str, skip_confirm: bool) -> CliResult {
     remove_from_domain_mod(&file_name)?;
     unwire_collection_from_solution(&fact.field_name, &fact.item_type, &domain.solution_type)?;
     crate::commands::sf_config::remove_fact(&snake)?;
+    app_spec::sync_from_project()?;
 
     output::print_remove(&format!("src/domain/{}.rs", file_name));
     output::print_update("src/domain/mod.rs");
     Ok(())
+}
+
+pub fn run_variable(field: &str, entity: &str, skip_confirm: bool) -> CliResult {
+    if !confirm_destroy("variable", field, skip_confirm)? {
+        output::print_skip(&format!("variable {}", field));
+        return Ok(());
+    }
+
+    generate_domain::destroy_variable(field, entity)
 }
 
 pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
@@ -185,6 +198,7 @@ pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
 
     remove_constraint_from_mod(&snake)?;
     crate::commands::sf_config::remove_constraint(&snake)?;
+    app_spec::sync_from_project()?;
 
     output::print_remove(&file_path);
     output::print_update("src/constraints/mod.rs");

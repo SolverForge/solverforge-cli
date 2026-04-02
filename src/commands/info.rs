@@ -33,13 +33,13 @@ pub fn run() -> CliResult {
                         entity
                             .planning_vars
                             .iter()
-                            .map(|field| format!("{field} [standard]")),
+                            .map(|field| format!("{} [standard]", field.field)),
                     );
                     solvable_fields.extend(
                         entity
                             .list_vars
                             .iter()
-                            .map(|field| format!("{field} [list]")),
+                            .map(|field| format!("{} [list]", field.field)),
                     );
 
                     if solvable_fields.is_empty() {

@@ -1,0 +1,13 @@
+[app]
+name = "{{project_name}}"
+starter = "neutral-shell"
+cli_version = "{{solverforge_cli_version}}"
+
+[runtime]
+target = "{{solverforge_runtime_target}}"
+runtime_source = "{{solverforge_runtime_source}}"
+ui_source = "{{solverforge_ui_source}}"
+
+[solution]
+name = "Plan"
+score = "HardSoftScore"

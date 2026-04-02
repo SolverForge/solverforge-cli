@@ -1,7 +1,7 @@
 {
   "title": "{{project_name}}",
   "subtitle": "List Variable Optimizer",
-  "constraints": ["balanced_load"],
+  "constraints": ["balanced_load", "sequence_cohesion"],
   "entities": [{ "name": "container", "label": "Containers", "plural": "containers" }],
   "facts": [{ "name": "item", "label": "Items", "plural": "items" }],
   "view": {

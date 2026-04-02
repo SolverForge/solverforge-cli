@@ -4,51 +4,28 @@ use std::process::Command;
 
 use crate::error::{is_rust_keyword, CliError, CliResult};
 use crate::output;
+use crate::scaffold_target::{
+    RUNTIME_SOURCE_PATH, RUNTIME_TARGET_DISPLAY, RUNTIME_TARGET_LABEL, UI_SOURCE_PATH,
+};
 use crate::template;
 
-static STANDARD_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/standard/generic");
+static UNIFIED_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/standard/generic");
 
-static LIST_GENERIC_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/list/generic");
-
-const AVAILABLE_TEMPLATES: &str = "
-  Standard Starter (sample app with standard variables):
-    --standard                      — generic standard starter skeleton
-
-  List Starter (sample app with list variables):
-    --list                          — generic list starter skeleton";
-
-pub fn run(
-    name: &str,
-    template: Template,
-    skip_git: bool,
-    skip_readme: bool,
-    quiet: bool,
-) -> CliResult {
+pub fn run(name: &str, skip_git: bool, skip_readme: bool, quiet: bool) -> CliResult {
     let crate_name = to_crate_name(name);
 
     // Validate project name
     validate_project_name(name, &crate_name)?;
 
-    match template {
-        Template::Standard => scaffold(
-            name,
-            &crate_name,
-            &STANDARD_TEMPLATE,
-            "standard",
-            skip_git,
-            skip_readme,
-            quiet,
-        ),
-        Template::List => scaffold(
-            name,
-            &crate_name,
-            &LIST_GENERIC_TEMPLATE,
-            "list",
-            skip_git,
-            skip_readme,
-            quiet,
-        ),
-    }
+    scaffold(
+        name,
+        &crate_name,
+        &UNIFIED_TEMPLATE,
+        "neutral shell",
+        skip_git,
+        skip_readme,
+        quiet,
+    )
 }
 
 fn validate_project_name(name: &str, crate_name: &str) -> CliResult {
@@ -112,7 +89,10 @@ fn scaffold(
         ("solverforge_ui_dep", &solverforge_ui_dep_spec()),
         ("project_name", project_name),
         ("crate_name", crate_name),
-        ("solverforge_version", env!("CARGO_PKG_VERSION")),
+        ("solverforge_cli_version", env!("CARGO_PKG_VERSION")),
+        ("solverforge_runtime_target", RUNTIME_TARGET_LABEL),
+        ("solverforge_runtime_source", RUNTIME_SOURCE_PATH),
+        ("solverforge_ui_source", UI_SOURCE_PATH),
     ];
 
     template::render(template_dir, dest, vars)?;
@@ -180,8 +160,7 @@ fn scaffold(
     ));
     println!();
 
-    // Template-specific guidance
-    print_template_guidance(project_name, label);
+    print_template_guidance(project_name);
 
     // Optional cargo check prompt (skipped in quiet mode)
     if !quiet {
@@ -193,13 +172,13 @@ fn scaffold(
 
 fn solverforge_dep_spec() -> String {
     format!(
-        "{{ version = \"{}\", features = [\"serde\", \"console\", \"verbose-logging\"] }}",
-        env!("CARGO_PKG_VERSION")
+        "{{ path = {:?}, features = [\"serde\", \"console\", \"verbose-logging\"] }}",
+        RUNTIME_SOURCE_PATH
     )
 }
 
 fn solverforge_ui_dep_spec() -> String {
-    "\"0.3.1\"".to_string()
+    format!("{{ path = {:?} }}", UI_SOURCE_PATH)
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {
@@ -232,41 +211,32 @@ fn run_cargo_check_prompt(dest: &Path) -> CliResult {
     Ok(())
 }
 
-fn print_template_guidance(project_name: &str, label: &str) {
+fn print_template_guidance(project_name: &str) {
     if output::is_quiet() {
         return;
     }
 
     println!("  Next steps:");
     println!("    cd {}", project_name);
+    println!(
+        "    # CLI {} targeting SolverForge {}",
+        env!("CARGO_PKG_VERSION"),
+        RUNTIME_TARGET_LABEL
+    );
+    println!("    # Runtime source: {}", RUNTIME_SOURCE_PATH);
+    println!("    # UI source: {}", UI_SOURCE_PATH);
 
-    match label {
-        "standard" => {
-            println!("    solverforge server");
-            println!();
-            println!("  This template includes:");
-            println!("    - Standard starter domain skeleton with field-declared variables");
-            println!("    - Assignment-board UI composed from solverforge-ui primitives");
-            println!("    - REST API with SSE live updates and score analysis");
-            println!("    - solver.toml as the search-strategy layer");
-            println!("    solverforge generate entity task --planning-variable resource_idx");
-            println!("    solverforge generate fact resource");
-            println!("    solverforge generate constraint all_assigned --unary --hard");
-        }
-        "list" => {
-            println!("    solverforge server");
-            println!();
-            println!("  This template includes:");
-            println!("    - List starter domain skeleton with field-declared list variables");
-            println!("    - Balanced load constraint (soft)");
-            println!("    - Sequence view composed from solverforge-ui primitives");
-            println!("    - REST API with SSE live updates and score analysis");
-            println!("    - solver.toml as the search-strategy layer");
-        }
-        _ => {
-            println!("    solverforge server");
-        }
-    }
+    println!("    solverforge server");
+    println!();
+    println!("  This starter includes:");
+    println!("    - One neutral app shell for standard, list, or mixed modeling");
+    println!("    - Variable-driven views generated from solverforge.app.toml");
+    println!("    - REST API with typed SSE live updates and score analysis");
+    println!("    - solverforge.app.toml for the scaffolded domain contract");
+    println!("    - solver.toml as the search-strategy layer");
+    println!("    solverforge generate entity task");
+    println!("    solverforge generate fact resource");
+    println!("    solverforge generate variable resource_idx --entity Task --kind standard --range resources --allows-unassigned");
 
     println!();
 }
@@ -303,8 +273,29 @@ fn print_file_tree(root: &Path, dir: &Path) -> CliResult {
 fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String {
     let mut readme = format!("# {}\n\n", project_name);
     readme.push_str(&format!(
-        "A SolverForge constraint optimization project (template: `{}`).\n\n",
+        "A SolverForge constraint optimization project (starter: `{}`).\n\n",
         label
+    ));
+    readme.push_str("## Versioning\n\n");
+    readme.push_str(&format!(
+        "- CLI version used to scaffold this project: `{}`\n",
+        env!("CARGO_PKG_VERSION")
+    ));
+    readme.push_str(&format!(
+        "- SolverForge runtime target for this scaffold: `{}`\n",
+        RUNTIME_TARGET_LABEL
+    ));
+    readme.push_str(&format!(
+        "- Runtime source currently wired into `Cargo.toml`: `{}`\n\n",
+        RUNTIME_SOURCE_PATH
+    ));
+    readme.push_str(&format!(
+        "- Frontend UI source currently wired into `Cargo.toml`: `{}`\n\n",
+        UI_SOURCE_PATH
+    ));
+    readme.push_str(&format!(
+        "This project was scaffolded by `solverforge-cli`, but it currently targets `{}` through hardcoded local path dependencies. That temporary policy keeps generated apps aligned with the unpublished runtime and UI worktrees until the intended releases ship.\n\n",
+        RUNTIME_TARGET_DISPLAY
     ));
     readme.push_str("## Quick Start\n\n");
     readme.push_str("```bash\n");
@@ -332,29 +323,9 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
     readme.push_str("| `src/solver/` | Solver service and configuration |\n");
     readme.push_str("| `src/api/` | HTTP routes and DTOs |\n");
     readme.push_str("| `src/data/` | Data loading and generation |\n");
+    readme.push_str("| `solverforge.app.toml` | Scaffolded app/domain contract |\n");
     readme.push_str("| `solver.toml` | Solver configuration (termination, phases) |\n");
     readme
-}
-
-pub enum Template {
-    Standard,
-    List,
-}
-
-impl Template {
-    pub fn parse(standard: bool, list: bool) -> CliResult<Self> {
-        match (standard, list) {
-            (true, false) => Ok(Template::Standard),
-            (false, true) => Ok(Template::List),
-            (false, false) => Err(CliError::with_hint(
-                "specify a template flag",
-                format!("Available templates:{AVAILABLE_TEMPLATES}"),
-            )),
-            (true, true) => Err(CliError::general(
-                "--standard and --list are mutually exclusive",
-            )),
-        }
-    }
 }
 
 /// Converts a project name to a valid Rust crate name (underscores, lowercase).

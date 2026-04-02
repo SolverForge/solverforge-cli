@@ -34,7 +34,7 @@ pub(crate) fn generate_skeleton(
         .unwrap_or(solution_type);
     let planning_var = entity
         .and_then(|e| e.planning_vars.first())
-        .map(|s| s.as_str())
+        .map(|s| s.field.as_str())
         .unwrap_or("value");
 
     let fact_field = fact.map(|f| f.field_name.as_str()).unwrap_or("facts");

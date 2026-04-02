@@ -91,7 +91,7 @@ impl fmt::Display for CliError {
                 write!(
                     f,
                     "not a SolverForge project directory ({} not found)\n\n  \
-                     hint: run `solverforge new <name> --standard` to create a project,\n  \
+                     hint: run `solverforge new <name>` to create a project,\n  \
                      or `cd` into an existing SolverForge project directory",
                     missing
                 )

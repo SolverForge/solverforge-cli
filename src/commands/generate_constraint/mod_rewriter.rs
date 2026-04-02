@@ -119,7 +119,9 @@ pub(crate) fn extend_tuple(src: &str, call: &str) -> String {
     let after = &src[last_paren..];
 
     let trimmed_before = before.trim_end();
-    if trimmed_before.ends_with(',') {
+    if trimmed_before.ends_with('(') {
+        format!("{}{},{}", before, call, after)
+    } else if trimmed_before.ends_with(',') {
         format!("{} {}{}", before, call, after)
     } else {
         format!("{}, {}{}", before, call, after)
