@@ -8,14 +8,15 @@ use solverforge::prelude::*;
 #[problem_fact]
 #[derive(Serialize, Deserialize)]
 pub struct Item {
-    pub index: usize,
+    #[planning_id]
+    pub id: String,
     pub name: String,
 }
 
 impl Item {
-    pub fn new(index: usize, name: impl Into<String>) -> Self {
+    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
-            index,
+            id: id.into(),
             name: name.into(),
         }
     }

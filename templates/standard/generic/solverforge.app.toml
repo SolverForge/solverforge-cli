@@ -8,6 +8,10 @@ target = "{{solverforge_runtime_target}}"
 runtime_source = "{{solverforge_runtime_source}}"
 ui_source = "{{solverforge_ui_source}}"
 
+[demo]
+default_size = "standard"
+available_sizes = ["small", "standard", "large"]
+
 [solution]
 name = "Plan"
 score = "HardSoftScore"

@@ -8,6 +8,7 @@ use crate::domain::Plan;
 pub enum DemoData {
     Small,
     Standard,
+    Large,
 }
 
 impl FromStr for DemoData {
@@ -17,6 +18,7 @@ impl FromStr for DemoData {
         match s.to_uppercase().as_str() {
             "SMALL" => Ok(DemoData::Small),
             "STANDARD" => Ok(DemoData::Standard),
+            "LARGE" => Ok(DemoData::Large),
             _ => Err(()),
         }
     }

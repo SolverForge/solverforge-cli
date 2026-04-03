@@ -32,7 +32,7 @@ impl Plan {
 
 /// Simple cross-entity meter for the generic list scaffold.
 ///
-/// Uses item index distance so nearby move selectors can rank positions
+/// Uses item-position distance so nearby move selectors can rank positions
 /// without relying on a domain-specific metric.
 #[derive(Clone, Default)]
 pub struct ItemIndexDistanceMeter;

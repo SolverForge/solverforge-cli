@@ -120,7 +120,7 @@
     sequencesContainer.innerHTML = '';
     var containers = data.containers || [];
     if (!containers.length) return;
-    var itemsByName = buildItemsByName(data);
+    var itemsById = buildItemsById(data);
     var metrics = deriveSequenceMetrics(containers);
     var sortedContainers = containers.slice().sort(compareContainers);
     var horizon = Math.max(metrics.longestSequence, 1);
@@ -133,14 +133,14 @@
     }));
 
     sortedContainers.forEach(function (container) {
-      sequencesContainer.appendChild(buildSequenceCard(container, itemsByName, metrics, horizon).el);
+      sequencesContainer.appendChild(buildSequenceCard(container, itemsById, metrics, horizon).el);
     });
   }
 
-  function buildItemsByName(data) {
+  function buildItemsById(data) {
     var items = data.items || data.itemFacts || data.item_facts || [];
     return items.reduce(function (map, item) {
-      if (item && item.name) map[item.name] = item;
+      if (item && item.id) map[item.id] = item;
       return map;
     }, {});
   }
@@ -185,10 +185,10 @@
     return section;
   }
 
-  function buildSequenceCard(container, itemsByName, metrics, horizon) {
+  function buildSequenceCard(container, itemsById, metrics, horizon) {
     var sequence = container.items || [];
-    var firstItem = sequence.length ? describeItem(sequence[0], itemsByName).name : '—';
-    var lastItem = sequence.length ? describeItem(sequence[sequence.length - 1], itemsByName).name : '—';
+    var firstItem = sequence.length ? describeItem(sequence[0], itemsById).name : '—';
+    var lastItem = sequence.length ? describeItem(sequence[sequence.length - 1], itemsById).name : '—';
     var length = sequence.length;
     var fullnessPct = metrics.longestSequence > 0
       ? Math.round((length / metrics.longestSequence) * 100)
@@ -215,8 +215,8 @@
       ],
     });
 
-    sequence.forEach(function (itemName, index) {
-      var item = describeItem(itemName, itemsByName);
+    sequence.forEach(function (itemId, index) {
+      var item = describeItem(itemId, itemsById);
       card.addBlock({
         id: 'container-' + String(container.id || container.name) + '-item-' + String(index),
         label: item.name,
@@ -239,14 +239,14 @@
     return badges;
   }
 
-  function describeItem(itemName, itemsByName) {
-    var item = itemsByName[itemName];
+  function describeItem(itemId, itemsById) {
+    var item = itemsById[itemId];
     if (!item) {
-      return { key: itemName || 'item', name: itemName || 'Unnamed' };
+      return { key: itemId || 'item', name: itemId || 'Unnamed' };
     }
     return {
-      key: item.index != null ? item.index : item.name,
-      name: item.name || itemName || 'Unnamed',
+      key: item.id || itemId || 'item',
+      name: item.name || item.id || itemId || 'Unnamed',
     };
   }
 

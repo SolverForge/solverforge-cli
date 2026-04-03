@@ -9,9 +9,9 @@ use solverforge::prelude::*;
 #[derive(Serialize, Deserialize)]
 pub struct Container {
     #[planning_id]
-    pub id: usize,
+    pub id: String,
     pub name: String,
-    /// Ordered sequence of item indices assigned to this container.
+    /// Ordered sequence of item positions assigned to this container.
     ///
     /// This field declares the list variable the solver may reorder.
     /// `solver.toml` still controls search strategy; the list starter only
@@ -21,9 +21,9 @@ pub struct Container {
 }
 
 impl Container {
-    pub fn new(id: usize, name: impl Into<String>) -> Self {
+    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
-            id,
+            id: id.into(),
             name: name.into(),
             items: Vec::new(),
         }

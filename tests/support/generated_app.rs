@@ -383,13 +383,13 @@ pub fn generate(demo: DemoData) -> Plan {
 
 fn generate_plan(n_resources: usize, n_tasks: usize, n_containers: usize, n_items: usize) -> Plan {
     let resources = (0..n_resources)
-        .map(|idx| Resource::new(idx, format!("resource-{idx}")))
+        .map(|idx| Resource::new(format!("resource-{idx}"), format!("resource-{idx}")))
         .collect::<Vec<_>>();
     let tasks = (0..n_tasks)
         .map(|idx| Task::new(format!("task-{idx}")))
         .collect::<Vec<_>>();
     let items = (0..n_items)
-        .map(|idx| Item::new(idx, format!("item-{idx}")))
+        .map(|idx| Item::new(format!("item-{idx}"), format!("item-{idx}")))
         .collect::<Vec<_>>();
     let containers = (0..n_containers)
         .map(|idx| Container::new(format!("container-{idx}")))
@@ -434,7 +434,7 @@ pub fn generate(demo: DemoData) -> Plan {
 
 fn generate_plan(n_resources: usize, n_tasks: usize) -> Plan {
     let resources = (0..n_resources)
-        .map(|idx| Resource::new(idx, format!("resource-{idx}")))
+        .map(|idx| Resource::new(format!("resource-{idx}"), format!("resource-{idx}")))
         .collect::<Vec<_>>();
     let tasks = (0..n_tasks)
         .map(|idx| Task::new(format!("task-{idx}")))

@@ -112,13 +112,14 @@ use solverforge::prelude::*;
 #[problem_fact]
 #[derive(Serialize, Deserialize)]
 pub struct {pascal} {{
-    pub index: usize,
+    #[planning_id]
+    pub id: String,
     pub name: String,
 {extra_field_defs}}}
 
 impl {pascal} {{
-    pub fn new(index: usize, name: impl Into<String>{extra_field_params}) -> Self {{
-        Self {{ index, name: name.into(){extra_field_inits} }}
+    pub fn new(id: impl Into<String>, name: impl Into<String>{extra_field_params}) -> Self {{
+        Self {{ id: id.into(), name: name.into(){extra_field_inits} }}
     }}
 }}
 {test_module}"#
@@ -205,8 +206,8 @@ mod tests {{
 
     #[test]
     fn test_{snake}_construction() {{
-        let fact = {pascal}::new(0, "test"{extra_args});
-        assert_eq!(fact.index, 0);
+        let fact = {pascal}::new("test-id", "test"{extra_args});
+        assert_eq!(fact.id, "test-id");
         assert_eq!(fact.name, "test");{extra_asserts}
     }}
 }}

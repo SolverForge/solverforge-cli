@@ -6,14 +6,14 @@ use solverforge::SolverStatus;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDto {
-    pub index: usize,
+    pub id: String,
     pub name: String,
 }
 
 impl From<&Item> for ItemDto {
     fn from(i: &Item) -> Self {
         Self {
-            index: i.index,
+            id: i.id.clone(),
             name: i.name.clone(),
         }
     }
@@ -21,16 +21,16 @@ impl From<&Item> for ItemDto {
 
 impl ItemDto {
     pub fn to_item(&self) -> Item {
-        Item::new(self.index, &self.name)
+        Item::new(&self.id, &self.name)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContainerDto {
-    pub id: usize,
+    pub id: String,
     pub name: String,
-    /// Item names in sequence order.
+    /// Item ids in sequence order.
     pub items: Vec<String>,
 }
 
@@ -78,13 +78,13 @@ impl PlanDto {
             .containers
             .iter()
             .map(|c| ContainerDto {
-                id: c.id,
+                id: c.id.clone(),
                 name: c.name.clone(),
                 items: c
                     .items
                     .iter()
                     .filter_map(|&idx| plan.item_facts.get(idx))
-                    .map(|item| item.name.clone())
+                    .map(|item| item.id.clone())
                     .collect(),
             })
             .collect();
@@ -98,9 +98,10 @@ impl PlanDto {
 
     pub fn to_domain(&self) -> Plan {
         let item_facts: Vec<Item> = self.items.iter().map(ItemDto::to_item).collect();
-        let name_to_idx: std::collections::HashMap<&str, usize> = item_facts
+        let id_to_idx: std::collections::HashMap<&str, usize> = item_facts
             .iter()
-            .map(|i| (i.name.as_str(), i.index))
+            .enumerate()
+            .map(|(idx, item)| (item.id.as_str(), idx))
             .collect();
         let containers: Vec<Container> = self
             .containers
@@ -109,10 +110,10 @@ impl PlanDto {
                 let items: Vec<usize> = c
                     .items
                     .iter()
-                    .filter_map(|name| name_to_idx.get(name.as_str()).copied())
+                    .filter_map(|id| id_to_idx.get(id.as_str()).copied())
                     .collect();
                 Container {
-                    id: c.id,
+                    id: c.id.clone(),
                     name: c.name.clone(),
                     items,
                 }

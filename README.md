@@ -35,17 +35,20 @@ Basic domain flow:
 ```bash
 solverforge new my-scheduler
 cd my-scheduler
-solverforge generate fact resource --field name:String
-solverforge generate entity task --field name:String
+solverforge generate fact resource --field category:String --field load:i32
+solverforge generate entity task --field label:String --field priority:i32
 solverforge generate variable resource_idx --entity Task --kind standard --range resources --allows-unassigned
-solverforge generate data
+solverforge generate data --size large
 solverforge server
 ```
 
 `solverforge generate data` rewrites the compiler-owned sample builders in
 `src/generated/data_seed.rs`. The stable wrapper in `src/data/mod.rs` delegates
 to that generated seed file by default, so the command can keep regenerating
-sample data without clobbering user-owned entrypoints.
+sample data without clobbering user-owned entrypoints. Dataset size defaults are
+persisted in `solverforge.app.toml`. Generated values are intentionally generic
+and deterministic: the CLI optimizes for structurally useful optimization
+datasets, not domain-specific fake business data.
 
 The generated frontend is intentionally thin and composes shipped `solverforge-ui` primitives instead of vendoring template-specific web assets. Domain-specific examples such as employee scheduling and vehicle routing belong in quickstarts, not in the CLI's built-in scaffold catalog.
 

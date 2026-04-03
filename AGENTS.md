@@ -73,7 +73,8 @@ Do not commit generated projects, secrets, or credentials. The pre-commit config
 ## Scaffold Contract Notes
 Generated apps should behave like production references, not toy demos.
 
-Keep these rules aligned across `standard` and `list` starters:
+Keep these rules aligned across the single neutral scaffold and all generated
+domain shapes that users create afterward:
 - backend services track best solution separately from live status telemetry
 - status endpoints return `currentScore`, `bestScore`, and solver status
 - SSE uses typed events: `progress`, `best_solution`, `finished`

@@ -5,7 +5,7 @@ use solverforge::IncrementalConstraint;
 
 /// SOFT: Keep each container's sequence locally coherent.
 ///
-/// Penalizes large jumps between adjacent item indices so local search has a
+/// Penalizes large jumps between adjacent item positions so local search has a
 /// visible optimization path after construction.
 pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
     ConstraintFactory::<Plan, HardSoftScore>::new()

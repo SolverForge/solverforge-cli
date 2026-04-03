@@ -61,7 +61,8 @@ fn test_generate_fact() {
     let src = generate_fact("Employee", &[]);
     assert!(src.contains("#[problem_fact]"));
     assert!(src.contains("pub struct Employee"));
-    assert!(src.contains("pub index: usize"));
+    assert!(src.contains("#[planning_id]"));
+    assert!(src.contains("pub id: String"));
     assert!(src.contains("pub name: String"));
 }
 

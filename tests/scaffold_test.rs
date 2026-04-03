@@ -159,7 +159,11 @@ fn test_new_creates_neutral_project_files() {
         std::fs::read_to_string(project_dir.join("src").join("api").join("sse.rs")).unwrap();
 
     assert!(
-        app_spec.contains("starter = \"neutral-shell\"") && !app_spec.contains("[[variables]]"),
+        app_spec.contains("starter = \"neutral-shell\"")
+            && app_spec.contains("[demo]")
+            && app_spec.contains("default_size = \"standard\"")
+            && app_spec.contains("available_sizes = [\"small\", \"standard\", \"large\"]")
+            && !app_spec.contains("[[variables]]"),
         "neutral scaffold should ship an empty app spec: {}",
         app_spec
     );
@@ -342,8 +346,6 @@ fn test_generate_variable_updates_app_spec_and_ui_model() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    pin_generated_project_to_local_solverforge(&project_dir);
-
     let fact_status = cli_command()
         .args(["generate", "fact", "resource"])
         .current_dir(&project_dir)
@@ -487,17 +489,32 @@ fn test_generate_data_creates_compiler_owned_seed_and_preserves_wrapper() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    pin_generated_project_to_local_solverforge(&project_dir);
 
     let fact_status = cli_command()
-        .args(["generate", "fact", "resource", "--field", "capacity:usize"])
+        .args([
+            "generate",
+            "fact",
+            "resource",
+            "--field",
+            "category:String",
+            "--field",
+            "load:i32",
+        ])
         .current_dir(&project_dir)
         .status()
         .expect("failed to generate fact");
     assert!(fact_status.success(), "fact generation failed");
 
     let entity_status = cli_command()
-        .args(["generate", "entity", "task", "--field", "priority:i32"])
+        .args([
+            "generate",
+            "entity",
+            "task",
+            "--field",
+            "label:String",
+            "--field",
+            "priority:i32",
+        ])
         .current_dir(&project_dir)
         .status()
         .expect("failed to generate entity");
@@ -522,7 +539,7 @@ fn test_generate_data_creates_compiler_owned_seed_and_preserves_wrapper() {
     assert!(variable_status.success(), "variable generation failed");
 
     let data_status = cli_command()
-        .args(["generate", "data"])
+        .args(["generate", "data", "--size", "large"])
         .current_dir(&project_dir)
         .status()
         .expect("failed to generate data");
@@ -539,6 +556,7 @@ fn test_generate_data_creates_compiler_owned_seed_and_preserves_wrapper() {
             .join("data_seed.rs"),
     )
     .unwrap();
+    let spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
 
     assert!(
         data_wrapper.contains("pub use crate::generated::data_seed::DemoData;")
@@ -554,11 +572,25 @@ fn test_generate_data_creates_compiler_owned_seed_and_preserves_wrapper() {
         generated_seed.contains("pub enum DemoData")
             && generated_seed.contains("DemoData::Small => generate_plan(")
             && generated_seed.contains("DemoData::Standard => generate_plan(")
+            && generated_seed.contains("DemoData::Large => generate_plan(")
             && generated_seed.contains("let resources =")
             && generated_seed.contains("let tasks =")
+            && generated_seed.contains("category: format!(\"resource-category-{idx}\")")
+            && generated_seed.contains("load: ((idx % 7) as i32) - 2")
+            && generated_seed.contains("label: format!(\"task-label-{idx}\")")
+            && generated_seed.contains("priority: ((idx % 7) as i32) - 2")
             && generated_seed.contains("Plan::new(resources, tasks)"),
         "generated data seed should be rebuilt from the current project model: {}",
         generated_seed
+    );
+    assert!(
+        spec.contains("default_size = \"large\"")
+            && spec.contains("[demo]")
+            && spec.contains("\"small\"")
+            && spec.contains("\"standard\"")
+            && spec.contains("\"large\""),
+        "generate data --size should persist the project default in solverforge.app.toml: {}",
+        spec
     );
 
     let check_status = Command::new("cargo")
@@ -664,7 +696,7 @@ fn test_generate_data_preserves_customized_legacy_loader() {
     let project_dir = tmp.path().join(project_name);
     pin_generated_project_to_local_solverforge(&project_dir);
 
-    let custom_loader = "/* Data loading module.\n\n   Replace `load()` with code that reads your real inputs and constructs the\n   domain objects your API or solver layer needs. */\n\nuse std::str::FromStr;\n\nuse crate::domain::{Plan, Resource};\n\n#[derive(Debug, Clone, Copy)]\npub enum DemoData {\n    Standard,\n}\n\nimpl FromStr for DemoData {\n    type Err = ();\n\n    fn from_str(s: &str) -> Result<Self, Self::Err> {\n        match s.to_uppercase().as_str() {\n            \"STANDARD\" => Ok(DemoData::Standard),\n            _ => Err(()),\n        }\n    }\n}\n\npub fn generate(_demo: DemoData) -> Plan {\n    let resources = vec![Resource::new(0, \"custom-resource\")];\n    Plan::new(resources)\n}\n\npub fn custom_source() -> &'static str { \"csv\" }\n"
+    let custom_loader = "/* Data loading module.\n\n   Replace `load()` with code that reads your real inputs and constructs the\n   domain objects your API or solver layer needs. */\n\nuse std::str::FromStr;\n\nuse crate::domain::{Plan, Resource};\n\n#[derive(Debug, Clone, Copy)]\npub enum DemoData {\n    Standard,\n}\n\nimpl FromStr for DemoData {\n    type Err = ();\n\n    fn from_str(s: &str) -> Result<Self, Self::Err> {\n        match s.to_uppercase().as_str() {\n            \"STANDARD\" => Ok(DemoData::Standard),\n            _ => Err(()),\n        }\n    }\n}\n\npub fn generate(_demo: DemoData) -> Plan {\n    let resources = vec![Resource::new(\"resource-0\", \"custom-resource\")];\n    Plan::new(resources)\n}\n\npub fn custom_source() -> &'static str { \"csv\" }\n"
         .to_string();
     std::fs::write(
         project_dir.join("src").join("data").join("mod.rs"),

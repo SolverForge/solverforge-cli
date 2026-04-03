@@ -160,8 +160,7 @@
 
     var byIndex = {};
     facts.forEach(function (fact, index) {
-      var key = fact.index != null ? fact.index : index;
-      byIndex[key] = fact;
+      byIndex[index] = fact;
     });
 
     var assignments = {};
@@ -240,8 +239,7 @@
     }
     var byIndex = {};
     facts.forEach(function (fact, index) {
-      var key = fact.index != null ? fact.index : index;
-      byIndex[key] = fact;
+      byIndex[index] = fact;
     });
     var horizon = entities.reduce(function (max, entity) {
       var list = entity[view.variableField] || [];
@@ -313,7 +311,7 @@
 
   function factLabel(fact, fallback) {
     if (!fact) return String(fallback);
-    return fact.name || fact.id || fact.index || fallback;
+    return fact.name || fact.id || fallback;
   }
 
   function entityLabel(entity, fallback) {

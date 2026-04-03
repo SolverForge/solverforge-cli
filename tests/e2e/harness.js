@@ -43,13 +43,13 @@ pub fn generate(demo: DemoData) -> Plan {
 
 fn generate_plan(n_resources: usize, n_tasks: usize, n_containers: usize, n_items: usize) -> Plan {
     let resources = (0..n_resources)
-        .map(|idx| Resource::new(idx, format!("resource-{idx}")))
+        .map(|idx| Resource::new(format!("resource-{idx}"), format!("resource-{idx}")))
         .collect::<Vec<_>>();
     let tasks = (0..n_tasks)
         .map(|idx| Task::new(format!("task-{idx}")))
         .collect::<Vec<_>>();
     let items = (0..n_items)
-        .map(|idx| Item::new(idx, format!("item-{idx}")))
+        .map(|idx| Item::new(format!("item-{idx}"), format!("item-{idx}")))
         .collect::<Vec<_>>();
     let containers = (0..n_containers)
         .map(|idx| Container::new(format!("container-{idx}")))
@@ -92,7 +92,7 @@ pub fn generate(demo: DemoData) -> Plan {
 
 fn generate_plan(n_resources: usize, n_tasks: usize) -> Plan {
     let resources = (0..n_resources)
-        .map(|idx| Resource::new(idx, format!("resource-{idx}")))
+        .map(|idx| Resource::new(format!("resource-{idx}"), format!("resource-{idx}")))
         .collect::<Vec<_>>();
     let tasks = (0..n_tasks)
         .map(|idx| Task::new(format!("task-{idx}")))
@@ -126,26 +126,6 @@ function runCommand({ suite, title, cwd, args, logPath, env = {} }) {
   if (result.status !== 0) {
     throw new Error(`${title} failed.\nSee ${logPath}\n${result.stderr || result.stdout || ''}`);
   }
-}
-
-function pinGeneratedProject(projectDir) {
-  const cargoToml = path.join(projectDir, 'Cargo.toml');
-  let manifest = fs.readFileSync(cargoToml, 'utf8');
-  const localSolverforge = path.join(path.dirname(repoRoot), 'solverforge-rs', 'crates', 'solverforge');
-  const standardReplacement =
-    `solverforge = { path = ${JSON.stringify(localSolverforge)}, features = ["serde", "console", "verbose-logging"] }`;
-  const minimalReplacement =
-    `solverforge = { path = ${JSON.stringify(localSolverforge)}, features = ["serde"] }`;
-  manifest = manifest
-    .replace(
-      'solverforge = { path = "/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge", features = ["serde", "console", "verbose-logging"] }',
-      standardReplacement
-    )
-    .replace(
-      'solverforge = { path = "/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge", features = ["serde"] }',
-      minimalReplacement
-    );
-  fs.writeFileSync(cargoToml, manifest);
 }
 
 function allocatePort() {
@@ -277,3 +257,22 @@ module.exports = {
   writeManifest,
   writeState,
 };
+function pinGeneratedProject(projectDir) {
+  const cargoToml = path.join(projectDir, 'Cargo.toml');
+  let manifest = fs.readFileSync(cargoToml, 'utf8');
+  const localSolverforge = path.join(path.dirname(repoRoot), 'solverforge-rs', 'crates', 'solverforge');
+  const standardReplacement =
+    `solverforge = { path = ${JSON.stringify(localSolverforge)}, features = ["serde", "console", "verbose-logging"] }`;
+  const minimalReplacement =
+    `solverforge = { path = ${JSON.stringify(localSolverforge)}, features = ["serde"] }`;
+  manifest = manifest
+    .replace(
+      'solverforge = { path = "/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge", features = ["serde", "console", "verbose-logging"] }',
+      standardReplacement
+    )
+    .replace(
+      'solverforge = { path = "/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge", features = ["serde"] }',
+      minimalReplacement
+    );
+  fs.writeFileSync(cargoToml, manifest);
+}

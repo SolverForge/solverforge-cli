@@ -16,6 +16,8 @@ pub struct AppSpec {
     #[serde(default)]
     pub runtime: RuntimeMeta,
     #[serde(default)]
+    pub demo: DemoMeta,
+    #[serde(default)]
     pub solution: SolutionMeta,
     #[serde(default)]
     pub facts: Vec<CollectionSpec>,
@@ -55,6 +57,14 @@ pub struct SolutionMeta {
     pub score: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DemoMeta {
+    #[serde(default = "default_demo_size")]
+    pub default_size: String,
+    #[serde(default = "default_available_demo_sizes")]
+    pub available_sizes: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CollectionSpec {
     pub name: String,
@@ -88,6 +98,27 @@ pub struct ConstraintSpec {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_demo_size() -> String {
+    "standard".to_string()
+}
+
+fn default_available_demo_sizes() -> Vec<String> {
+    vec![
+        "small".to_string(),
+        "standard".to_string(),
+        "large".to_string(),
+    ]
+}
+
+impl Default for DemoMeta {
+    fn default() -> Self {
+        Self {
+            default_size: default_demo_size(),
+            available_sizes: default_available_demo_sizes(),
+        }
+    }
 }
 
 pub fn load() -> CliResult<AppSpec> {
@@ -193,8 +224,52 @@ pub fn sync_from_project() -> CliResult {
         })
         .collect();
 
+    normalize_demo_meta(&mut spec.demo);
+
     save(&spec)?;
     write_ui_model(&spec)
+}
+
+pub fn set_demo_size(size: &str) -> CliResult {
+    let mut spec = load()?;
+    normalize_demo_meta(&mut spec.demo);
+    spec.demo.default_size = size.to_string();
+    if !spec.demo.available_sizes.iter().any(|value| value == size) {
+        spec.demo.available_sizes.push(size.to_string());
+    }
+    normalize_demo_meta(&mut spec.demo);
+    save(&spec)?;
+    write_ui_model(&spec)
+}
+
+fn normalize_demo_meta(demo: &mut DemoMeta) {
+    if demo.default_size.is_empty() {
+        demo.default_size = default_demo_size();
+    }
+    if demo.available_sizes.is_empty() {
+        demo.available_sizes = default_available_demo_sizes();
+    }
+    if !demo
+        .available_sizes
+        .iter()
+        .any(|value| value == &demo.default_size)
+    {
+        demo.available_sizes.push(demo.default_size.clone());
+    }
+    demo.available_sizes.sort();
+    demo.available_sizes.dedup();
+    let mut ordered = Vec::new();
+    for canonical in default_available_demo_sizes() {
+        if demo.available_sizes.iter().any(|value| value == &canonical) {
+            ordered.push(canonical);
+        }
+    }
+    for value in &demo.available_sizes {
+        if !ordered.iter().any(|existing| existing == value) {
+            ordered.push(value.clone());
+        }
+    }
+    demo.available_sizes = ordered;
 }
 
 fn write_ui_model(spec: &AppSpec) -> CliResult {

@@ -72,7 +72,7 @@ enum Command {
     },
     /// Generate a new resource for the current project
     #[command(
-        after_help = "Examples:\n  solverforge generate entity shift --planning-variable employee_idx\n  solverforge generate fact employee\n  solverforge generate constraint no_overlap --pair --hard\n  solverforge generate solution schedule --score HardSoftScore\n  solverforge generate data\n  solverforge generate data --mode stub"
+        after_help = "Examples:\n  solverforge generate entity shift --planning-variable employee_idx\n  solverforge generate fact employee\n  solverforge generate constraint no_overlap --pair --hard\n  solverforge generate solution schedule --score HardSoftScore\n  solverforge generate data\n  solverforge generate data --size large\n  solverforge generate data --mode stub"
     )]
     Generate {
         #[command(subcommand)]
@@ -293,12 +293,16 @@ enum GenerateResource {
     },
     /// Regenerate compiler-owned demo data from the project model
     #[command(
-        after_help = "Examples:\n  solverforge generate data\n  solverforge generate data --mode stub"
+        after_help = "Examples:\n  solverforge generate data\n  solverforge generate data --size large\n  solverforge generate data --mode stub"
     )]
     Data {
         /// Data generation mode
         #[arg(long, value_parser = ["sample", "stub"], default_value = "sample")]
         mode: String,
+
+        /// Default dataset size exposed by the generated demo data
+        #[arg(long, value_parser = ["small", "standard", "large"])]
+        size: Option<String>,
     },
     /// Compound generator: entity + optional constraint + optional twin entity in one go
     #[command(
@@ -452,8 +456,8 @@ fn main() {
             resource: GenerateResource::Score { score_type },
         } => commands::generate_domain::run_score(&score_type),
         Command::Generate {
-            resource: GenerateResource::Data { mode },
-        } => commands::generate_domain::run_data(&mode),
+            resource: GenerateResource::Data { mode, size },
+        } => commands::generate_domain::run_data(&mode, size.as_deref()),
         Command::Destroy {
             yes,
             resource: DestroyResource::Solution,

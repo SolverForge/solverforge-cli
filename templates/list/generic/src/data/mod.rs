@@ -36,13 +36,14 @@ pub fn generate(demo: DemoData) -> Plan {
 fn generate_plan(n_containers: usize, n_items: usize) -> Plan {
     let containers: Vec<Container> = (0..n_containers)
         .map(|i| {
+            let id = format!("container-{i}");
             let name = format!("Container {}", (b'A' + i as u8) as char);
-            Container::new(i, name)
+            Container::new(id, name)
         })
         .collect();
 
     let item_facts: Vec<Item> = (0..n_items)
-        .map(|i| Item::new(i, format!("Item {}", i + 1)))
+        .map(|i| Item::new(format!("item-{i}"), format!("Item {}", i + 1)))
         .collect();
 
     Plan::new(item_facts, containers)
