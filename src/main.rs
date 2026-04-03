@@ -72,7 +72,7 @@ enum Command {
     },
     /// Generate a new resource for the current project
     #[command(
-        after_help = "Examples:\n  solverforge generate entity shift --planning-variable employee_idx\n  solverforge generate fact employee\n  solverforge generate constraint no_overlap --pair --hard\n  solverforge generate solution schedule --score HardSoftScore"
+        after_help = "Examples:\n  solverforge generate entity shift --planning-variable employee_idx\n  solverforge generate fact employee\n  solverforge generate constraint no_overlap --pair --hard\n  solverforge generate solution schedule --score HardSoftScore\n  solverforge generate data\n  solverforge generate data --mode stub"
     )]
     Generate {
         #[command(subcommand)]
@@ -291,6 +291,15 @@ enum GenerateResource {
         /// Score type (e.g. HardSoftScore, HardSoftDecimalScore, HardMediumSoftScore, SimpleScore)
         score_type: String,
     },
+    /// Regenerate compiler-owned demo data from the project model
+    #[command(
+        after_help = "Examples:\n  solverforge generate data\n  solverforge generate data --mode stub"
+    )]
+    Data {
+        /// Data generation mode
+        #[arg(long, value_parser = ["sample", "stub"], default_value = "sample")]
+        mode: String,
+    },
     /// Compound generator: entity + optional constraint + optional twin entity in one go
     #[command(
         after_help = "Examples:\n  solverforge generate scaffold shift employee_idx:usize --entity --constraint no_overlap --pair\n  solverforge generate scaffold task resource_idx:usize --entity"
@@ -442,6 +451,9 @@ fn main() {
         Command::Generate {
             resource: GenerateResource::Score { score_type },
         } => commands::generate_domain::run_score(&score_type),
+        Command::Generate {
+            resource: GenerateResource::Data { mode },
+        } => commands::generate_domain::run_data(&mode),
         Command::Destroy {
             yes,
             resource: DestroyResource::Solution,

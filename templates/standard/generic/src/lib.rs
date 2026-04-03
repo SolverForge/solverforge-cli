@@ -11,4 +11,5 @@ pub mod api;
 pub mod constraints;
 pub mod data;
 pub mod domain;
+pub mod generated;
 pub mod solver;

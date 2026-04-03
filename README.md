@@ -30,6 +30,23 @@ That scaffold is a neutral app shell. Users choose standard variables, list
 variables, or any mixed combination later through domain generation and the app
 spec, instead of picking a starter family up front.
 
+Basic domain flow:
+
+```bash
+solverforge new my-scheduler
+cd my-scheduler
+solverforge generate fact resource --field name:String
+solverforge generate entity task --field name:String
+solverforge generate variable resource_idx --entity Task --kind standard --range resources --allows-unassigned
+solverforge generate data
+solverforge server
+```
+
+`solverforge generate data` rewrites the compiler-owned sample builders in
+`src/generated/data_seed.rs`. The stable wrapper in `src/data/mod.rs` delegates
+to that generated seed file by default, so the command can keep regenerating
+sample data without clobbering user-owned entrypoints.
+
 The generated frontend is intentionally thin and composes shipped `solverforge-ui` primitives instead of vendoring template-specific web assets. Domain-specific examples such as employee scheduling and vehicle routing belong in quickstarts, not in the CLI's built-in scaffold catalog.
 
 ## Validation Flow

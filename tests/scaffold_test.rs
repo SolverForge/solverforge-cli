@@ -69,6 +69,10 @@ fn pin_generated_project_to_local_solverforge(project_dir: &std::path::Path) {
     }
 }
 
+fn legacy_data_loader_stub() -> &'static str {
+    "/* Data loading module.\n\n   Replace `load()` with code that reads your real inputs and constructs the\n   domain objects your API or solver layer needs. */\n\npub fn load() -> Result<(), Box<dyn std::error::Error>> {\n    Ok(())\n}\n"
+}
+
 #[test]
 fn test_version_output_distinguishes_cli_from_runtime_target() {
     let output = cli_command()
@@ -460,5 +464,248 @@ fn test_generate_constraint_workflow_cargo_check_passes() {
     assert!(
         check_status.success(),
         "cargo check failed after generate constraint workflow"
+    );
+}
+
+#[test]
+fn test_generate_data_creates_compiler_owned_seed_and_preserves_wrapper() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_generate_data";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    pin_generated_project_to_local_solverforge(&project_dir);
+
+    let fact_status = cli_command()
+        .args(["generate", "fact", "resource", "--field", "capacity:usize"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate fact");
+    assert!(fact_status.success(), "fact generation failed");
+
+    let entity_status = cli_command()
+        .args(["generate", "entity", "task", "--field", "priority:i32"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate entity");
+    assert!(entity_status.success(), "entity generation failed");
+
+    let variable_status = cli_command()
+        .args([
+            "generate",
+            "variable",
+            "resource_idx",
+            "--entity",
+            "Task",
+            "--kind",
+            "standard",
+            "--range",
+            "resources",
+            "--allows-unassigned",
+        ])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate variable");
+    assert!(variable_status.success(), "variable generation failed");
+
+    let data_status = cli_command()
+        .args(["generate", "data"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate data");
+    assert!(data_status.success(), "data generation failed");
+
+    let data_wrapper =
+        std::fs::read_to_string(project_dir.join("src").join("data").join("mod.rs")).unwrap();
+    let generated_mod =
+        std::fs::read_to_string(project_dir.join("src").join("generated").join("mod.rs")).unwrap();
+    let generated_seed = std::fs::read_to_string(
+        project_dir
+            .join("src")
+            .join("generated")
+            .join("data_seed.rs"),
+    )
+    .unwrap();
+
+    assert!(
+        data_wrapper.contains("pub use crate::generated::data_seed::DemoData;")
+            && data_wrapper.contains("crate::generated::data_seed::generate(demo)"),
+        "data wrapper should remain a stable shim over the compiler-owned generated seed: {}",
+        data_wrapper
+    );
+    assert_eq!(
+        generated_mod, "pub mod data_seed;\n",
+        "generated module should expose the compiler-owned data seed"
+    );
+    assert!(
+        generated_seed.contains("pub enum DemoData")
+            && generated_seed.contains("DemoData::Small => generate_plan(")
+            && generated_seed.contains("DemoData::Standard => generate_plan(")
+            && generated_seed.contains("let resources =")
+            && generated_seed.contains("let tasks =")
+            && generated_seed.contains("Plan::new(resources, tasks)"),
+        "generated data seed should be rebuilt from the current project model: {}",
+        generated_seed
+    );
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+
+    assert!(
+        check_status.success(),
+        "cargo check failed after generate data workflow"
+    );
+}
+
+#[test]
+fn test_generate_data_migrates_legacy_owned_loader_and_backfills_lib_export() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_generate_data_legacy_migration";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    pin_generated_project_to_local_solverforge(&project_dir);
+
+    std::fs::write(
+        project_dir.join("src").join("data").join("mod.rs"),
+        legacy_data_loader_stub(),
+    )
+    .unwrap();
+
+    let lib_path = project_dir.join("src").join("lib.rs");
+    let legacy_lib = std::fs::read_to_string(&lib_path)
+        .unwrap()
+        .replace("pub mod generated;\n", "");
+    std::fs::write(&lib_path, legacy_lib).unwrap();
+
+    let fact_status = cli_command()
+        .args(["generate", "fact", "resource"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate fact");
+    assert!(fact_status.success(), "fact generation failed");
+
+    let data_wrapper =
+        std::fs::read_to_string(project_dir.join("src").join("data").join("mod.rs")).unwrap();
+    let lib_rs = std::fs::read_to_string(&lib_path).unwrap();
+
+    assert!(
+        data_wrapper.contains("@generated by solverforge-cli: data-wrapper v1")
+            && data_wrapper.contains("crate::generated::data_seed::generate(demo)"),
+        "legacy owned data loader should be migrated to the generated wrapper: {}",
+        data_wrapper
+    );
+    assert!(
+        lib_rs.contains("pub mod generated;"),
+        "legacy app migration should backfill pub mod generated; into src/lib.rs: {}",
+        lib_rs
+    );
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+
+    assert!(
+        check_status.success(),
+        "cargo check failed after migrating legacy data loader"
+    );
+}
+
+#[test]
+fn test_generate_data_preserves_customized_legacy_loader() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_generate_data_preserve_custom_legacy_loader";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    pin_generated_project_to_local_solverforge(&project_dir);
+
+    let custom_loader = "/* Data loading module.\n\n   Replace `load()` with code that reads your real inputs and constructs the\n   domain objects your API or solver layer needs. */\n\nuse std::str::FromStr;\n\nuse crate::domain::{Plan, Resource};\n\n#[derive(Debug, Clone, Copy)]\npub enum DemoData {\n    Standard,\n}\n\nimpl FromStr for DemoData {\n    type Err = ();\n\n    fn from_str(s: &str) -> Result<Self, Self::Err> {\n        match s.to_uppercase().as_str() {\n            \"STANDARD\" => Ok(DemoData::Standard),\n            _ => Err(()),\n        }\n    }\n}\n\npub fn generate(_demo: DemoData) -> Plan {\n    let resources = vec![Resource::new(0, \"custom-resource\")];\n    Plan::new(resources)\n}\n\npub fn custom_source() -> &'static str { \"csv\" }\n"
+        .to_string();
+    std::fs::write(
+        project_dir.join("src").join("data").join("mod.rs"),
+        &custom_loader,
+    )
+    .unwrap();
+
+    let lib_path = project_dir.join("src").join("lib.rs");
+    let legacy_lib = std::fs::read_to_string(&lib_path)
+        .unwrap()
+        .replace("pub mod generated;\n", "");
+    std::fs::write(&lib_path, legacy_lib).unwrap();
+
+    let fact_status = cli_command()
+        .args(["generate", "fact", "resource"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate fact");
+    assert!(fact_status.success(), "fact generation failed");
+
+    let data_mod =
+        std::fs::read_to_string(project_dir.join("src").join("data").join("mod.rs")).unwrap();
+    let lib_rs = std::fs::read_to_string(&lib_path).unwrap();
+
+    assert_eq!(
+        data_mod, custom_loader,
+        "customized legacy data loader should not be overwritten"
+    );
+    assert!(
+        !lib_rs.contains("pub mod generated;"),
+        "customized legacy app should not be rewritten to depend on generated data wiring"
+    );
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+
+    assert!(
+        check_status.success(),
+        "cargo check failed after preserving customized legacy data loader"
     );
 }

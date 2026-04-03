@@ -8,11 +8,11 @@
 
 Current scaffold policy:
 - generated projects are temporarily pinned to the local `solverforge-rs` and `solverforge-ui` checkouts until the intended runtime/UI releases are published
-- `standard` and `list` are starter templates, not different runtime families
-- both starters must expose the same typed real-time solve contract and rendering flow
+- `solverforge new <name>` is the only public scaffold path and produces a neutral shell
+- users shape the app afterward through facts, entities, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
 
-When changing templates or scaffold behavior, follow the current `PRD.md` over older architectural assumptions.
+When changing templates or scaffold behavior, follow the current repo reality over older starter-template assumptions.
 
 ## Build, Test, and Development Commands
 - `cargo build`: compile the `solverforge` binary.
@@ -60,6 +60,8 @@ For scaffold changes, prefer assertions that check the generated contract direct
 - CLI version vs runtime target messaging
 - generated README version/runtime source disclosure
 - typed solver SSE payload shape and typed frontend hooks
+- `solverforge generate data` ownership boundaries:
+  `src/data/mod.rs` is a stable wrapper and `src/generated/data_seed.rs` is compiler-owned
 - scaffolded `cargo check` against the current local runtime/UI worktrees
 
 ## Commit & Pull Request Guidelines
