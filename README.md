@@ -3,14 +3,13 @@
 Default entry point for new SolverForge projects.
 
 Use this CLI to scaffold, grow, and manage SolverForge applications. Generated
-projects currently pin to the local unpublished `solverforge-rs 0.7.0` and
-`solverforge-ui 0.4.0` worktrees, and that temporary policy is part of the
-product surface rather than an invisible implementation detail.
+projects currently target released `solverforge 0.7.1` and `solverforge-ui 0.4.0`
+crate dependencies, and that target policy is part of the product surface rather
+than an invisible implementation detail.
 
 This package has its own version. That version is not the same thing as the
 SolverForge runtime version or source that newly scaffolded projects target.
-When the scaffold is temporarily pinned to a local checkout, the CLI should say
-so explicitly.
+The CLI should say that runtime/UI target explicitly.
 
 ```bash
 cargo install solverforge-cli
@@ -18,9 +17,8 @@ solverforge new my-scheduler
 ```
 
 The CLI lives outside `solverforge-rs` and generates problem-type projects that
-depend on separate SolverForge runtime and UI sources. Use `solverforge --version`
-to see the CLI version, scaffold target label, and the local runtime and UI paths
-currently baked into new projects.
+depend on separate SolverForge runtime and UI packages. Use `solverforge --version`
+to see the CLI version and the runtime/UI targets currently baked into new projects.
 
 Built-in starter path:
 

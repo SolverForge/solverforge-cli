@@ -1,4 +1,4 @@
-# SolverForge CLI Makefile v0.7.0
+# SolverForge CLI Makefile v1.0.0
 # CLI-focused build and validation workflow
 
 # ============== Colors & Symbols ==============

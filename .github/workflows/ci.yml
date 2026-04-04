@@ -12,7 +12,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CI_WORKSPACE_ROOT: /srv/lab/dev/solverforge
 
 jobs:
   quality:
@@ -20,30 +19,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout solverforge-cli
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          path: solverforge-cli
-
-      - name: Checkout solverforge-rs
-        uses: actions/checkout@v4
-        with:
-          repository: solverforge/solverforge-rs
-          path: solverforge-rs
-
-      - name: Checkout solverforge-ui
-        uses: actions/checkout@v4
-        with:
-          repository: solverforge/solverforge-ui
-          path: solverforge-ui
-
-      - name: Recreate local workspace layout
-        shell: bash
-        run: |
-          sudo mkdir -p "$CI_WORKSPACE_ROOT"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-cli" "$CI_WORKSPACE_ROOT/solverforge-cli"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-rs" "$CI_WORKSPACE_ROOT/solverforge-rs"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-ui" "$CI_WORKSPACE_ROOT/solverforge-ui"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -52,9 +29,6 @@ jobs:
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            solverforge-cli
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -63,19 +37,15 @@ jobs:
 
       - name: Install pre-commit
         shell: bash
-        working-directory: /srv/lab/dev/solverforge/solverforge-cli
         run: python -m pip install --upgrade pip pre-commit
 
       - name: Run pre-commit
-        working-directory: /srv/lab/dev/solverforge/solverforge-cli
         run: make pre-commit
 
       - name: Build CLI
-        working-directory: /srv/lab/dev/solverforge/solverforge-cli
         run: make build
 
       - name: Run scaffold contract tests
-        working-directory: /srv/lab/dev/solverforge/solverforge-cli
         run: make test-scaffold
 
       - name: Upload scaffold artifacts on failure
@@ -83,7 +53,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: quality-test-artifacts
-          path: /srv/lab/dev/solverforge/solverforge-cli/target/test-artifacts
+          path: target/test-artifacts
           if-no-files-found: ignore
 
   runtime:
@@ -92,42 +62,16 @@ jobs:
     needs: [quality]
 
     steps:
-      - name: Checkout solverforge-cli
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          path: solverforge-cli
-
-      - name: Checkout solverforge-rs
-        uses: actions/checkout@v4
-        with:
-          repository: solverforge/solverforge-rs
-          path: solverforge-rs
-
-      - name: Checkout solverforge-ui
-        uses: actions/checkout@v4
-        with:
-          repository: solverforge/solverforge-ui
-          path: solverforge-ui
-
-      - name: Recreate local workspace layout
-        shell: bash
-        run: |
-          sudo mkdir -p "$CI_WORKSPACE_ROOT"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-cli" "$CI_WORKSPACE_ROOT/solverforge-cli"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-rs" "$CI_WORKSPACE_ROOT/solverforge-rs"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-ui" "$CI_WORKSPACE_ROOT/solverforge-ui"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            solverforge-cli
 
       - name: Run runtime pipeline tests
-        working-directory: /srv/lab/dev/solverforge/solverforge-cli
         run: make test-runtime
 
       - name: Upload runtime artifacts on failure
@@ -135,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runtime-test-artifacts
-          path: /srv/lab/dev/solverforge/solverforge-cli/target/test-artifacts
+          path: target/test-artifacts
           if-no-files-found: ignore
 
   e2e:
@@ -144,57 +88,29 @@ jobs:
     needs: [quality]
 
     steps:
-      - name: Checkout solverforge-cli
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          path: solverforge-cli
-
-      - name: Checkout solverforge-rs
-        uses: actions/checkout@v4
-        with:
-          repository: solverforge/solverforge-rs
-          path: solverforge-rs
-
-      - name: Checkout solverforge-ui
-        uses: actions/checkout@v4
-        with:
-          repository: solverforge/solverforge-ui
-          path: solverforge-ui
-
-      - name: Recreate local workspace layout
-        shell: bash
-        run: |
-          sudo mkdir -p "$CI_WORKSPACE_ROOT"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-cli" "$CI_WORKSPACE_ROOT/solverforge-cli"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-rs" "$CI_WORKSPACE_ROOT/solverforge-rs"
-          sudo ln -sfn "$GITHUB_WORKSPACE/solverforge-ui" "$CI_WORKSPACE_ROOT/solverforge-ui"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            solverforge-cli
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: solverforge-cli/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install Node dependencies
-        working-directory: /srv/lab/dev/solverforge/solverforge-cli
         run: npm ci
 
       - name: Install Playwright Chromium
-        working-directory: /srv/lab/dev/solverforge/solverforge-cli
         run: make install-e2e
 
       - name: Run Playwright browser tests
-        working-directory: /srv/lab/dev/solverforge/solverforge-cli
         run: make test-e2e
 
       - name: Upload browser artifacts on failure
@@ -202,5 +118,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-test-artifacts
-          path: /srv/lab/dev/solverforge/solverforge-cli/target/test-artifacts
+          path: target/test-artifacts
           if-no-files-found: ignore

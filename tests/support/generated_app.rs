@@ -67,7 +67,6 @@ impl GeneratedApp {
             "scaffold failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        pin_generated_project_to_local_solverforge(&self.project_dir);
     }
 
     pub fn run_cli(&self, label: &str, args: &[&str]) {
@@ -285,50 +284,6 @@ fn find_free_port() -> u16 {
         .local_addr()
         .expect("listener should have a local addr")
         .port()
-}
-
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("crate manifest dir should have a parent")
-        .to_path_buf()
-}
-
-fn pin_generated_project_to_local_solverforge(project_dir: &Path) {
-    let cargo_toml = project_dir.join("Cargo.toml");
-    let manifest = fs::read_to_string(&cargo_toml).expect("failed to read scaffold Cargo.toml");
-    let solverforge_path = workspace_root()
-        .join("solverforge-rs")
-        .join("crates")
-        .join("solverforge");
-    let standard_replacement = format!(
-        "solverforge = {{ path = {:?}, features = [\"serde\", \"console\", \"verbose-logging\"] }}",
-        solverforge_path
-    );
-    let minimal_replacement = format!(
-        "solverforge = {{ path = {:?}, features = [\"serde\"] }}",
-        solverforge_path
-    );
-    let updated = if manifest.contains(&standard_replacement)
-        || manifest.contains(&minimal_replacement)
-    {
-        manifest.clone()
-    } else {
-        manifest
-            .replacen(
-                "solverforge = { path = \"/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge\", features = [\"serde\", \"console\", \"verbose-logging\"] }",
-                &standard_replacement,
-                1,
-            )
-            .replacen(
-                "solverforge = { path = \"/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge\", features = [\"serde\"] }",
-                &minimal_replacement,
-                1,
-            )
-    };
-    if manifest != updated {
-        fs::write(&cargo_toml, updated).expect("failed to update scaffold Cargo.toml");
-    }
 }
 
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {

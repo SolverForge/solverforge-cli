@@ -171,14 +171,11 @@ fn scaffold(
 }
 
 fn solverforge_dep_spec() -> String {
-    format!(
-        "{{ path = {:?}, features = [\"serde\", \"console\", \"verbose-logging\"] }}",
-        RUNTIME_SOURCE_PATH
-    )
+    "{ version = \"0.7.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }".to_string()
 }
 
 fn solverforge_ui_dep_spec() -> String {
-    format!("{{ path = {:?} }}", UI_SOURCE_PATH)
+    "{ version = \"0.4.0\" }".to_string()
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {
@@ -223,8 +220,6 @@ fn print_template_guidance(project_name: &str) {
         env!("CARGO_PKG_VERSION"),
         RUNTIME_TARGET_LABEL
     );
-    println!("    # Runtime source: {}", RUNTIME_SOURCE_PATH);
-    println!("    # UI source: {}", UI_SOURCE_PATH);
 
     println!("    solverforge server");
     println!();
@@ -286,15 +281,15 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
         RUNTIME_TARGET_LABEL
     ));
     readme.push_str(&format!(
-        "- Runtime source currently wired into `Cargo.toml`: `{}`\n\n",
+        "- Runtime dependency currently wired into `Cargo.toml`: `{}`\n\n",
         RUNTIME_SOURCE_PATH
     ));
     readme.push_str(&format!(
-        "- Frontend UI source currently wired into `Cargo.toml`: `{}`\n\n",
+        "- Frontend UI dependency currently wired into `Cargo.toml`: `{}`\n\n",
         UI_SOURCE_PATH
     ));
     readme.push_str(&format!(
-        "This project was scaffolded by `solverforge-cli`, but it currently targets `{}` through hardcoded local path dependencies. That temporary policy keeps generated apps aligned with the unpublished runtime and UI worktrees until the intended releases ship.\n\n",
+        "This project was scaffolded by `solverforge-cli`, and it currently targets `{}` through released crate dependencies.\n\n",
         RUNTIME_TARGET_DISPLAY
     ));
     readme.push_str("## Quick Start\n\n");

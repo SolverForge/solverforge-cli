@@ -3,11 +3,10 @@
 // Some tests invoke `cargo check` inside a temp directory and therefore require a full Rust
 // toolchain plus dependency resolution access.
 
-use std::path::PathBuf;
 use std::process::Command;
 
-const LOCAL_SOLVERFORGE_PATH: &str = "/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge";
-const LOCAL_SOLVERFORGE_UI_PATH: &str = "/srv/lab/dev/solverforge/solverforge-ui";
+const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.7.1";
+const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.4.0";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn cli_command() -> Command {
@@ -24,49 +23,8 @@ fn cli_command() -> Command {
     command
 }
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("crate manifest dir should have a parent")
-        .to_path_buf()
-}
-
 fn pin_generated_project_to_local_solverforge(project_dir: &std::path::Path) {
-    let cargo_toml = project_dir.join("Cargo.toml");
-    let manifest =
-        std::fs::read_to_string(&cargo_toml).expect("failed to read scaffold Cargo.toml");
-    let solverforge_path = workspace_root()
-        .join("solverforge-rs")
-        .join("crates")
-        .join("solverforge");
-    let standard_replacement = format!(
-        "solverforge = {{ path = {:?}, features = [\"serde\", \"console\", \"verbose-logging\"] }}",
-        solverforge_path
-    );
-    let minimal_replacement = format!(
-        "solverforge = {{ path = {:?}, features = [\"serde\"] }}",
-        solverforge_path
-    );
-    let updated = if manifest.contains(&standard_replacement)
-        || manifest.contains(&minimal_replacement)
-    {
-        manifest.clone()
-    } else {
-        manifest
-            .replacen(
-                "solverforge = { path = \"/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge\", features = [\"serde\", \"console\", \"verbose-logging\"] }",
-                &standard_replacement,
-                1,
-            )
-            .replacen(
-                "solverforge = { path = \"/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge\", features = [\"serde\"] }",
-                &minimal_replacement,
-                1,
-            )
-    };
-    if manifest != updated {
-        std::fs::write(&cargo_toml, updated).expect("failed to update scaffold Cargo.toml");
-    }
+    let _ = project_dir;
 }
 
 fn legacy_data_loader_stub() -> &'static str {
@@ -86,11 +44,9 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
     assert!(
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
-            && stdout.contains(
-                "Scaffold runtime target: SolverForge local checkout (pre-0.7.0 release)"
-            )
-            && stdout.contains(LOCAL_SOLVERFORGE_PATH)
-            && stdout.contains(LOCAL_SOLVERFORGE_UI_PATH),
+            && stdout.contains("Scaffold runtime target: SolverForge crates.io release 0.7.1")
+            && stdout.contains(RUNTIME_DEP_LABEL)
+            && stdout.contains(UI_DEP_LABEL),
         "version output should distinguish the CLI version from the scaffold runtime target: {}",
         stdout
     );
@@ -196,9 +152,9 @@ fn test_new_creates_neutral_project_files() {
     );
     assert!(
         cargo_toml.contains(
-            "solverforge = { path = \"/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
-        ) && cargo_toml.contains("solverforge-ui = { path = \"/srv/lab/dev/solverforge/solverforge-ui\" }"),
-        "unified scaffold should point at the local SolverForge and solverforge-ui checkouts until the releases are published: {}",
+            "solverforge = { version = \"0.7.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+        ) && cargo_toml.contains("solverforge-ui = { version = \"0.4.0\" }"),
+        "unified scaffold should point at released SolverForge and solverforge-ui crate dependencies: {}",
         cargo_toml
     );
     assert!(
@@ -260,11 +216,10 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
         readme.contains(&format!(
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
-        )) && readme.contains(
-            "SolverForge runtime target for this scaffold: `local checkout (pre-0.7.0 release)`"
-        ) && readme.contains(LOCAL_SOLVERFORGE_PATH)
-            && readme.contains(LOCAL_SOLVERFORGE_UI_PATH)
-            && readme.contains("hardcoded local path dependencies")
+        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.7.1`")
+            && readme.contains(RUNTIME_DEP_LABEL)
+            && readme.contains(UI_DEP_LABEL)
+            && readme.contains("released crate dependencies")
             && readme.contains("solverforge.app.toml"),
         "scaffold README should distinguish CLI version from runtime target: {}",
         readme

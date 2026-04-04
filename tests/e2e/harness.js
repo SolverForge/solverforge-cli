@@ -169,7 +169,6 @@ async function scaffoldScenario(name, generatorCommands) {
     args: ['new', projectName, '--skip-git', '--skip-readme', '--quiet'],
     logPath: path.join(scenarioArtifactDir, '01-scaffold.log'),
   });
-  pinGeneratedProject(projectDir);
 
   generatorCommands.forEach((args, index) => {
     runCommand({
@@ -257,22 +256,3 @@ module.exports = {
   writeManifest,
   writeState,
 };
-function pinGeneratedProject(projectDir) {
-  const cargoToml = path.join(projectDir, 'Cargo.toml');
-  let manifest = fs.readFileSync(cargoToml, 'utf8');
-  const localSolverforge = path.join(path.dirname(repoRoot), 'solverforge-rs', 'crates', 'solverforge');
-  const standardReplacement =
-    `solverforge = { path = ${JSON.stringify(localSolverforge)}, features = ["serde", "console", "verbose-logging"] }`;
-  const minimalReplacement =
-    `solverforge = { path = ${JSON.stringify(localSolverforge)}, features = ["serde"] }`;
-  manifest = manifest
-    .replace(
-      'solverforge = { path = "/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge", features = ["serde", "console", "verbose-logging"] }',
-      standardReplacement
-    )
-    .replace(
-      'solverforge = { path = "/srv/lab/dev/solverforge/solverforge-rs/crates/solverforge", features = ["serde"] }',
-      minimalReplacement
-    );
-  fs.writeFileSync(cargoToml, manifest);
-}
