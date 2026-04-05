@@ -156,11 +156,13 @@ async fn get_schedule_status(
 }
 
 async fn stop_solving(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> StatusCode {
-    state.solver.stop_solving(&id);
-    if state.solver.remove_job(&id) {
+    if !state.solver.has_job(&id) {
+        return StatusCode::NOT_FOUND;
+    }
+    if state.solver.stop_solving(&id) {
         StatusCode::NO_CONTENT
     } else {
-        StatusCode::NOT_FOUND
+        StatusCode::CONFLICT
     }
 }
 

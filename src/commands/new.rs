@@ -9,6 +9,7 @@ use crate::scaffold_target::{
 };
 use crate::template;
 
+// Keep the neutral scaffold embedded so generated apps are self-contained at build time.
 static UNIFIED_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/standard/generic");
 
 pub fn run(name: &str, skip_git: bool, skip_readme: bool, quiet: bool) -> CliResult {

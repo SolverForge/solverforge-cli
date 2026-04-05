@@ -23,52 +23,60 @@ test.describe('Standard Solver Pipeline', () => {
       expect(counts.tasks).toBeGreaterThan(0);
     });
 
-    await test.step('Create a solve and observe typed SSE', async () => {
-      const result = await page.evaluate(async () => {
-        const demo = await fetch('/demo-data/STANDARD').then((response) => response.json());
-        const create = await fetch('/schedules', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(demo),
-        }).then((response) => response.json());
+    await test.step('Solve, stop, and resume through the generated UI', async () => {
+      const solveButton = page.getByRole('button', { name: 'Solve' });
+      const stopButton = page.getByRole('button', { name: 'Stop' });
 
-        const eventTypes = [];
-        await new Promise((resolve, reject) => {
-          const events = new EventSource(`/schedules/${create.id}/events`);
-          const timeout = setTimeout(() => {
-            events.close();
-            resolve();
-          }, 5000);
-          events.onmessage = (event) => {
-            const payload = JSON.parse(event.data);
-            eventTypes.push(payload.eventType);
-            if (payload.eventType === 'finished') {
-              clearTimeout(timeout);
-              events.close();
-              resolve();
-            }
-          };
-          events.onerror = () => {
-            clearTimeout(timeout);
-            events.close();
-            reject(new Error('SSE stream failed'));
-          };
-        });
+      await expect(solveButton).toBeVisible();
+      await expect(stopButton).toBeHidden();
 
-        const schedule = await fetch(`/schedules/${create.id}`).then((response) => response.json());
-        const status = await fetch(`/schedules/${create.id}/status`).then((response) => response.json());
-        const analysis = await fetch(`/schedules/${create.id}/analyze`).then((response) => response.json());
-        return { id: create.id, eventTypes, schedule, status, analysis };
+      await solveButton.click();
+      await expect(stopButton).toBeVisible();
+      await expect(solveButton).toBeHidden();
+
+      await page.waitForFunction(() => {
+        const score = document.getElementById('sfScoreDisplay');
+        return !!score && score.textContent && score.textContent.trim() !== '—';
       });
 
-      expect(result.id).toBeTruthy();
-      expect(result.eventTypes.length).toBeGreaterThan(0);
-      expect(result.eventTypes.every((eventType) => ['progress', 'best_solution', 'finished'].includes(eventType))).toBeTruthy();
+      await stopButton.click();
+      await expect(solveButton).toBeVisible({ timeout: 10000 });
+      await expect(stopButton).toBeHidden();
+
+      const afterStop = await page.evaluate(async () => {
+        const ids = await fetch('/schedules').then((response) => response.json());
+        const latestId = ids[ids.length - 1];
+        const schedule = await fetch(`/schedules/${latestId}`).then((response) => response.json());
+        const status = await fetch(`/schedules/${latestId}/status`).then((response) => response.json());
+        return { latestId, schedule, status };
+      });
+
+      expect(afterStop.latestId).toBeTruthy();
+      expect(afterStop.status.solverStatus).toBe('NOT_SOLVING');
+      expect(Array.isArray(afterStop.schedule.resources)).toBeTruthy();
+      expect(Array.isArray(afterStop.schedule.tasks)).toBeTruthy();
+
+      await solveButton.click();
+      await expect(stopButton).toBeVisible();
+      await stopButton.click();
+      await expect(solveButton).toBeVisible({ timeout: 10000 });
+
+      const result = await page.evaluate(async () => {
+        const ids = await fetch('/schedules').then((response) => response.json());
+        const latestId = ids[ids.length - 1];
+        const schedule = await fetch(`/schedules/${latestId}`).then((response) => response.json());
+        const status = await fetch(`/schedules/${latestId}/status`).then((response) => response.json());
+        const analysis = await fetch(`/schedules/${latestId}/analyze`).then((response) => response.json());
+        return { latestId, schedule, status, analysis, jobCount: ids.length };
+      });
+
+      expect(result.jobCount).toBeGreaterThan(1);
+      expect(result.latestId).toBeTruthy();
+      expect(result.status.solverStatus).toBe('NOT_SOLVING');
       expect(Array.isArray(result.schedule.resources)).toBeTruthy();
       expect(result.schedule.resources.length).toBeGreaterThan(0);
       expect(Array.isArray(result.schedule.tasks)).toBeTruthy();
       expect(result.schedule.tasks.length).toBeGreaterThan(0);
-      expect(result.status.solverStatus).toBeTruthy();
       expect(Array.isArray(result.analysis.constraints)).toBeTruthy();
     });
   });

@@ -140,9 +140,31 @@ impl SolverService {
     }
 
     pub fn stop_solving(&self, id: &str) -> bool {
-        let jobs = self.jobs.read();
-        if let Some(state) = jobs.get(id) {
-            return MANAGER.terminate_early(state.slot_id);
+        let payload = {
+            let mut jobs = self.jobs.write();
+            if let Some(state) = jobs.get_mut(id) {
+                if !MANAGER.terminate_early(state.slot_id) {
+                    return false;
+                }
+                state.status = SolverStatus::NotSolving;
+                Some(sse_payload(
+                    id,
+                    "finished",
+                    state.current_score,
+                    state.best_score,
+                    SolverStatus::NotSolving,
+                    state.moves_per_second,
+                    state.latest_best.as_ref(),
+                ))
+            } else {
+                None
+            }
+        };
+        if let Some(payload) = payload {
+            if let Some(state) = self.jobs.read().get(id) {
+                let _ = state.sse_tx.send(payload);
+            }
+            return true;
         }
         false
     }

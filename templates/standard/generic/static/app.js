@@ -8,16 +8,13 @@
   var app = document.getElementById('sf-app');
   var backend = SF.createBackend({ baseUrl: '' });
   var statusBar = SF.createStatusBar({ constraints: uiModel.constraints || [] });
+  var currentPlan = null;
+  var currentScheduleId = null;
+  var solvingJobId = null;
+  var closeStream = null;
+  var solveRunToken = 0;
   var activeTab = (uiModel.views && uiModel.views.length) ? uiModel.views[0].id : 'overview';
   var viewPanels = {};
-
-  var solver = SF.createSolver({
-    backend: backend,
-    statusBar: statusBar,
-    onProgress: function (meta) { void meta; },
-    onSolution: function (data) { renderAll(data); },
-    onComplete: function (data) { renderAll(data); },
-  });
 
   var tabs = (uiModel.views || []).map(function (view, index) {
     return {
@@ -40,7 +37,7 @@
     tabs: tabs,
     actions: {
       onSolve: function () { loadAndSolve(); },
-      onStop: function () { solver.stop(); },
+      onStop: function () { stopSolve(); },
       onAnalyze: function () { openAnalysis(); },
     },
     onTabChange: function (tab) {
@@ -54,6 +51,7 @@
     },
   });
   app.appendChild(header);
+  statusBar.bindHeader(header);
   app.appendChild(statusBar.el);
 
   var overviewPanel = SF.el('div', { className: 'sf-content', style: { display: activeTab === 'overview' ? '' : 'none' } });
@@ -81,7 +79,7 @@
       { method: 'GET', path: '/schedules/{id}', description: 'Get current best solution', curl: 'curl http://localhost:7860/schedules/{id}' },
       { method: 'GET', path: '/schedules/{id}/events', description: 'Stream solver updates (SSE)', curl: 'curl -N http://localhost:7860/schedules/{id}/events' },
       { method: 'GET', path: '/schedules/{id}/analyze', description: 'Get constraint analysis', curl: 'curl http://localhost:7860/schedules/{id}/analyze' },
-      { method: 'DELETE', path: '/schedules/{id}', description: 'Stop solving and remove job', curl: 'curl -X DELETE http://localhost:7860/schedules/{id}' },
+      { method: 'DELETE', path: '/schedules/{id}', description: 'Stop solving and keep the latest checkpoint for resume', curl: 'curl -X DELETE http://localhost:7860/schedules/{id}' },
     ],
   }));
   app.appendChild(apiPanel);
@@ -101,14 +99,25 @@
     .catch(function () {});
 
   function loadAndSolve() {
-    fetch('/demo-data/STANDARD')
-      .then(function (r) { return r.json(); })
-      .then(function (data) { solver.start(data); })
-      .catch(function (err) { console.error('Demo load failed:', err); });
+    if (solvingJobId) return;
+    solveRunToken += 1;
+    var token = solveRunToken;
+    resolvePlanForSolve()
+      .then(function (data) {
+        if (token !== solveRunToken) return;
+        startSolve(data, token);
+      })
+      .catch(function (err) { console.error('Solve start failed:', err); });
+  }
+
+  function stopSolve() {
+    if (!solvingJobId) return;
+    backend.deleteSchedule(solvingJobId)
+      .catch(function (err) { console.error('Stop failed:', err); });
   }
 
   function openAnalysis() {
-    var id = solver.getJobId();
+    var id = currentScheduleId;
     if (!id) return;
     backend.analyze(id)
       .then(function (analysis) {
@@ -119,9 +128,84 @@
   }
 
   function renderAll(data) {
+    currentPlan = clonePlan(data);
     renderOverview(data);
     renderViews(data);
     renderTables(data);
+  }
+
+  function resolvePlanForSolve() {
+    if (currentPlan) {
+      return Promise.resolve(clonePlan(currentPlan));
+    }
+    return fetch('/demo-data/STANDARD')
+      .then(function (r) { return r.json(); });
+  }
+
+  function startSolve(data, token) {
+    statusBar.setSolving(true);
+    statusBar.updateMoves(null);
+    backend.createSchedule(data)
+      .then(function (id) {
+        if (token !== solveRunToken || !id) return;
+        currentScheduleId = id;
+        solvingJobId = id;
+        closeExistingStream();
+        closeStream = backend.streamEvents(id, function (msg) {
+          if (token !== solveRunToken || !msg || typeof msg !== 'object') return;
+          handleSolverEvent(msg, id, token);
+        }, function (err) {
+          if (token !== solveRunToken) return;
+          console.error('Solver event stream failed:', err);
+          finishSolve(id, false);
+        });
+      })
+      .catch(function (err) {
+        if (token !== solveRunToken) return;
+        console.error('Create schedule failed:', err);
+        finishSolve(null, false);
+      });
+  }
+
+  function handleSolverEvent(msg, id, token) {
+    if (token !== solveRunToken) return;
+    if (msg.id && String(msg.id) !== String(id)) return;
+    if (!msg.eventType) return;
+
+    statusBar.updateScore(msg.currentScore || null);
+    statusBar.updateMoves(msg.movesPerSecond || null);
+
+    if (msg.eventType === 'best_solution' || msg.eventType === 'finished') {
+      if (msg.solution) {
+        currentScheduleId = id;
+        renderAll(msg.solution);
+      }
+    }
+
+    if (msg.eventType === 'finished') {
+      finishSolve(id, true);
+    }
+  }
+
+  function finishSolve(id, keepSchedule) {
+    closeExistingStream();
+    solvingJobId = null;
+    if (!keepSchedule) {
+      currentScheduleId = id || currentScheduleId;
+    }
+    statusBar.setSolving(false);
+    statusBar.updateMoves(null);
+  }
+
+  function closeExistingStream() {
+    if (closeStream) {
+      closeStream();
+      closeStream = null;
+    }
+  }
+
+  function clonePlan(data) {
+    return JSON.parse(JSON.stringify(data));
   }
 
   function renderOverview(data) {

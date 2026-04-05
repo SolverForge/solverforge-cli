@@ -3,6 +3,8 @@ mod support;
 use reqwest::blocking::Client;
 use serde_json::Value;
 use std::sync::{Mutex, OnceLock};
+use std::thread;
+use std::time::{Duration, Instant};
 use support::generated_app::{seeded_mixed_data_module, seeded_standard_data_module, GeneratedApp};
 
 fn test_lock() -> &'static Mutex<()> {
@@ -265,5 +267,76 @@ fn standard_solver_pipeline() {
         .status();
     assert_eq!(delete_status.as_u16(), 204);
 
+    let stopped_status = wait_for_schedule_status(&client, &base_url, &job_id, "NOT_SOLVING");
+    assert_eq!(stopped_status["solverStatus"], "NOT_SOLVING");
+
+    let stopped_schedule: Value = client
+        .get(format!("{base_url}/schedules/{job_id}"))
+        .send()
+        .expect("get stopped schedule request failed")
+        .error_for_status()
+        .expect("stopped schedule should remain available")
+        .json()
+        .expect("stopped schedule should return JSON");
+    assert!(
+        stopped_schedule["tasks"]
+            .as_array()
+            .map(|rows| !rows.is_empty())
+            == Some(true),
+        "expected stopped schedule snapshot to remain available"
+    );
+
+    let resumed: Value = client
+        .post(format!("{base_url}/schedules"))
+        .json(&stopped_schedule)
+        .send()
+        .expect("resume create schedule request failed")
+        .error_for_status()
+        .expect("resume create schedule should succeed")
+        .json()
+        .expect("resume create schedule should return JSON");
+    let resumed_id = resumed["id"]
+        .as_str()
+        .expect("resumed schedule id should be a string");
+    assert_ne!(resumed_id, job_id);
+
+    let resumed_event_types = app.read_sse_event_types(&client, port, resumed_id, 3);
+    assert!(
+        !resumed_event_types.is_empty(),
+        "expected resumed solve to emit SSE events"
+    );
+
+    let resumed_delete_status = client
+        .delete(format!("{base_url}/schedules/{resumed_id}"))
+        .send()
+        .expect("resume delete request failed")
+        .status();
+    assert_eq!(resumed_delete_status.as_u16(), 204);
+
+    let resumed_status = wait_for_schedule_status(&client, &base_url, resumed_id, "NOT_SOLVING");
+    assert_eq!(resumed_status["solverStatus"], "NOT_SOLVING");
+
     app.mark_success();
+}
+
+fn wait_for_schedule_status(client: &Client, base_url: &str, id: &str, expected: &str) -> Value {
+    let started = Instant::now();
+    loop {
+        let status: Value = client
+            .get(format!("{base_url}/schedules/{id}/status"))
+            .send()
+            .expect("status request failed")
+            .error_for_status()
+            .expect("status should be successful")
+            .json()
+            .expect("status should return JSON");
+        if status["solverStatus"].as_str() == Some(expected) {
+            return status;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "timed out waiting for schedule {id} to reach status {expected}: {status:?}"
+        );
+        thread::sleep(Duration::from_millis(100));
+    }
 }
