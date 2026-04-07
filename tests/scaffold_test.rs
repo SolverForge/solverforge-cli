@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.7.1";
-const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.4.1";
+const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.4.2";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn cli_command() -> Command {
@@ -211,7 +211,7 @@ fn test_new_creates_neutral_project_files() {
     assert!(
         cargo_toml.contains(
             "solverforge = { version = \"0.7.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
-        ) && cargo_toml.contains("solverforge-ui = { version = \"0.4.1\" }"),
+        ) && cargo_toml.contains("solverforge-ui = { version = \"0.4.2\" }"),
         "unified scaffold should point at released SolverForge and solverforge-ui crate dependencies: {}",
         cargo_toml
     );

@@ -176,7 +176,7 @@ fn solverforge_dep_spec() -> String {
 }
 
 fn solverforge_ui_dep_spec() -> String {
-    "{ version = \"0.4.1\" }".to_string()
+    "{ version = \"0.4.2\" }".to_string()
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {
