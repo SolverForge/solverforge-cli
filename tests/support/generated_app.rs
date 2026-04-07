@@ -67,6 +67,7 @@ impl GeneratedApp {
             "scaffold failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
+        pin_generated_project_to_local_solverforge(&self.project_dir);
     }
 
     pub fn run_cli(&self, label: &str, args: &[&str]) {
@@ -137,11 +138,11 @@ impl GeneratedApp {
         format!("http://127.0.0.1:{port}")
     }
 
-    pub fn create_schedule_from_demo(&self, client: &Client, port: u16) -> String {
-        self.phase("Create schedule from demo data");
+    pub fn create_job_from_demo(&self, client: &Client, port: u16, demo_name: &str) -> String {
+        self.phase("Create job from demo data");
         let base_url = self.base_url(port);
         let dto: Value = client
-            .get(format!("{base_url}/demo-data/STANDARD"))
+            .get(format!("{base_url}/demo-data/{demo_name}"))
             .send()
             .expect("failed to fetch demo data")
             .error_for_status()
@@ -149,39 +150,32 @@ impl GeneratedApp {
             .json()
             .expect("demo data should be JSON");
         let response: Value = client
-            .post(format!("{base_url}/schedules"))
+            .post(format!("{base_url}/jobs"))
             .json(&dto)
             .send()
-            .expect("failed to create schedule")
+            .expect("failed to create job")
             .error_for_status()
-            .expect("create schedule request failed")
+            .expect("create job request failed")
             .json()
-            .expect("create schedule should return JSON");
+            .expect("create job should return JSON");
         response["id"]
             .as_str()
-            .expect("schedule id should be a string")
+            .expect("job id should be a string")
             .to_string()
     }
 
-    pub fn read_sse_event_types(
-        &self,
-        client: &Client,
-        port: u16,
-        id: &str,
-        max_events: usize,
-    ) -> Vec<String> {
-        self.phase("Observe SSE events");
+    pub fn read_first_sse_event(&self, client: &Client, port: u16, id: &str) -> Value {
+        self.phase("Observe SSE bootstrap event");
         let response = client
-            .get(format!("{}/schedules/{id}/events", self.base_url(port)))
+            .get(format!("{}/jobs/{id}/events", self.base_url(port)))
             .send()
             .expect("failed to open SSE stream")
             .error_for_status()
             .expect("SSE endpoint returned error");
         let mut reader = BufReader::new(response);
         let mut line = String::new();
-        let mut event_types = Vec::new();
         let start = Instant::now();
-        while event_types.len() < max_events && start.elapsed() < Duration::from_secs(10) {
+        while start.elapsed() < Duration::from_secs(10) {
             line.clear();
             let read = reader
                 .read_line(&mut line)
@@ -191,16 +185,11 @@ impl GeneratedApp {
             }
             if let Some(rest) = line.strip_prefix("data: ") {
                 if let Ok(value) = serde_json::from_str::<Value>(rest.trim()) {
-                    if let Some(event_type) = value["eventType"].as_str() {
-                        event_types.push(event_type.to_string());
-                        if event_type == "finished" {
-                            break;
-                        }
-                    }
+                    return value;
                 }
             }
         }
-        event_types
+        panic!("timed out waiting for first SSE event from job {id}");
     }
 
     pub fn mark_success(&mut self) {
@@ -304,6 +293,64 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+fn pin_generated_project_to_local_solverforge(project_dir: &Path) {
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("CLI repo should have a workspace parent")
+        .to_path_buf();
+    let runtime_path = find_existing_path(&[
+        workspace_root
+            .join("solverforge-rs-track-b")
+            .join("crates")
+            .join("solverforge"),
+        workspace_root
+            .join("solverforge-rs")
+            .join("crates")
+            .join("solverforge"),
+    ]);
+    let ui_path = find_existing_path(&[
+        workspace_root.join("solverforge-ui-track-b"),
+        workspace_root.join("solverforge-ui"),
+    ]);
+
+    let cargo_toml_path = project_dir.join("Cargo.toml");
+    let cargo_toml = fs::read_to_string(&cargo_toml_path).expect("read generated Cargo.toml");
+    let runtime_line = format!(
+        "solverforge = {{ path = \"{}\", features = [\"serde\", \"console\", \"verbose-logging\"] }}",
+        toml_path(&runtime_path)
+    );
+    let ui_line = format!("solverforge-ui = {{ path = \"{}\" }}", toml_path(&ui_path));
+
+    let rewritten = cargo_toml
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("solverforge = ") {
+                runtime_line.clone()
+            } else if trimmed.starts_with("solverforge-ui = ") {
+                ui_line.clone()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    fs::write(cargo_toml_path, rewritten + "\n").expect("write pinned generated Cargo.toml");
+}
+
+fn find_existing_path(candidates: &[PathBuf]) -> PathBuf {
+    candidates
+        .iter()
+        .find(|path| path.exists())
+        .cloned()
+        .unwrap_or_else(|| panic!("expected one of these paths to exist: {candidates:?}"))
+}
+
+fn toml_path(path: &Path) -> String {
+    path.display().to_string().replace('\\', "/")
+}
+
 pub fn seeded_mixed_data_module() -> &'static str {
     r#"/* Seeded demo data for end-to-end pipeline tests. */
 
@@ -382,8 +429,8 @@ impl FromStr for DemoData {
 
 pub fn generate(demo: DemoData) -> Plan {
     match demo {
-        DemoData::Small => generate_plan(2, 4),
-        DemoData::Standard => generate_plan(3, 6),
+        DemoData::Small => generate_plan(4, 16),
+        DemoData::Standard => generate_plan(8, 48),
     }
 }
 

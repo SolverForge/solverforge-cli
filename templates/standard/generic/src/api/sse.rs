@@ -18,8 +18,8 @@ pub async fn events(
 
     let bootstrap_json = state.solver.sse_snapshot(&id).unwrap_or_else(|| {
         format!(
-            r#"{{"id":"{}","eventType":"progress","solverStatus":"SOLVING","currentScore":null,"bestScore":null,"movesPerSecond":0,"solution":null}}"#,
-            id
+            r#"{{"id":"{}","jobId":"{}","eventType":"progress","eventSequence":0,"lifecycleState":"SOLVING","terminalReason":null,"telemetry":{{"elapsedMs":0,"stepCount":0,"movesEvaluated":0,"movesAccepted":0,"scoreCalculations":0,"movesPerSecond":0,"acceptanceRate":0.0}},"currentScore":null,"bestScore":null,"snapshotRevision":null,"solution":null,"error":null}}"#,
+            id, id
         )
     });
     let bootstrap = tokio_stream::iter(std::iter::once(Ok::<_, std::convert::Infallible>(

@@ -3,10 +3,11 @@
 // Some tests invoke `cargo check` inside a temp directory and therefore require a full Rust
 // toolchain plus dependency resolution access.
 
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.7.1";
-const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.4.0";
+const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.4.1";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn cli_command() -> Command {
@@ -23,8 +24,63 @@ fn cli_command() -> Command {
     command
 }
 
-fn pin_generated_project_to_local_solverforge(project_dir: &std::path::Path) {
-    let _ = project_dir;
+fn pin_generated_project_to_local_solverforge(project_dir: &Path) {
+    let runtime_path = find_existing_path(&[
+        workspace_root()
+            .join("solverforge-rs-track-b")
+            .join("crates")
+            .join("solverforge"),
+        workspace_root()
+            .join("solverforge-rs")
+            .join("crates")
+            .join("solverforge"),
+    ]);
+    let ui_path = find_existing_path(&[
+        workspace_root().join("solverforge-ui-track-b"),
+        workspace_root().join("solverforge-ui"),
+    ]);
+
+    let cargo_toml_path = project_dir.join("Cargo.toml");
+    let cargo_toml = std::fs::read_to_string(&cargo_toml_path).expect("read scaffold Cargo.toml");
+    let mut rewritten = Vec::new();
+    let runtime_line = format!(
+        "solverforge = {{ path = \"{}\", features = [\"serde\", \"console\", \"verbose-logging\"] }}",
+        toml_path(&runtime_path)
+    );
+    let ui_line = format!("solverforge-ui = {{ path = \"{}\" }}", toml_path(&ui_path));
+
+    for line in cargo_toml.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("solverforge = ") {
+            rewritten.push(runtime_line.clone());
+        } else if trimmed.starts_with("solverforge-ui = ") {
+            rewritten.push(ui_line.clone());
+        } else {
+            rewritten.push(line.to_string());
+        }
+    }
+
+    std::fs::write(cargo_toml_path, rewritten.join("\n") + "\n")
+        .expect("write pinned scaffold Cargo.toml");
+}
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("CLI repo should have a workspace parent")
+        .to_path_buf()
+}
+
+fn find_existing_path(candidates: &[PathBuf]) -> PathBuf {
+    candidates
+        .iter()
+        .find(|path| path.exists())
+        .cloned()
+        .unwrap_or_else(|| panic!("expected one of these paths to exist: {candidates:?}"))
+}
+
+fn toml_path(path: &Path) -> String {
+    path.display().to_string().replace('\\', "/")
 }
 
 fn legacy_data_loader_stub() -> &'static str {
@@ -144,8 +200,10 @@ fn test_new_creates_neutral_project_files() {
             && app_js.contains("renderStandardView")
             && app_js.contains("renderListView")
             && app_js.contains("No planning variables are declared yet")
-            && app_js.contains("onProgress")
             && app_js.contains("onSolution")
+            && app_js.contains("onPaused")
+            && app_js.contains("onResume")
+            && app_js.contains("onCancel")
             && app_js.contains("onComplete"),
         "neutral scaffold should render variable-driven views from solverforge-ui primitives: {}",
         app_js
@@ -153,7 +211,7 @@ fn test_new_creates_neutral_project_files() {
     assert!(
         cargo_toml.contains(
             "solverforge = { version = \"0.7.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
-        ) && cargo_toml.contains("solverforge-ui = { version = \"0.4.0\" }"),
+        ) && cargo_toml.contains("solverforge-ui = { version = \"0.4.1\" }"),
         "unified scaffold should point at released SolverForge and solverforge-ui crate dependencies: {}",
         cargo_toml
     );
@@ -172,27 +230,36 @@ fn test_new_creates_neutral_project_files() {
     assert!(
         solver_service.contains("mpsc::UnboundedReceiver<SolverEvent<Plan>>")
             && solver_service.contains("event_type: &'static str")
-            && solver_service.contains("current_score: Option<String>")
-            && solver_service.contains("best_score: Option<String>")
-            && solver_service.contains("solution: Option<PlanDto>")
-            && solver_service.contains("fn snapshot_event(state: &JobState)")
+            && solver_service.contains("snapshot_revision: Option<u64>")
+            && solver_service.contains("\"pause_requested\"")
+            && solver_service.contains("\"paused\"")
+            && solver_service.contains("\"resumed\"")
+            && solver_service.contains("\"completed\"")
+            && solver_service.contains("\"cancelled\"")
+            && solver_service.contains("\"failed\"")
+            && solver_service.contains("pub fn start_job(&self, plan: Plan)")
             && solver_service.contains("\"best_solution\"")
-            && solver_service.contains("\"finished\"")
-            && solver_service.contains("let (event_type, solution) = snapshot_event(state);"),
-        "neutral scaffold should align solver SSE payloads with the current backend contract: {}",
+            && solver_service.contains("MANAGER.pause(parse_job_id(id)?)")
+            && solver_service.contains("MANAGER.resume(parse_job_id(id)?)"),
+        "neutral scaffold should align solver SSE payloads with the retained job lifecycle contract: {}",
         solver_service
     );
     assert!(
-        routes_rs.contains("Json<CreateScheduleResponse>")
-            && routes_rs.contains("Json(CreateScheduleResponse { id })"),
-        "neutral scaffold should return create schedule responses as JSON ids: {}",
+        routes_rs.contains("Json<CreateJobResponse>")
+            && routes_rs.contains("Json(CreateJobResponse { id })")
+            && routes_rs.contains(".route(\"/jobs\", post(create_job))")
+            && routes_rs.contains(".route(\"/jobs/{id}/snapshot\", get(get_snapshot))")
+            && routes_rs.contains(".route(\"/jobs/{id}/pause\", post(pause_job))")
+            && routes_rs.contains(".route(\"/jobs/{id}/resume\", post(resume_job))")
+            && routes_rs.contains(".route(\"/jobs/{id}/cancel\", post(cancel_job))"),
+        "neutral scaffold should expose the retained /jobs lifecycle routes: {}",
         routes_rs
     );
     assert!(
         sse_rs.contains("\"eventType\":\"progress\"")
-            && sse_rs.contains("\"currentScore\":null")
-            && sse_rs.contains("\"bestScore\":null"),
-        "neutral scaffold SSE bootstrap should use the typed progress payload shape: {}",
+            && sse_rs.contains("\"lifecycleState\":\"SOLVING\"")
+            && sse_rs.contains("\"snapshotRevision\":null"),
+        "neutral scaffold SSE bootstrap should use the retained lifecycle payload shape: {}",
         sse_rs
     );
 }
@@ -444,6 +511,7 @@ fn test_generate_data_creates_compiler_owned_seed_and_preserves_wrapper() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
+    pin_generated_project_to_local_solverforge(&project_dir);
 
     let fact_status = cli_command()
         .args([

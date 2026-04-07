@@ -169,6 +169,7 @@ fn standard_solver_pipeline() {
     );
     app.phase("Seed non-empty standard demo data");
     app.write_file("src/data/mod.rs", seeded_standard_data_module());
+    app.write_file("solver.toml", short_runtime_solver_config());
     app.cargo_check("Compile generated standard app");
 
     // PHASE 2: boot the generated server and run real data through the solver.
@@ -184,159 +185,265 @@ fn standard_solver_pipeline() {
         .expect("demo data should be successful")
         .json()
         .expect("demo data should be JSON");
-    assert!(demo["resources"].as_array().map(|rows| rows.len() >= 3) == Some(true));
-    assert!(demo["tasks"].as_array().map(|rows| rows.len() >= 6) == Some(true));
+    assert!(demo["resources"].as_array().map(|rows| rows.len() >= 8) == Some(true));
+    assert!(demo["tasks"].as_array().map(|rows| rows.len() >= 48) == Some(true));
 
-    let job_id = app.create_schedule_from_demo(&client, port);
+    let live_job_id = app.create_job_from_demo(&client, port, "STANDARD");
+    let solving = wait_for_job_snapshot(&client, &base_url, &live_job_id);
+    assert_eq!(solving["lifecycleState"], "SOLVING");
+    assert!(solving["snapshotRevision"].as_u64().is_some());
+    assert!(solving.get("currentScore").is_some());
+    assert!(solving.get("bestScore").is_some());
 
-    let schedules: Value = client
-        .get(format!("{base_url}/schedules"))
+    let latest_snapshot = client
+        .get(format!("{base_url}/jobs/{live_job_id}/snapshot"))
         .send()
-        .expect("list schedules request failed")
+        .expect("snapshot request failed")
         .error_for_status()
-        .expect("list schedules should be successful")
-        .json()
-        .expect("list schedules should return JSON");
-    assert!(schedules
-        .as_array()
-        .expect("schedules should be an array")
-        .iter()
-        .any(|value| value.as_str() == Some(&job_id)));
-
-    let schedule: Value = client
-        .get(format!("{base_url}/schedules/{job_id}"))
-        .send()
-        .expect("get schedule request failed")
-        .error_for_status()
-        .expect("get schedule should be successful")
-        .json()
-        .expect("schedule should return JSON");
+        .expect("snapshot should be successful")
+        .json::<Value>()
+        .expect("snapshot should return JSON");
     assert!(
-        schedule["resources"]
+        latest_snapshot["solution"]["resources"]
             .as_array()
             .map(|rows| !rows.is_empty())
             == Some(true),
-        "expected seeded resources in solved payload"
+        "expected seeded resources in retained snapshot"
     );
     assert!(
-        schedule["tasks"].as_array().map(|rows| !rows.is_empty()) == Some(true),
-        "expected seeded tasks in solved payload"
+        latest_snapshot["solution"]["tasks"]
+            .as_array()
+            .map(|rows| !rows.is_empty())
+            == Some(true),
+        "expected seeded tasks in retained snapshot"
     );
 
-    let status: Value = client
-        .get(format!("{base_url}/schedules/{job_id}/status"))
+    let latest_revision = latest_snapshot["snapshotRevision"]
+        .as_u64()
+        .expect("latest snapshot should expose a revision");
+    let live_analysis = client
+        .get(format!(
+            "{base_url}/jobs/{live_job_id}/analysis?snapshot_revision={latest_revision}"
+        ))
         .send()
-        .expect("status request failed")
+        .expect("analysis request failed")
         .error_for_status()
-        .expect("status should be successful")
-        .json()
-        .expect("status should return JSON");
-    assert!(status["solverStatus"].is_string());
-    assert!(status.get("currentScore").is_some());
-    assert!(status.get("bestScore").is_some());
-
-    let event_types = app.read_sse_event_types(&client, port, &job_id, 3);
-    assert!(
-        !event_types.is_empty(),
-        "expected at least one SSE event type from the generated app"
+        .expect("analysis should be successful")
+        .json::<Value>()
+        .expect("analysis should return JSON");
+    assert_eq!(
+        live_analysis["snapshotRevision"].as_u64(),
+        Some(latest_revision)
     );
-    assert!(
-        event_types.iter().all(|event_type| matches!(
-            event_type.as_str(),
-            "progress" | "best_solution" | "finished"
-        )),
-        "unexpected event types: {:?}",
-        event_types
-    );
+    assert!(live_analysis["analysis"]["constraints"].is_array());
 
-    let analyze: Value = client
-        .get(format!("{base_url}/schedules/{job_id}/analyze"))
+    let pause_status = client
+        .post(format!("{base_url}/jobs/{live_job_id}/pause"))
         .send()
-        .expect("analyze request failed")
+        .expect("pause request failed")
+        .status();
+    assert_eq!(pause_status.as_u16(), 202);
+
+    let paused = wait_for_job_state(&client, &base_url, &live_job_id, "PAUSED");
+    assert_eq!(paused["lifecycleState"], "PAUSED");
+    assert_eq!(paused["checkpointAvailable"], true);
+    assert_eq!(
+        app.read_first_sse_event(&client, port, &live_job_id)["eventType"],
+        "paused"
+    );
+
+    let paused_revision = paused["snapshotRevision"]
+        .as_u64()
+        .expect("paused job should expose a retained snapshot revision");
+    let paused_snapshot = client
+        .get(format!(
+            "{base_url}/jobs/{live_job_id}/snapshot?snapshot_revision={paused_revision}"
+        ))
+        .send()
+        .expect("paused snapshot request failed")
         .error_for_status()
-        .expect("analyze should be successful")
-        .json()
-        .expect("analyze should return JSON");
-    assert!(analyze.get("score").is_some());
-    assert!(analyze["constraints"].is_array());
+        .expect("paused snapshot should be successful")
+        .json::<Value>()
+        .expect("paused snapshot should return JSON");
+    assert_eq!(
+        paused_snapshot["snapshotRevision"].as_u64(),
+        Some(paused_revision)
+    );
+
+    let paused_analysis = client
+        .get(format!(
+            "{base_url}/jobs/{live_job_id}/analysis?snapshot_revision={paused_revision}"
+        ))
+        .send()
+        .expect("paused analysis request failed")
+        .error_for_status()
+        .expect("paused analysis should be successful")
+        .json::<Value>()
+        .expect("paused analysis should return JSON");
+    assert_eq!(
+        paused_analysis["snapshotRevision"].as_u64(),
+        Some(paused_revision)
+    );
+    assert!(paused_analysis["analysis"]["constraints"].is_array());
+
+    let resume_status = client
+        .post(format!("{base_url}/jobs/{live_job_id}/resume"))
+        .send()
+        .expect("resume request failed")
+        .status();
+    assert_eq!(resume_status.as_u16(), 202);
+
+    let resumed = wait_for_job_state(&client, &base_url, &live_job_id, "SOLVING");
+    assert_eq!(resumed["lifecycleState"], "SOLVING");
+    let resumed_bootstrap = app.read_first_sse_event(&client, port, &live_job_id);
+    assert!(
+        matches!(
+            resumed_bootstrap["eventType"].as_str(),
+            Some("resumed" | "progress" | "best_solution")
+        ),
+        "unexpected resumed bootstrap payload: {resumed_bootstrap:?}"
+    );
+
+    let cancel_status = client
+        .post(format!("{base_url}/jobs/{live_job_id}/cancel"))
+        .send()
+        .expect("cancel request failed")
+        .status();
+    assert_eq!(cancel_status.as_u16(), 202);
+
+    let cancelled = wait_for_job_state(&client, &base_url, &live_job_id, "CANCELLED");
+    assert_eq!(cancelled["terminalReason"], "cancelled");
+    assert_eq!(
+        app.read_first_sse_event(&client, port, &live_job_id)["eventType"],
+        "cancelled"
+    );
 
     let delete_status = client
-        .delete(format!("{base_url}/schedules/{job_id}"))
+        .delete(format!("{base_url}/jobs/{live_job_id}"))
         .send()
         .expect("delete request failed")
         .status();
     assert_eq!(delete_status.as_u16(), 204);
+    assert_eq!(
+        client
+            .get(format!("{base_url}/jobs/{live_job_id}"))
+            .send()
+            .expect("deleted job lookup failed")
+            .status()
+            .as_u16(),
+        404
+    );
 
-    let stopped_status = wait_for_schedule_status(&client, &base_url, &job_id, "NOT_SOLVING");
-    assert_eq!(stopped_status["solverStatus"], "NOT_SOLVING");
+    let completed_job_id = app.create_job_from_demo(&client, port, "SMALL");
+    let completed = wait_for_job_state(&client, &base_url, &completed_job_id, "COMPLETED");
+    assert!(matches!(
+        completed["terminalReason"].as_str(),
+        Some("completed" | "terminated_by_config")
+    ));
 
-    let stopped_schedule: Value = client
-        .get(format!("{base_url}/schedules/{job_id}"))
+    let completed_snapshot = client
+        .get(format!("{base_url}/jobs/{completed_job_id}/snapshot"))
         .send()
-        .expect("get stopped schedule request failed")
+        .expect("completed snapshot request failed")
         .error_for_status()
-        .expect("stopped schedule should remain available")
-        .json()
-        .expect("stopped schedule should return JSON");
+        .expect("completed snapshot should be successful")
+        .json::<Value>()
+        .expect("completed snapshot should return JSON");
     assert!(
-        stopped_schedule["tasks"]
+        completed_snapshot["solution"]["tasks"]
             .as_array()
             .map(|rows| !rows.is_empty())
             == Some(true),
-        "expected stopped schedule snapshot to remain available"
+        "expected completed snapshot to keep the latest rendered plan"
     );
 
-    let resumed: Value = client
-        .post(format!("{base_url}/schedules"))
-        .json(&stopped_schedule)
+    let completed_analysis = client
+        .get(format!("{base_url}/jobs/{completed_job_id}/analysis"))
         .send()
-        .expect("resume create schedule request failed")
+        .expect("completed analysis request failed")
         .error_for_status()
-        .expect("resume create schedule should succeed")
-        .json()
-        .expect("resume create schedule should return JSON");
-    let resumed_id = resumed["id"]
-        .as_str()
-        .expect("resumed schedule id should be a string");
-    assert_ne!(resumed_id, job_id);
-
-    let resumed_event_types = app.read_sse_event_types(&client, port, resumed_id, 3);
-    assert!(
-        !resumed_event_types.is_empty(),
-        "expected resumed solve to emit SSE events"
+        .expect("completed analysis should be successful")
+        .json::<Value>()
+        .expect("completed analysis should return JSON");
+    assert!(completed_analysis["analysis"]["constraints"].is_array());
+    assert_eq!(
+        app.read_first_sse_event(&client, port, &completed_job_id)["eventType"],
+        "completed"
     );
 
-    let resumed_delete_status = client
-        .delete(format!("{base_url}/schedules/{resumed_id}"))
+    let completed_delete_status = client
+        .delete(format!("{base_url}/jobs/{completed_job_id}"))
         .send()
-        .expect("resume delete request failed")
+        .expect("completed delete request failed")
         .status();
-    assert_eq!(resumed_delete_status.as_u16(), 204);
-
-    let resumed_status = wait_for_schedule_status(&client, &base_url, resumed_id, "NOT_SOLVING");
-    assert_eq!(resumed_status["solverStatus"], "NOT_SOLVING");
+    assert_eq!(completed_delete_status.as_u16(), 204);
 
     app.mark_success();
 }
 
-fn wait_for_schedule_status(client: &Client, base_url: &str, id: &str, expected: &str) -> Value {
+fn wait_for_job_snapshot(client: &Client, base_url: &str, id: &str) -> Value {
     let started = Instant::now();
     loop {
         let status: Value = client
-            .get(format!("{base_url}/schedules/{id}/status"))
+            .get(format!("{base_url}/jobs/{id}"))
             .send()
-            .expect("status request failed")
+            .expect("job summary request failed")
             .error_for_status()
-            .expect("status should be successful")
+            .expect("job summary should be successful")
             .json()
-            .expect("status should return JSON");
-        if status["solverStatus"].as_str() == Some(expected) {
+            .expect("job summary should return JSON");
+        let lifecycle_state = status["lifecycleState"].as_str();
+        if matches!(
+            lifecycle_state,
+            Some("SOLVING" | "PAUSE_REQUESTED" | "PAUSED")
+        ) && status["snapshotRevision"].as_u64().is_some()
+        {
             return status;
         }
         assert!(
-            started.elapsed() < Duration::from_secs(10),
-            "timed out waiting for schedule {id} to reach status {expected}: {status:?}"
+            started.elapsed() < Duration::from_secs(20),
+            "timed out waiting for job {id} to expose a retained snapshot: {status:?}"
         );
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+fn wait_for_job_state(client: &Client, base_url: &str, id: &str, expected: &str) -> Value {
+    let started = Instant::now();
+    loop {
+        let status: Value = client
+            .get(format!("{base_url}/jobs/{id}"))
+            .send()
+            .expect("job summary request failed")
+            .error_for_status()
+            .expect("job summary should be successful")
+            .json()
+            .expect("job summary should return JSON");
+        if status["lifecycleState"].as_str() == Some(expected) {
+            return status;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "timed out waiting for job {id} to reach lifecycle state {expected}: {status:?}"
+        );
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn short_runtime_solver_config() -> &'static str {
+    r#"[[phases]]
+type = "construction_heuristic"
+construction_heuristic_type = "first_fit"
+
+[[phases]]
+type = "local_search"
+[phases.acceptor]
+type = "late_acceptance"
+late_acceptance_size = 400
+[phases.forager]
+accepted_count_limit = 4
+
+[termination]
+seconds_spent_limit = 5
+"#
 }

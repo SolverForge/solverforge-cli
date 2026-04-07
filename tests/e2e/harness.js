@@ -85,8 +85,8 @@ impl FromStr for DemoData {
 
 pub fn generate(demo: DemoData) -> Plan {
     match demo {
-        DemoData::Small => generate_plan(2, 4),
-        DemoData::Standard => generate_plan(3, 6),
+        DemoData::Small => generate_plan(4, 16),
+        DemoData::Standard => generate_plan(8, 48),
     }
 }
 
@@ -108,6 +108,50 @@ function phase(suite, title) {
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
+}
+
+function workspaceRoot() {
+  return path.dirname(repoRoot);
+}
+
+function findExistingPath(candidates) {
+  const resolved = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!resolved) {
+    throw new Error(`Expected one of these paths to exist: ${candidates.join(', ')}`);
+  }
+  return resolved;
+}
+
+function tomlPath(value) {
+  return value.replace(/\\/g, '/');
+}
+
+function pinGeneratedProjectToLocalSolverforge(projectDir) {
+  const runtimePath = findExistingPath([
+    path.join(workspaceRoot(), 'solverforge-rs-track-b', 'crates', 'solverforge'),
+    path.join(workspaceRoot(), 'solverforge-rs', 'crates', 'solverforge'),
+  ]);
+  const uiPath = findExistingPath([
+    path.join(workspaceRoot(), 'solverforge-ui-track-b'),
+    path.join(workspaceRoot(), 'solverforge-ui'),
+  ]);
+
+  const cargoTomlPath = path.join(projectDir, 'Cargo.toml');
+  const cargoToml = fs.readFileSync(cargoTomlPath, 'utf8');
+  const rewritten = cargoToml
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trimStart();
+      if (trimmed.startsWith('solverforge = ')) {
+        return `solverforge = { path = "${tomlPath(runtimePath)}", features = ["serde", "console", "verbose-logging"] }`;
+      }
+      if (trimmed.startsWith('solverforge-ui = ')) {
+        return `solverforge-ui = { path = "${tomlPath(uiPath)}" }`;
+      }
+      return line;
+    })
+    .join('\n');
+  fs.writeFileSync(cargoTomlPath, `${rewritten}\n`);
 }
 
 function runCommand({ suite, title, cwd, args, logPath, env = {} }) {
@@ -169,6 +213,7 @@ async function scaffoldScenario(name, generatorCommands) {
     args: ['new', projectName, '--skip-git', '--skip-readme', '--quiet'],
     logPath: path.join(scenarioArtifactDir, '01-scaffold.log'),
   });
+  pinGeneratedProjectToLocalSolverforge(projectDir);
 
   generatorCommands.forEach((args, index) => {
     runCommand({

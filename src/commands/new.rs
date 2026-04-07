@@ -176,7 +176,7 @@ fn solverforge_dep_spec() -> String {
 }
 
 fn solverforge_ui_dep_spec() -> String {
-    "{ version = \"0.4.0\" }".to_string()
+    "{ version = \"0.4.1\" }".to_string()
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {
@@ -227,7 +227,8 @@ fn print_template_guidance(project_name: &str) {
     println!("  This starter includes:");
     println!("    - One neutral app shell for standard, list, or mixed modeling");
     println!("    - Variable-driven views generated from solverforge.app.toml");
-    println!("    - REST API with typed SSE live updates and score analysis");
+    println!("    - Retained job lifecycle with pause, resume, cancel, and delete");
+    println!("    - Typed SSE lifecycle events and snapshot-bound score analysis");
     println!("    - solverforge.app.toml for the scaffolded domain contract");
     println!("    - solver.toml as the search-strategy layer");
     println!("    solverforge generate entity task");

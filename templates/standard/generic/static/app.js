@@ -9,10 +9,7 @@
   var backend = SF.createBackend({ baseUrl: '' });
   var statusBar = SF.createStatusBar({ constraints: uiModel.constraints || [] });
   var currentPlan = null;
-  var currentScheduleId = null;
-  var solvingJobId = null;
-  var closeStream = null;
-  var solveRunToken = 0;
+  var lastAnalysis = null;
   var activeTab = (uiModel.views && uiModel.views.length) ? uiModel.views[0].id : 'overview';
   var viewPanels = {};
 
@@ -37,7 +34,9 @@
     tabs: tabs,
     actions: {
       onSolve: function () { loadAndSolve(); },
-      onStop: function () { stopSolve(); },
+      onPause: function () { pauseSolve(); },
+      onResume: function () { resumeSolve(); },
+      onCancel: function () { cancelSolve(); },
       onAnalyze: function () { openAnalysis(); },
     },
     onTabChange: function (tab) {
@@ -75,11 +74,15 @@
   apiPanel.appendChild(SF.createApiGuide({
     endpoints: [
       { method: 'GET', path: '/demo-data/STANDARD', description: 'Fetch demo data', curl: 'curl http://localhost:7860/demo-data/STANDARD' },
-      { method: 'POST', path: '/schedules', description: 'Submit a plan for solving', curl: 'curl -X POST -H "Content-Type: application/json" http://localhost:7860/schedules -d @plan.json' },
-      { method: 'GET', path: '/schedules/{id}', description: 'Get current best solution', curl: 'curl http://localhost:7860/schedules/{id}' },
-      { method: 'GET', path: '/schedules/{id}/events', description: 'Stream solver updates (SSE)', curl: 'curl -N http://localhost:7860/schedules/{id}/events' },
-      { method: 'GET', path: '/schedules/{id}/analyze', description: 'Get constraint analysis', curl: 'curl http://localhost:7860/schedules/{id}/analyze' },
-      { method: 'DELETE', path: '/schedules/{id}', description: 'Stop solving and keep the latest checkpoint for resume', curl: 'curl -X DELETE http://localhost:7860/schedules/{id}' },
+      { method: 'POST', path: '/jobs', description: 'Create a retained solving job', curl: 'curl -X POST -H "Content-Type: application/json" http://localhost:7860/jobs -d @plan.json' },
+      { method: 'GET', path: '/jobs/{id}', description: 'Get current job summary', curl: 'curl http://localhost:7860/jobs/{id}' },
+      { method: 'GET', path: '/jobs/{id}/snapshot', description: 'Fetch the latest retained snapshot', curl: 'curl http://localhost:7860/jobs/{id}/snapshot' },
+      { method: 'GET', path: '/jobs/{id}/analysis?snapshot_revision={n}', description: 'Analyze an exact snapshot revision', curl: 'curl "http://localhost:7860/jobs/{id}/analysis?snapshot_revision=3"' },
+      { method: 'POST', path: '/jobs/{id}/pause', description: 'Request an exact runtime pause', curl: 'curl -X POST http://localhost:7860/jobs/{id}/pause' },
+      { method: 'POST', path: '/jobs/{id}/resume', description: 'Resume a paused retained job', curl: 'curl -X POST http://localhost:7860/jobs/{id}/resume' },
+      { method: 'POST', path: '/jobs/{id}/cancel', description: 'Cancel a live or paused job', curl: 'curl -X POST http://localhost:7860/jobs/{id}/cancel' },
+      { method: 'DELETE', path: '/jobs/{id}', description: 'Delete a terminal retained job', curl: 'curl -X DELETE http://localhost:7860/jobs/{id}' },
+      { method: 'GET', path: '/jobs/{id}/events', description: 'Stream job lifecycle updates (SSE)', curl: 'curl -N http://localhost:7860/jobs/{id}/events' },
     ],
   }));
   app.appendChild(apiPanel);
@@ -92,6 +95,54 @@
   }));
 
   var analysisModal = SF.createModal({ title: 'Score Analysis', width: '700px' });
+  var solver = SF.createSolver({
+    backend: backend,
+    statusBar: statusBar,
+    onSolution: function (snapshot) {
+      if (snapshot && snapshot.solution) {
+        renderAll(snapshot.solution);
+      }
+      syncLifecycleMarkers();
+    },
+    onPaused: function (snapshot) {
+      if (snapshot && snapshot.solution) {
+        renderAll(snapshot.solution);
+      }
+      syncLifecycleMarkers();
+    },
+    onResumed: function () {
+      syncLifecycleMarkers();
+    },
+    onCancelled: function (snapshot) {
+      if (snapshot && snapshot.solution) {
+        renderAll(snapshot.solution);
+      }
+      syncLifecycleMarkers();
+    },
+    onComplete: function (snapshot) {
+      if (snapshot && snapshot.solution) {
+        renderAll(snapshot.solution);
+      }
+      syncLifecycleMarkers();
+    },
+    onFailure: function (_message, meta, snapshot, analysis) {
+      if (snapshot && snapshot.solution) {
+        renderAll(snapshot.solution);
+      }
+      if (analysis) {
+        lastAnalysis = analysis;
+      }
+      syncLifecycleMarkers(meta);
+    },
+    onAnalysis: function (analysis) {
+      lastAnalysis = analysis;
+      syncLifecycleMarkers();
+    },
+    onError: function (message) {
+      console.error('Solver lifecycle failed:', message);
+      syncLifecycleMarkers();
+    },
+  });
 
   fetch('/demo-data/STANDARD')
     .then(function (r) { return r.json(); })
@@ -99,28 +150,43 @@
     .catch(function () {});
 
   function loadAndSolve() {
-    if (solvingJobId) return;
-    solveRunToken += 1;
-    var token = solveRunToken;
-    resolvePlanForSolve()
+    if (solver.isRunning() || solver.getLifecycleState() === 'PAUSED') return;
+    cleanupTerminalJob()
       .then(function (data) {
-        if (token !== solveRunToken) return;
-        startSolve(data, token);
+        return data || resolvePlanForSolve();
+      })
+      .then(function (data) {
+        return solver.start(data);
+      })
+      .then(function () {
+        syncLifecycleMarkers();
       })
       .catch(function (err) { console.error('Solve start failed:', err); });
   }
 
-  function stopSolve() {
-    if (!solvingJobId) return;
-    backend.deleteSchedule(solvingJobId)
-      .catch(function (err) { console.error('Stop failed:', err); });
+  function pauseSolve() {
+    solver.pause()
+      .then(function () { syncLifecycleMarkers(); })
+      .catch(function (err) { console.error('Pause failed:', err); });
+  }
+
+  function resumeSolve() {
+    solver.resume()
+      .then(function () { syncLifecycleMarkers(); })
+      .catch(function (err) { console.error('Resume failed:', err); });
+  }
+
+  function cancelSolve() {
+    solver.cancel()
+      .then(function () { syncLifecycleMarkers(); })
+      .catch(function (err) { console.error('Cancel failed:', err); });
   }
 
   function openAnalysis() {
-    var id = currentScheduleId;
-    if (!id) return;
-    backend.analyze(id)
+    if (!solver.getJobId()) return;
+    solver.analyzeSnapshot()
       .then(function (analysis) {
+        lastAnalysis = analysis;
         analysisModal.setBody(buildAnalysisHtml(analysis));
         analysisModal.open();
       })
@@ -142,65 +208,42 @@
       .then(function (r) { return r.json(); });
   }
 
-  function startSolve(data, token) {
-    statusBar.setSolving(true);
-    statusBar.updateMoves(null);
-    backend.createSchedule(data)
-      .then(function (id) {
-        if (token !== solveRunToken || !id) return;
-        currentScheduleId = id;
-        solvingJobId = id;
-        closeExistingStream();
-        closeStream = backend.streamEvents(id, function (msg) {
-          if (token !== solveRunToken || !msg || typeof msg !== 'object') return;
-          handleSolverEvent(msg, id, token);
-        }, function (err) {
-          if (token !== solveRunToken) return;
-          console.error('Solver event stream failed:', err);
-          finishSolve(id, false);
-        });
+  function cleanupTerminalJob() {
+    var state = solver.getLifecycleState();
+    if (!solver.getJobId() || state === 'IDLE' || state === 'PAUSED' || solver.isRunning()) {
+      return Promise.resolve(null);
+    }
+    return solver.delete()
+      .then(function () {
+        lastAnalysis = null;
+        syncLifecycleMarkers();
+        return null;
       })
       .catch(function (err) {
-        if (token !== solveRunToken) return;
-        console.error('Create schedule failed:', err);
-        finishSolve(null, false);
+        console.error('Delete failed:', err);
+        return null;
       });
   }
 
-  function handleSolverEvent(msg, id, token) {
-    if (token !== solveRunToken) return;
-    if (msg.id && String(msg.id) !== String(id)) return;
-    if (!msg.eventType) return;
+  function syncLifecycleMarkers(meta) {
+    var jobId = solver.getJobId();
+    var snapshotRevision = solver.getSnapshotRevision();
+    var lifecycleState = meta && meta.lifecycleState ? meta.lifecycleState : solver.getLifecycleState();
 
-    statusBar.updateScore(msg.currentScore || null);
-    statusBar.updateMoves(msg.movesPerSecond || null);
-
-    if (msg.eventType === 'best_solution' || msg.eventType === 'finished') {
-      if (msg.solution) {
-        currentScheduleId = id;
-        renderAll(msg.solution);
-      }
+    if (jobId) {
+      app.dataset.jobId = String(jobId);
+    } else {
+      delete app.dataset.jobId;
     }
-
-    if (msg.eventType === 'finished') {
-      finishSolve(id, true);
+    if (snapshotRevision != null) {
+      app.dataset.snapshotRevision = String(snapshotRevision);
+    } else {
+      delete app.dataset.snapshotRevision;
     }
-  }
-
-  function finishSolve(id, keepSchedule) {
-    closeExistingStream();
-    solvingJobId = null;
-    if (!keepSchedule) {
-      currentScheduleId = id || currentScheduleId;
-    }
-    statusBar.setSolving(false);
-    statusBar.updateMoves(null);
-  }
-
-  function closeExistingStream() {
-    if (closeStream) {
-      closeStream();
-      closeStream = null;
+    if (lifecycleState && lifecycleState !== 'IDLE') {
+      app.dataset.lifecycleState = lifecycleState;
+    } else {
+      delete app.dataset.lifecycleState;
     }
   }
 
@@ -387,7 +430,8 @@
     var html = '<p><strong>Score:</strong> ' + SF.escHtml(analysis.score) + '</p>';
     html += '<table class="sf-table"><thead><tr><th>Constraint</th><th>Type</th><th>Score</th><th>Matches</th></tr></thead><tbody>';
     analysis.constraints.forEach(function (c) {
-      html += '<tr><td>' + SF.escHtml(c.name) + '</td><td>' + SF.escHtml(c.constraintType || c.type || '') + '</td><td>' + SF.escHtml(c.score) + '</td><td>' + (c.matches ? c.matches.length : 0) + '</td></tr>';
+      var matchCount = c.matchCount != null ? c.matchCount : (c.matches ? c.matches.length : 0);
+      html += '<tr><td>' + SF.escHtml(c.name) + '</td><td>' + SF.escHtml(c.constraintType || c.type || '') + '</td><td>' + SF.escHtml(c.score) + '</td><td>' + matchCount + '</td></tr>';
     });
     html += '</tbody></table>';
     return html;

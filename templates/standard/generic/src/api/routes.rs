@@ -1,17 +1,16 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    routing::{delete, get, post, put},
+    routing::{get, post},
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use uuid::Uuid;
 
-use super::dto::{AnalyzeResponse, ConstraintAnalysisDto, ConstraintMatchDto, PlanDto};
+use super::dto::{analysis_response, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, PlanDto};
 use super::sse;
 use crate::data::{generate, DemoData};
-use crate::solver::{SolverService, SolverStatus};
+use crate::solver::SolverService;
 
 /// Shared application state.
 pub struct AppState {
@@ -39,20 +38,17 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/info", get(info))
         .route("/demo-data", get(list_demo_data))
         .route("/demo-data/{id}", get(get_demo_data))
-        .route("/schedules", post(create_schedule))
-        .route("/schedules", get(list_schedules))
-        .route("/schedules/analyze", put(analyze_schedule))
-        .route("/schedules/{id}", get(get_schedule))
-        .route("/schedules/{id}/status", get(get_schedule_status))
-        .route("/schedules/{id}/events", get(sse::events))
-        .route("/schedules/{id}/analyze", get(analyze_by_id))
-        .route("/schedules/{id}", delete(stop_solving))
+        .route("/jobs", post(create_job))
+        .route("/jobs/{id}", get(get_job).delete(delete_job))
+        .route("/jobs/{id}/status", get(get_job_status))
+        .route("/jobs/{id}/snapshot", get(get_snapshot))
+        .route("/jobs/{id}/analysis", get(analyze_by_id))
+        .route("/jobs/{id}/pause", post(pause_job))
+        .route("/jobs/{id}/resume", post(resume_job))
+        .route("/jobs/{id}/cancel", post(cancel_job))
+        .route("/jobs/{id}/events", get(sse::events))
         .with_state(state)
 }
-
-// ============================================================================
-// Handlers
-// ============================================================================
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -86,165 +82,120 @@ async fn list_demo_data() -> Json<Vec<&'static str>> {
 async fn get_demo_data(Path(id): Path<String>) -> Result<Json<PlanDto>, StatusCode> {
     let demo = id.parse::<DemoData>().map_err(|_| StatusCode::NOT_FOUND)?;
     let plan = generate(demo);
-    Ok(Json(PlanDto::from_plan(&plan, None)))
-}
-
-async fn create_schedule(
-    State(state): State<Arc<AppState>>,
-    Json(dto): Json<PlanDto>,
-) -> Json<CreateScheduleResponse> {
-    let id = Uuid::new_v4().to_string();
-    let plan = dto.to_domain();
-    state.solver.start_solving(id.clone(), plan);
-    Json(CreateScheduleResponse { id })
+    Ok(Json(PlanDto::from_plan(&plan)))
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateScheduleResponse {
+struct CreateJobResponse {
     id: String,
 }
 
-async fn list_schedules(State(state): State<Arc<AppState>>) -> Json<Vec<String>> {
-    Json(state.solver.list_jobs())
+async fn create_job(
+    State(state): State<Arc<AppState>>,
+    Json(dto): Json<PlanDto>,
+) -> Result<Json<CreateJobResponse>, StatusCode> {
+    let id = state
+        .solver
+        .start_job(dto.to_domain())
+        .map_err(status_from_solver_error)?;
+    Ok(Json(CreateJobResponse { id }))
 }
 
-async fn get_schedule(
+async fn get_job(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<PlanDto>, StatusCode> {
-    if !state.solver.has_job(&id) {
-        return Err(StatusCode::NOT_FOUND);
-    }
-    match state
+) -> Result<Json<JobSummaryDto>, StatusCode> {
+    let job_id = parse_job_id(&id)?;
+    let status = state
         .solver
-        .with_snapshot(&id, |plan, _current_score, _best_score, status| {
-            PlanDto::from_plan(plan, Some(status))
-        }) {
-        Some(dto) => Ok(Json(dto)),
-        None => Err(StatusCode::NOT_FOUND),
-    }
+        .get_status(&id)
+        .map_err(status_from_solver_error)?;
+    Ok(Json(JobSummaryDto::from_status(job_id, &status)))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StatusResponse {
-    current_score: Option<String>,
-    best_score: Option<String>,
-    solver_status: SolverStatus,
-}
-
-async fn get_schedule_status(
+async fn get_job_status(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<StatusResponse>, StatusCode> {
-    if !state.solver.has_job(&id) {
-        return Err(StatusCode::NOT_FOUND);
-    }
-    match state
+) -> Result<Json<JobSummaryDto>, StatusCode> {
+    get_job(State(state), Path(id)).await
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct SnapshotQuery {
+    snapshot_revision: Option<u64>,
+}
+
+async fn get_snapshot(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(query): Query<SnapshotQuery>,
+) -> Result<Json<JobSnapshotDto>, StatusCode> {
+    let snapshot = state
         .solver
-        .with_snapshot(&id, |_plan, current_score, best_score, status| {
-            StatusResponse {
-                current_score: current_score.map(|s| s.to_string()),
-                best_score: best_score.map(|s| s.to_string()),
-                solver_status: status,
-            }
-        }) {
-        Some(resp) => Ok(Json(resp)),
-        None => Err(StatusCode::NOT_FOUND),
-    }
-}
-
-async fn stop_solving(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> StatusCode {
-    if !state.solver.has_job(&id) {
-        return StatusCode::NOT_FOUND;
-    }
-    if state.solver.stop_solving(&id) {
-        StatusCode::NO_CONTENT
-    } else {
-        StatusCode::CONFLICT
-    }
-}
-
-async fn analyze_schedule(Json(dto): Json<PlanDto>) -> Json<AnalyzeResponse> {
-    use crate::constraints::create_constraints;
-    use solverforge::ConstraintSet;
-    use solverforge::ScoreDirector;
-
-    let plan = dto.to_domain();
-    let constraints = create_constraints();
-    let mut director = ScoreDirector::new(plan, constraints);
-    let score = director.calculate_score();
-    let analyses = director
-        .constraints()
-        .evaluate_detailed(director.working_solution());
-
-    let constraints_dto: Vec<ConstraintAnalysisDto> = analyses
-        .into_iter()
-        .map(|a| ConstraintAnalysisDto {
-            name: a.constraint_ref.name.clone(),
-            constraint_type: if a.is_hard { "hard" } else { "soft" }.to_string(),
-            weight: format!("{}", a.weight),
-            score: format!("{}", a.score),
-            matches: a
-                .matches
-                .iter()
-                .map(|m| ConstraintMatchDto {
-                    score: format!("{}", m.score),
-                    justification: m.justification.description.clone(),
-                })
-                .collect(),
-        })
-        .collect();
-
-    Json(AnalyzeResponse {
-        score: format!("{}", score),
-        constraints: constraints_dto,
-    })
+        .get_snapshot(&id, query.snapshot_revision)
+        .map_err(status_from_solver_error)?;
+    Ok(Json(JobSnapshotDto::from_snapshot(&snapshot)))
 }
 
 async fn analyze_by_id(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<AnalyzeResponse>, StatusCode> {
-    use crate::constraints::create_constraints;
-    use solverforge::ConstraintSet;
-    use solverforge::ScoreDirector;
-
-    let plan = state
+    Query(query): Query<SnapshotQuery>,
+) -> Result<Json<JobAnalysisDto>, StatusCode> {
+    let snapshot_analysis = state
         .solver
-        .with_snapshot(&id, |plan, _current_score, _best_score, _status| {
-            plan.clone()
-        })
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .analyze_snapshot(&id, query.snapshot_revision)
+        .map_err(status_from_solver_error)?;
+    let analysis = analysis_response(&snapshot_analysis.analysis);
+    Ok(Json(JobAnalysisDto::from_snapshot_analysis(
+        &snapshot_analysis,
+        analysis,
+    )))
+}
 
-    let constraints = create_constraints();
-    let mut director = ScoreDirector::new(plan, constraints);
-    let score = director.calculate_score();
-    let analyses = director
-        .constraints()
-        .evaluate_detailed(director.working_solution());
+async fn pause_job(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    state.solver.pause(&id).map_err(status_from_solver_error)?;
+    Ok(StatusCode::ACCEPTED)
+}
 
-    let constraints_dto: Vec<ConstraintAnalysisDto> = analyses
-        .into_iter()
-        .map(|a| ConstraintAnalysisDto {
-            name: a.constraint_ref.name.clone(),
-            constraint_type: if a.is_hard { "hard" } else { "soft" }.to_string(),
-            weight: format!("{}", a.weight),
-            score: format!("{}", a.score),
-            matches: a
-                .matches
-                .iter()
-                .map(|m| ConstraintMatchDto {
-                    score: format!("{}", m.score),
-                    justification: m.justification.description.clone(),
-                })
-                .collect(),
-        })
-        .collect();
+async fn resume_job(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    state.solver.resume(&id).map_err(status_from_solver_error)?;
+    Ok(StatusCode::ACCEPTED)
+}
 
-    Ok(Json(AnalyzeResponse {
-        score: format!("{}", score),
-        constraints: constraints_dto,
-    }))
+async fn cancel_job(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    state.solver.cancel(&id).map_err(status_from_solver_error)?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+async fn delete_job(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    state.solver.delete(&id).map_err(status_from_solver_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn parse_job_id(id: &str) -> Result<usize, StatusCode> {
+    id.parse::<usize>().map_err(|_| StatusCode::NOT_FOUND)
+}
+
+fn status_from_solver_error(error: solverforge::SolverManagerError) -> StatusCode {
+    match error {
+        solverforge::SolverManagerError::NoFreeJobSlots => StatusCode::SERVICE_UNAVAILABLE,
+        solverforge::SolverManagerError::JobNotFound { .. } => StatusCode::NOT_FOUND,
+        solverforge::SolverManagerError::InvalidStateTransition { .. } => StatusCode::CONFLICT,
+        solverforge::SolverManagerError::NoSnapshotAvailable { .. } => StatusCode::CONFLICT,
+        solverforge::SolverManagerError::SnapshotNotFound { .. } => StatusCode::NOT_FOUND,
+    }
 }

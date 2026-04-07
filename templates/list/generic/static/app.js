@@ -6,6 +6,7 @@
   var config = await fetch('/sf-config.json').then(function (r) { return r.json(); });
 
   var app = document.getElementById('sf-app');
+  var currentPlan = null;
 
   // Backend and solver
   var backend = SF.createBackend({ baseUrl: '' });
@@ -13,9 +14,11 @@
   var solver = SF.createSolver({
     backend: backend,
     statusBar: statusBar,
-    onProgress: function (meta) { void meta; },
-    onSolution: function (data) { renderSequences(data); renderTables(data); },
-    onComplete: function (data) { renderSequences(data); renderTables(data); },
+    onSolution: function (snapshot) { renderAll(snapshot && snapshot.solution ? snapshot.solution : null); },
+    onPaused: function (snapshot) { renderAll(snapshot && snapshot.solution ? snapshot.solution : null); },
+    onCancelled: function (snapshot) { renderAll(snapshot && snapshot.solution ? snapshot.solution : null); },
+    onComplete: function (snapshot) { renderAll(snapshot && snapshot.solution ? snapshot.solution : null); },
+    onError: function (message) { console.error('Solver lifecycle failed:', message); },
   });
 
   // Header
@@ -30,7 +33,9 @@
     ],
     actions: {
       onSolve: function () { loadAndSolve(); },
-      onStop: function () { solver.stop(); },
+      onPause: function () { solver.pause().catch(function (err) { console.error('Pause failed:', err); }); },
+      onResume: function () { solver.resume().catch(function (err) { console.error('Resume failed:', err); }); },
+      onCancel: function () { solver.cancel().catch(function (err) { console.error('Cancel failed:', err); }); },
       onAnalyze: function () { openAnalysis(); },
     },
     onTabChange: function (tab) {
@@ -40,6 +45,7 @@
     },
   });
   app.appendChild(header);
+  statusBar.bindHeader(header);
   app.appendChild(statusBar.el);
 
   // Sequences panel (hero)
@@ -59,11 +65,15 @@
   var guide = SF.createApiGuide({
     endpoints: [
       { method: 'GET', path: '/demo-data/STANDARD', description: 'Fetch demo data', curl: 'curl http://localhost:7860/demo-data/STANDARD' },
-      { method: 'POST', path: '/schedules', description: 'Submit a plan for solving', curl: 'curl -X POST -H "Content-Type: application/json" http://localhost:7860/schedules -d @plan.json' },
-      { method: 'GET', path: '/schedules/{id}', description: 'Get current best solution', curl: 'curl http://localhost:7860/schedules/{id}' },
-      { method: 'GET', path: '/schedules/{id}/events', description: 'Stream solver updates (SSE)', curl: 'curl -N http://localhost:7860/schedules/{id}/events' },
-      { method: 'GET', path: '/schedules/{id}/analyze', description: 'Get constraint analysis', curl: 'curl http://localhost:7860/schedules/{id}/analyze' },
-      { method: 'DELETE', path: '/schedules/{id}', description: 'Stop solving and remove job', curl: 'curl -X DELETE http://localhost:7860/schedules/{id}' },
+      { method: 'POST', path: '/jobs', description: 'Create a retained solving job', curl: 'curl -X POST -H "Content-Type: application/json" http://localhost:7860/jobs -d @plan.json' },
+      { method: 'GET', path: '/jobs/{id}', description: 'Get current job summary', curl: 'curl http://localhost:7860/jobs/{id}' },
+      { method: 'GET', path: '/jobs/{id}/snapshot', description: 'Fetch the latest retained snapshot', curl: 'curl http://localhost:7860/jobs/{id}/snapshot' },
+      { method: 'GET', path: '/jobs/{id}/analysis?snapshot_revision={n}', description: 'Analyze an exact snapshot revision', curl: 'curl "http://localhost:7860/jobs/{id}/analysis?snapshot_revision=3"' },
+      { method: 'POST', path: '/jobs/{id}/pause', description: 'Request an exact runtime pause', curl: 'curl -X POST http://localhost:7860/jobs/{id}/pause' },
+      { method: 'POST', path: '/jobs/{id}/resume', description: 'Resume a paused retained job', curl: 'curl -X POST http://localhost:7860/jobs/{id}/resume' },
+      { method: 'POST', path: '/jobs/{id}/cancel', description: 'Cancel a live or paused job', curl: 'curl -X POST http://localhost:7860/jobs/{id}/cancel' },
+      { method: 'DELETE', path: '/jobs/{id}', description: 'Delete a terminal retained job', curl: 'curl -X DELETE http://localhost:7860/jobs/{id}' },
+      { method: 'GET', path: '/jobs/{id}/events', description: 'Stream job lifecycle updates (SSE)', curl: 'curl -N http://localhost:7860/jobs/{id}/events' },
     ],
   });
   apiPanel.appendChild(guide);
@@ -84,20 +94,35 @@
   // Load demo data on startup
   fetch('/demo-data/STANDARD')
     .then(function (r) { return r.json(); })
-    .then(function (data) { renderSequences(data); renderTables(data); })
+    .then(function (data) { renderAll(data); })
     .catch(function () {});
 
   function loadAndSolve() {
-    fetch('/demo-data/STANDARD')
-      .then(function (r) { return r.json(); })
-      .then(function (data) { solver.start(data); })
+    cleanupTerminalJob()
+      .then(function () {
+        if (currentPlan) return currentPlan;
+        return fetch('/demo-data/STANDARD').then(function (r) { return r.json(); });
+      })
+      .then(function (data) {
+        return solver.start(clonePlan(data));
+      })
       .catch(function (err) { console.error('Demo load failed:', err); });
+  }
+
+  function cleanupTerminalJob() {
+    var state = solver.getLifecycleState();
+    if (!solver.getJobId() || state === 'IDLE' || state === 'PAUSED' || solver.isRunning()) {
+      return Promise.resolve();
+    }
+    return solver.delete().catch(function (err) {
+      console.error('Delete failed:', err);
+    });
   }
 
   function openAnalysis() {
     var id = solver.getJobId();
     if (!id) return;
-    backend.analyze(id)
+    solver.analyzeSnapshot()
       .then(function (analysis) {
         analysisModal.setBody(buildAnalysisHtml(analysis));
         analysisModal.open();
@@ -110,10 +135,22 @@
     var html = '<p><strong>Score:</strong> ' + SF.escHtml(analysis.score) + '</p>';
     html += '<table class="sf-table"><thead><tr><th>Constraint</th><th>Type</th><th>Score</th><th>Matches</th></tr></thead><tbody>';
     analysis.constraints.forEach(function (c) {
-      html += '<tr><td>' + SF.escHtml(c.name) + '</td><td>' + SF.escHtml(c.constraintType || c.type || '') + '</td><td>' + SF.escHtml(c.score) + '</td><td>' + (c.matches ? c.matches.length : 0) + '</td></tr>';
+      var matchCount = c.matchCount != null ? c.matchCount : (c.matches ? c.matches.length : 0);
+      html += '<tr><td>' + SF.escHtml(c.name) + '</td><td>' + SF.escHtml(c.constraintType || c.type || '') + '</td><td>' + SF.escHtml(c.score) + '</td><td>' + matchCount + '</td></tr>';
     });
     html += '</tbody></table>';
     return html;
+  }
+
+  function renderAll(data) {
+    if (!data) return;
+    currentPlan = clonePlan(data);
+    renderSequences(data);
+    renderTables(data);
+  }
+
+  function clonePlan(data) {
+    return JSON.parse(JSON.stringify(data));
   }
 
   function renderSequences(data) {

@@ -4,70 +4,55 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 
-use solverforge::{HardSoftScore, SolverEvent, SolverManager, SolverStatus};
+use solverforge::{
+    HardSoftScore, SolverEvent, SolverEventMetadata, SolverLifecycleState, SolverManager,
+    SolverManagerError, SolverSnapshot, SolverSnapshotAnalysis, SolverStatus, SolverTelemetry,
+    SolverTerminalReason,
+};
 
 use crate::api::PlanDto;
 use crate::domain::Plan;
 
-// Static manager — must be 'static for SolverManager::solve.
+// Static manager — must be 'static for retained job execution.
 static MANAGER: SolverManager<Plan> = SolverManager::new();
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SsePayload {
+struct TelemetryPayload {
+    elapsed_ms: u64,
+    step_count: u64,
+    moves_evaluated: u64,
+    moves_accepted: u64,
+    score_calculations: u64,
+    moves_per_second: u64,
+    acceptance_rate: f64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JobEventPayload {
     id: String,
+    job_id: String,
     event_type: &'static str,
-    solver_status: SolverStatus,
+    event_sequence: u64,
+    lifecycle_state: &'static str,
+    terminal_reason: Option<&'static str>,
+    telemetry: TelemetryPayload,
     current_score: Option<String>,
     best_score: Option<String>,
-    moves_per_second: u64,
+    snapshot_revision: Option<u64>,
     solution: Option<PlanDto>,
-}
-
-fn sse_payload(
-    id: &str,
-    event_type: &'static str,
-    current_score: Option<HardSoftScore>,
-    best_score: Option<HardSoftScore>,
-    status: SolverStatus,
-    mps: u64,
-    solution: Option<&Plan>,
-) -> String {
-    serde_json::to_string(&SsePayload {
-        id: id.to_string(),
-        event_type,
-        solver_status: status,
-        current_score: current_score.map(|s| s.to_string()),
-        best_score: best_score.map(|s| s.to_string()),
-        moves_per_second: mps,
-        solution: solution.map(|plan| PlanDto::from_plan(plan, Some(status))),
-    })
-    .expect("failed to serialize solver SSE payload")
-}
-
-fn snapshot_event(state: &JobState) -> (&'static str, Option<&Plan>) {
-    if state.status == SolverStatus::NotSolving && state.latest_best.is_some() {
-        ("finished", state.latest_best.as_ref())
-    } else if state.best_score.is_some() && state.latest_best.is_some() {
-        ("best_solution", state.latest_best.as_ref())
-    } else {
-        ("progress", None)
-    }
+    error: Option<String>,
 }
 
 struct JobState {
-    slot_id: usize,
-    latest_best: Option<Plan>,
-    current_score: Option<HardSoftScore>,
-    best_score: Option<HardSoftScore>,
-    moves_per_second: u64,
-    status: SolverStatus,
     sse_tx: broadcast::Sender<String>,
+    last_event: String,
 }
 
-/// Manages solving jobs using the framework SolverManager.
+/// Manages retained solving jobs and broadcasts lifecycle-complete SSE payloads.
 pub struct SolverService {
-    jobs: Arc<RwLock<HashMap<String, JobState>>>,
+    jobs: Arc<RwLock<HashMap<usize, JobState>>>,
 }
 
 impl SolverService {
@@ -77,209 +62,213 @@ impl SolverService {
         }
     }
 
-    pub fn start_solving(&self, id: String, plan: Plan) {
-        let (slot_id, receiver) = MANAGER.solve(plan.clone());
+    pub fn start_job(&self, plan: Plan) -> Result<String, SolverManagerError> {
+        let (job_id, receiver) = MANAGER.solve(plan)?;
+        let status = MANAGER.get_status(job_id)?;
+        let initial_event = status_event_payload(job_id, "progress", &status);
         let (sse_tx, _) = broadcast::channel(64);
-        let state = JobState {
-            slot_id,
-            latest_best: Some(plan),
-            current_score: None,
-            best_score: None,
-            moves_per_second: 0,
-            status: SolverStatus::Solving,
-            sse_tx: sse_tx.clone(),
-        };
-        self.jobs.write().insert(id.clone(), state);
+
+        self.jobs.write().insert(
+            job_id,
+            JobState {
+                sse_tx: sse_tx.clone(),
+                last_event: initial_event,
+            },
+        );
 
         let jobs = Arc::clone(&self.jobs);
         tokio::spawn(async move {
-            drain_receiver(jobs, id, slot_id, sse_tx, receiver).await;
+            drain_receiver(jobs, job_id, sse_tx, receiver).await;
         });
-    }
 
-    pub fn with_snapshot<R>(
-        &self,
-        id: &str,
-        f: impl FnOnce(&Plan, Option<HardSoftScore>, Option<HardSoftScore>, SolverStatus) -> R,
-    ) -> Option<R> {
-        let jobs = self.jobs.read();
-        let state = jobs.get(id)?;
-        Some(f(
-            state.latest_best.as_ref()?,
-            state.current_score,
-            state.best_score,
-            state.status,
-        ))
+        Ok(job_id.to_string())
     }
 
     pub fn subscribe(&self, id: &str) -> Option<broadcast::Receiver<String>> {
-        self.jobs.read().get(id).map(|s| s.sse_tx.subscribe())
+        let job_id = parse_job_id(id).ok()?;
+        self.jobs
+            .read()
+            .get(&job_id)
+            .map(|state| state.sse_tx.subscribe())
     }
 
     pub fn sse_snapshot(&self, id: &str) -> Option<String> {
-        let jobs = self.jobs.read();
-        let state = jobs.get(id)?;
-        let (event_type, solution) = snapshot_event(state);
-        Some(sse_payload(
-            id,
-            event_type,
-            state.current_score,
-            state.best_score,
-            state.status,
-            state.moves_per_second,
-            solution,
-        ))
+        let job_id = parse_job_id(id).ok()?;
+        self.jobs
+            .read()
+            .get(&job_id)
+            .map(|state| state.last_event.clone())
     }
 
-    pub fn has_job(&self, id: &str) -> bool {
-        self.jobs.read().contains_key(id)
+    pub fn get_status(&self, id: &str) -> Result<SolverStatus<HardSoftScore>, SolverManagerError> {
+        let job_id = parse_job_id(id)?;
+        MANAGER.get_status(job_id)
     }
 
-    pub fn list_jobs(&self) -> Vec<String> {
-        self.jobs.read().keys().cloned().collect()
+    pub fn pause(&self, id: &str) -> Result<(), SolverManagerError> {
+        MANAGER.pause(parse_job_id(id)?)
     }
 
-    pub fn stop_solving(&self, id: &str) -> bool {
-        let jobs = self.jobs.read();
-        if let Some(state) = jobs.get(id) {
-            return MANAGER.terminate_early(state.slot_id);
-        }
-        false
+    pub fn resume(&self, id: &str) -> Result<(), SolverManagerError> {
+        MANAGER.resume(parse_job_id(id)?)
     }
 
-    pub fn remove_job(&self, id: &str) -> bool {
-        if let Some(state) = self.jobs.write().remove(id) {
-            MANAGER.free_slot(state.slot_id);
-            return true;
-        }
-        false
+    pub fn cancel(&self, id: &str) -> Result<(), SolverManagerError> {
+        MANAGER.cancel(parse_job_id(id)?)
+    }
+
+    pub fn delete(&self, id: &str) -> Result<(), SolverManagerError> {
+        let job_id = parse_job_id(id)?;
+        MANAGER.delete(job_id)?;
+        self.jobs.write().remove(&job_id);
+        Ok(())
+    }
+
+    pub fn get_snapshot(
+        &self,
+        id: &str,
+        snapshot_revision: Option<u64>,
+    ) -> Result<SolverSnapshot<Plan>, SolverManagerError> {
+        MANAGER.get_snapshot(parse_job_id(id)?, snapshot_revision)
+    }
+
+    pub fn analyze_snapshot(
+        &self,
+        id: &str,
+        snapshot_revision: Option<u64>,
+    ) -> Result<SolverSnapshotAnalysis<HardSoftScore>, SolverManagerError> {
+        MANAGER.analyze_snapshot(parse_job_id(id)?, snapshot_revision)
     }
 }
 
 async fn drain_receiver(
-    jobs: Arc<RwLock<HashMap<String, JobState>>>,
-    id: String,
-    slot_id: usize,
+    jobs: Arc<RwLock<HashMap<usize, JobState>>>,
+    job_id: usize,
     sse_tx: broadcast::Sender<String>,
     mut receiver: mpsc::UnboundedReceiver<SolverEvent<Plan>>,
 ) {
     while let Some(event) = receiver.recv().await {
-        match event {
-            SolverEvent::Progress {
-                current_score,
-                best_score,
-                telemetry,
-            } => {
-                let payload = {
-                    let mut jobs = jobs.write();
-                    if let Some(state) = jobs.get_mut(&id) {
-                        state.current_score = current_score;
-                        state.best_score = best_score.or(state.best_score);
-                        state.moves_per_second = telemetry.moves_per_second;
-                        Some(sse_payload(
-                            &id,
-                            "progress",
-                            state.current_score,
-                            state.best_score,
-                            SolverStatus::Solving,
-                            state.moves_per_second,
-                            None,
-                        ))
-                    } else {
-                        None
-                    }
-                };
-                if let Some(payload) = payload {
-                    let _ = sse_tx.send(payload);
-                }
+        let payload = match &event {
+            SolverEvent::Progress { metadata } => {
+                event_payload(job_id, "progress", metadata, None, None)
             }
-            SolverEvent::BestSolution {
-                solution,
-                score,
-                telemetry,
-            } => {
-                let payload = {
-                    let mut jobs = jobs.write();
-                    if let Some(state) = jobs.get_mut(&id) {
-                        state.latest_best = Some(solution);
-                        state.current_score = Some(score);
-                        state.best_score = Some(score);
-                        state.moves_per_second = telemetry.moves_per_second;
-                        Some(sse_payload(
-                            &id,
-                            "best_solution",
-                            state.current_score,
-                            state.best_score,
-                            SolverStatus::Solving,
-                            state.moves_per_second,
-                            state.latest_best.as_ref(),
-                        ))
-                    } else {
-                        None
-                    }
-                };
-                if let Some(payload) = payload {
-                    let _ = sse_tx.send(payload);
-                }
+            SolverEvent::BestSolution { metadata, solution } => {
+                event_payload(job_id, "best_solution", metadata, Some(solution), None)
             }
-            SolverEvent::Finished {
-                solution,
-                score,
-                telemetry,
-            } => {
-                let payload = {
-                    let mut jobs = jobs.write();
-                    if let Some(state) = jobs.get_mut(&id) {
-                        state.latest_best = Some(solution);
-                        state.current_score = Some(score);
-                        state.best_score = Some(score);
-                        state.moves_per_second = telemetry.moves_per_second;
-                        state.status = SolverStatus::NotSolving;
-                        Some(sse_payload(
-                            &id,
-                            "finished",
-                            state.current_score,
-                            state.best_score,
-                            SolverStatus::NotSolving,
-                            state.moves_per_second,
-                            state.latest_best.as_ref(),
-                        ))
-                    } else {
-                        None
-                    }
-                };
-                if let Some(payload) = payload {
-                    let _ = sse_tx.send(payload);
-                }
-                return;
+            SolverEvent::PauseRequested { metadata } => {
+                event_payload(job_id, "pause_requested", metadata, None, None)
             }
-        }
-    }
+            SolverEvent::Paused { metadata } => {
+                event_payload(job_id, "paused", metadata, None, None)
+            }
+            SolverEvent::Resumed { metadata } => {
+                event_payload(job_id, "resumed", metadata, None, None)
+            }
+            SolverEvent::Completed { metadata, solution } => {
+                event_payload(job_id, "completed", metadata, Some(solution), None)
+            }
+            SolverEvent::Cancelled { metadata } => {
+                event_payload(job_id, "cancelled", metadata, None, None)
+            }
+            SolverEvent::Failed { metadata, error } => {
+                event_payload(job_id, "failed", metadata, None, Some(error.as_str()))
+            }
+        };
 
-    let final_payload = {
         let mut jobs = jobs.write();
-        if let Some(state) = jobs.get_mut(&id) {
-            state.status = SolverStatus::NotSolving;
-            Some(sse_payload(
-                &id,
-                "finished",
-                state.current_score,
-                state.best_score,
-                SolverStatus::NotSolving,
-                state.moves_per_second,
-                state.latest_best.as_ref(),
-            ))
+        if let Some(state) = jobs.get_mut(&job_id) {
+            state.last_event = payload.clone();
         } else {
-            None
+            return;
         }
-    };
-    if let Some(payload) = final_payload {
+        drop(jobs);
+
         let _ = sse_tx.send(payload);
     }
+}
 
-    let mut jobs = jobs.write();
-    if let Some(state) = jobs.get_mut(&id) {
-        state.status = MANAGER.get_status(slot_id);
+fn parse_job_id(id: &str) -> Result<usize, SolverManagerError> {
+    id.parse::<usize>()
+        .map_err(|_| SolverManagerError::JobNotFound { job_id: usize::MAX })
+}
+
+fn status_event_payload(
+    job_id: usize,
+    event_type: &'static str,
+    status: &SolverStatus<HardSoftScore>,
+) -> String {
+    serialize_payload(JobEventPayload {
+        id: job_id.to_string(),
+        job_id: job_id.to_string(),
+        event_type,
+        event_sequence: status.event_sequence,
+        lifecycle_state: lifecycle_state_label(status.lifecycle_state),
+        terminal_reason: status.terminal_reason.map(terminal_reason_label),
+        telemetry: telemetry_payload(status.telemetry),
+        current_score: status.current_score.map(|score| score.to_string()),
+        best_score: status.best_score.map(|score| score.to_string()),
+        snapshot_revision: status.latest_snapshot_revision,
+        solution: None,
+        error: None,
+    })
+}
+
+fn event_payload(
+    job_id: usize,
+    event_type: &'static str,
+    metadata: &SolverEventMetadata<HardSoftScore>,
+    solution: Option<&Plan>,
+    error: Option<&str>,
+) -> String {
+    serialize_payload(JobEventPayload {
+        id: job_id.to_string(),
+        job_id: job_id.to_string(),
+        event_type,
+        event_sequence: metadata.event_sequence,
+        lifecycle_state: lifecycle_state_label(metadata.lifecycle_state),
+        terminal_reason: metadata.terminal_reason.map(terminal_reason_label),
+        telemetry: telemetry_payload(metadata.telemetry),
+        current_score: metadata.current_score.map(|score| score.to_string()),
+        best_score: metadata.best_score.map(|score| score.to_string()),
+        snapshot_revision: metadata.snapshot_revision,
+        solution: solution.map(PlanDto::from_plan),
+        error: error.map(ToOwned::to_owned),
+    })
+}
+
+fn serialize_payload(payload: JobEventPayload) -> String {
+    serde_json::to_string(&payload).expect("failed to serialize solver lifecycle payload")
+}
+
+fn telemetry_payload(telemetry: SolverTelemetry) -> TelemetryPayload {
+    TelemetryPayload {
+        elapsed_ms: telemetry.elapsed_ms,
+        step_count: telemetry.step_count,
+        moves_evaluated: telemetry.moves_evaluated,
+        moves_accepted: telemetry.moves_accepted,
+        score_calculations: telemetry.score_calculations,
+        moves_per_second: telemetry.moves_per_second,
+        acceptance_rate: telemetry.acceptance_rate,
+    }
+}
+
+fn lifecycle_state_label(state: SolverLifecycleState) -> &'static str {
+    match state {
+        SolverLifecycleState::Solving => "SOLVING",
+        SolverLifecycleState::PauseRequested => "PAUSE_REQUESTED",
+        SolverLifecycleState::Paused => "PAUSED",
+        SolverLifecycleState::Completed => "COMPLETED",
+        SolverLifecycleState::Cancelled => "CANCELLED",
+        SolverLifecycleState::Failed => "FAILED",
+    }
+}
+
+fn terminal_reason_label(reason: SolverTerminalReason) -> &'static str {
+    match reason {
+        SolverTerminalReason::Completed => "completed",
+        SolverTerminalReason::TerminatedByConfig => "terminated_by_config",
+        SolverTerminalReason::Cancelled => "cancelled",
+        SolverTerminalReason::Failed => "failed",
     }
 }
 
