@@ -172,7 +172,7 @@ fn scaffold(
 }
 
 fn solverforge_dep_spec() -> String {
-    "{ version = \"0.7.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }".to_string()
+    "{ version = \"0.8.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }".to_string()
 }
 
 fn solverforge_ui_dep_spec() -> String {
@@ -291,7 +291,7 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
         UI_SOURCE_PATH
     ));
     readme.push_str(&format!(
-        "This project was scaffolded by `solverforge-cli`, and it currently targets `{}` through released crate dependencies.\n\n",
+        "This project was scaffolded by `solverforge-cli`, and it currently targets `{}` through the configured crate dependency targets.\n\n",
         RUNTIME_TARGET_DISPLAY
     ));
     readme.push_str("## Quick Start\n\n");

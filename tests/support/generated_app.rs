@@ -298,20 +298,11 @@ fn pin_generated_project_to_local_solverforge(project_dir: &Path) {
         .parent()
         .expect("CLI repo should have a workspace parent")
         .to_path_buf();
-    let runtime_path = find_existing_path(&[
-        workspace_root
-            .join("solverforge-rs-track-b")
-            .join("crates")
-            .join("solverforge"),
-        workspace_root
-            .join("solverforge-rs")
-            .join("crates")
-            .join("solverforge"),
-    ]);
-    let ui_path = find_existing_path(&[
-        workspace_root.join("solverforge-ui-track-b"),
-        workspace_root.join("solverforge-ui"),
-    ]);
+    let runtime_path = find_existing_path(&[workspace_root
+        .join("solverforge-rs")
+        .join("crates")
+        .join("solverforge")]);
+    let ui_path = find_existing_path(&[workspace_root.join("solverforge-ui")]);
 
     let cargo_toml_path = project_dir.join("Cargo.toml");
     let cargo_toml = fs::read_to_string(&cargo_toml_path).expect("read generated Cargo.toml");

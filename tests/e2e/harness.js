@@ -128,13 +128,9 @@ function tomlPath(value) {
 
 function pinGeneratedProjectToLocalSolverforge(projectDir) {
   const runtimePath = findExistingPath([
-    path.join(workspaceRoot(), 'solverforge-rs-track-b', 'crates', 'solverforge'),
     path.join(workspaceRoot(), 'solverforge-rs', 'crates', 'solverforge'),
   ]);
-  const uiPath = findExistingPath([
-    path.join(workspaceRoot(), 'solverforge-ui-track-b'),
-    path.join(workspaceRoot(), 'solverforge-ui'),
-  ]);
+  const uiPath = findExistingPath([path.join(workspaceRoot(), 'solverforge-ui')]);
 
   const cargoTomlPath = path.join(projectDir, 'Cargo.toml');
   const cargoToml = fs.readFileSync(cargoTomlPath, 'utf8');

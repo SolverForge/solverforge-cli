@@ -106,8 +106,8 @@ test-e2e: banner
 
 test-full: banner
 	@printf -- "$(CYAN)$(BOLD)==== Full Validation =================================$(RESET)\n\n"
-	@printf -- "$(PROGRESS) Phase 1/4: cargo test...\n"
-	@cargo test
+	@printf -- "$(PROGRESS) Phase 1/4: Rust unit and binary tests...\n"
+	@cargo test --bin $(BIN)
 	@printf -- "$(PROGRESS) Phase 2/4: scaffold contract tests...\n"
 	@cargo test --test scaffold_test -- --nocapture --test-threads=1
 	@printf -- "$(PROGRESS) Phase 3/4: runtime pipeline tests...\n"

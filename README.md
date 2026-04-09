@@ -3,8 +3,8 @@
 Default entry point for new SolverForge projects.
 
 Use this CLI to scaffold, grow, and manage SolverForge applications. Generated
-projects currently target released `solverforge 0.7.1` and `solverforge-ui 0.4.2`
-crate dependencies, and that target policy is part of the product surface rather
+projects currently target `solverforge 0.8.1` and `solverforge-ui 0.4.2` as
+their crate dependency versions, and that target policy is part of the product surface rather
 than an invisible implementation detail.
 
 This package has its own version. That version is not the same thing as the
@@ -69,6 +69,9 @@ pipeline stays readable:
 The runtime and browser suites both scaffold fresh temp apps, mutate them
 through the real CLI, boot the generated servers on random ports, and clean up
 automatically. Failure artifacts are written under `target/test-artifacts/`.
+During end-to-end validation, the generated temp apps are pinned to the local
+`solverforge-rs` and `solverforge-ui` sibling checkouts so the CLI can validate
+the current cross-repo contract before every runtime release lands on crates.io.
 
 Current scenario coverage:
 
