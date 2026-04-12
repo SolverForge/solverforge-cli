@@ -114,23 +114,34 @@ function workspaceRoot() {
   return path.dirname(repoRoot);
 }
 
-function findExistingPath(candidates) {
-  const resolved = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!resolved) {
-    throw new Error(`Expected one of these paths to exist: ${candidates.join(', ')}`);
-  }
-  return resolved;
-}
-
 function tomlPath(value) {
   return value.replace(/\\/g, '/');
 }
 
+function usePublishedDeps() {
+  const value = process.env.SF_USE_PUBLISHED_DEPS;
+  return value && ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+function resolveLocalSolverforgePaths() {
+  if (usePublishedDeps()) {
+    return null;
+  }
+
+  const runtimePath = path.join(workspaceRoot(), 'solverforge-rs', 'crates', 'solverforge');
+  const uiPath = path.join(workspaceRoot(), 'solverforge-ui');
+  if (!fs.existsSync(runtimePath) || !fs.existsSync(uiPath)) {
+    return null;
+  }
+
+  return { runtimePath, uiPath };
+}
+
 function pinGeneratedProjectToLocalSolverforge(projectDir) {
-  const runtimePath = findExistingPath([
-    path.join(workspaceRoot(), 'solverforge-rs', 'crates', 'solverforge'),
-  ]);
-  const uiPath = findExistingPath([path.join(workspaceRoot(), 'solverforge-ui')]);
+  const localPaths = resolveLocalSolverforgePaths();
+  if (!localPaths) {
+    return false;
+  }
 
   const cargoTomlPath = path.join(projectDir, 'Cargo.toml');
   const cargoToml = fs.readFileSync(cargoTomlPath, 'utf8');
@@ -139,15 +150,16 @@ function pinGeneratedProjectToLocalSolverforge(projectDir) {
     .map((line) => {
       const trimmed = line.trimStart();
       if (trimmed.startsWith('solverforge = ')) {
-        return `solverforge = { path = "${tomlPath(runtimePath)}", features = ["serde", "console", "verbose-logging"] }`;
+        return `solverforge = { path = "${tomlPath(localPaths.runtimePath)}", features = ["serde", "console", "verbose-logging"] }`;
       }
       if (trimmed.startsWith('solverforge-ui = ')) {
-        return `solverforge-ui = { path = "${tomlPath(uiPath)}" }`;
+        return `solverforge-ui = { path = "${tomlPath(localPaths.uiPath)}" }`;
       }
       return line;
     })
     .join('\n');
   fs.writeFileSync(cargoTomlPath, `${rewritten}\n`);
+  return true;
 }
 
 function runCommand({ suite, title, cwd, args, logPath, env = {} }) {
@@ -209,7 +221,10 @@ async function scaffoldScenario(name, generatorCommands) {
     args: ['new', projectName, '--skip-git', '--skip-readme', '--quiet'],
     logPath: path.join(scenarioArtifactDir, '01-scaffold.log'),
   });
-  pinGeneratedProjectToLocalSolverforge(projectDir);
+  const pinnedToLocal = pinGeneratedProjectToLocalSolverforge(projectDir);
+  if (!pinnedToLocal) {
+    phase(suite, 'Using published SolverForge crate targets');
+  }
 
   generatorCommands.forEach((args, index) => {
     runCommand({

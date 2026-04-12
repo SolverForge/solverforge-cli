@@ -62,7 +62,7 @@ For scaffold changes, prefer assertions that check the generated contract direct
 - typed solver SSE payload shape and typed frontend hooks
 - `solverforge generate data` ownership boundaries:
   `src/data/mod.rs` is a stable wrapper and `src/generated/data_seed.rs` is compiler-owned
-- scaffolded `cargo check` against the current local runtime/UI worktrees
+- scaffolded `cargo check` against the current local runtime/UI worktrees when those sibling repos are present, otherwise against the published crate targets
 
 ## Commit & Pull Request Guidelines
 Follow the commit style already used in history: `fix: ...`, `refactor: ...`, `style: ...`, `chore: ...`. Keep commits scoped to one behavior change. PRs should explain user-visible CLI impact, list verification commands run, and link the relevant issue. Include concrete examples when flags, generated files, or template output change.

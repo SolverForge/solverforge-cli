@@ -3,8 +3,12 @@
 // Some tests invoke `cargo check` inside a temp directory and therefore require a full Rust
 // toolchain plus dependency resolution access.
 
-use std::path::{Path, PathBuf};
 use std::process::Command;
+
+#[path = "support/local_dependencies.rs"]
+mod local_dependencies;
+
+use local_dependencies::{pin_generated_project_to_local_solverforge, USE_PUBLISHED_DEPS_ENV};
 
 const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.8.3";
 const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.4.2";
@@ -22,56 +26,6 @@ fn cli_command() -> Command {
         "--",
     ]);
     command
-}
-
-fn pin_generated_project_to_local_solverforge(project_dir: &Path) {
-    let runtime_path = find_existing_path(&[workspace_root()
-        .join("solverforge-rs")
-        .join("crates")
-        .join("solverforge")]);
-    let ui_path = find_existing_path(&[workspace_root().join("solverforge-ui")]);
-
-    let cargo_toml_path = project_dir.join("Cargo.toml");
-    let cargo_toml = std::fs::read_to_string(&cargo_toml_path).expect("read scaffold Cargo.toml");
-    let mut rewritten = Vec::new();
-    let runtime_line = format!(
-        "solverforge = {{ path = \"{}\", features = [\"serde\", \"console\", \"verbose-logging\"] }}",
-        toml_path(&runtime_path)
-    );
-    let ui_line = format!("solverforge-ui = {{ path = \"{}\" }}", toml_path(&ui_path));
-
-    for line in cargo_toml.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("solverforge = ") {
-            rewritten.push(runtime_line.clone());
-        } else if trimmed.starts_with("solverforge-ui = ") {
-            rewritten.push(ui_line.clone());
-        } else {
-            rewritten.push(line.to_string());
-        }
-    }
-
-    std::fs::write(cargo_toml_path, rewritten.join("\n") + "\n")
-        .expect("write pinned scaffold Cargo.toml");
-}
-
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("CLI repo should have a workspace parent")
-        .to_path_buf()
-}
-
-fn find_existing_path(candidates: &[PathBuf]) -> PathBuf {
-    candidates
-        .iter()
-        .find(|path| path.exists())
-        .cloned()
-        .unwrap_or_else(|| panic!("expected one of these paths to exist: {candidates:?}"))
-}
-
-fn toml_path(path: &Path) -> String {
-    path.display().to_string().replace('\\', "/")
 }
 
 fn legacy_data_loader_stub() -> &'static str {
@@ -326,7 +280,13 @@ fn test_new_neutral_cargo_check_passes() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    pin_generated_project_to_local_solverforge(&project_dir);
+    let pinned_to_local = pin_generated_project_to_local_solverforge(&project_dir);
+    if !pinned_to_local {
+        eprintln!(
+            "using published SolverForge crate targets for scaffold validation; set {}=0 and keep sibling repos present to validate against local checkouts",
+            USE_PUBLISHED_DEPS_ENV
+        );
+    }
     let check_status = Command::new("cargo")
         .arg("check")
         .current_dir(&project_dir)

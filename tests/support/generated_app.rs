@@ -1,3 +1,6 @@
+use super::local_dependencies::{
+    pin_generated_project_to_local_solverforge, USE_PUBLISHED_DEPS_ENV,
+};
 use reqwest::blocking::Client;
 use serde_json::Value;
 use std::fs;
@@ -67,7 +70,13 @@ impl GeneratedApp {
             "scaffold failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        pin_generated_project_to_local_solverforge(&self.project_dir);
+        let pinned_to_local = pin_generated_project_to_local_solverforge(&self.project_dir);
+        if !pinned_to_local {
+            println!(
+                "=== INFO: {} :: Using published SolverForge crate targets for generated-app validation (override with {}=0 and sibling repos present to pin local paths) ===",
+                self.test_name, USE_PUBLISHED_DEPS_ENV
+            );
+        }
     }
 
     pub fn run_cli(&self, label: &str, args: &[&str]) {
@@ -291,55 +300,6 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
-}
-
-fn pin_generated_project_to_local_solverforge(project_dir: &Path) {
-    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("CLI repo should have a workspace parent")
-        .to_path_buf();
-    let runtime_path = find_existing_path(&[workspace_root
-        .join("solverforge-rs")
-        .join("crates")
-        .join("solverforge")]);
-    let ui_path = find_existing_path(&[workspace_root.join("solverforge-ui")]);
-
-    let cargo_toml_path = project_dir.join("Cargo.toml");
-    let cargo_toml = fs::read_to_string(&cargo_toml_path).expect("read generated Cargo.toml");
-    let runtime_line = format!(
-        "solverforge = {{ path = \"{}\", features = [\"serde\", \"console\", \"verbose-logging\"] }}",
-        toml_path(&runtime_path)
-    );
-    let ui_line = format!("solverforge-ui = {{ path = \"{}\" }}", toml_path(&ui_path));
-
-    let rewritten = cargo_toml
-        .lines()
-        .map(|line| {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("solverforge = ") {
-                runtime_line.clone()
-            } else if trimmed.starts_with("solverforge-ui = ") {
-                ui_line.clone()
-            } else {
-                line.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    fs::write(cargo_toml_path, rewritten + "\n").expect("write pinned generated Cargo.toml");
-}
-
-fn find_existing_path(candidates: &[PathBuf]) -> PathBuf {
-    candidates
-        .iter()
-        .find(|path| path.exists())
-        .cloned()
-        .unwrap_or_else(|| panic!("expected one of these paths to exist: {candidates:?}"))
-}
-
-fn toml_path(path: &Path) -> String {
-    path.display().to_string().replace('\\', "/")
 }
 
 pub fn seeded_mixed_data_module() -> &'static str {
