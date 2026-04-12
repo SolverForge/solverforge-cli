@@ -22,6 +22,7 @@ pub struct GeneratedApp {
     artifact_dir: PathBuf,
     stdout_log: PathBuf,
     stderr_log: PathBuf,
+    built_binary_path: Option<PathBuf>,
     server: Option<Child>,
     success: bool,
 }
@@ -42,6 +43,7 @@ impl GeneratedApp {
             artifact_dir,
             stdout_log,
             stderr_log,
+            built_binary_path: None,
             server: None,
             success: false,
         }
@@ -95,6 +97,7 @@ impl GeneratedApp {
         );
     }
 
+    #[allow(dead_code)]
     pub fn cargo_check(&self, label: &str) {
         self.phase(label);
         let output = Command::new("cargo")
@@ -110,6 +113,28 @@ impl GeneratedApp {
         );
     }
 
+    pub fn cargo_build(&mut self, label: &str) {
+        self.phase(label);
+        let output = Command::new("cargo")
+            .args(["build", "--message-format=json-render-diagnostics"])
+            .current_dir(&self.project_dir)
+            .output()
+            .expect("failed to run cargo build");
+        self.record_command("cargo-build", &output.stdout, &output.stderr);
+        assert!(
+            output.status.success(),
+            "cargo build failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        self.built_binary_path =
+            Some(resolve_built_executable(&output.stdout).unwrap_or_else(|| {
+                panic!(
+                    "cargo build succeeded but no executable artifact was reported. log: {}",
+                    self.artifact_dir.join("cargo-build.log").display()
+                )
+            }));
+    }
+
     pub fn write_file(&self, relative_path: &str, contents: &str) {
         let path = self.project_dir.join(relative_path);
         if let Some(parent) = path.parent() {
@@ -123,8 +148,7 @@ impl GeneratedApp {
         let port = find_free_port();
         let stdout = fs::File::create(&self.stdout_log).expect("failed to create stdout log");
         let stderr = fs::File::create(&self.stderr_log).expect("failed to create stderr log");
-        let child = Command::new("cargo")
-            .args(["run", "--quiet"])
+        let child = Command::new(self.project_binary_path())
             .env("PORT", port.to_string())
             .current_dir(&self.project_dir)
             .stdout(Stdio::from(stdout))
@@ -206,11 +230,24 @@ impl GeneratedApp {
         let _ = fs::remove_dir_all(&self.artifact_dir);
     }
 
-    fn wait_for_ready(&self, port: u16) {
+    fn wait_for_ready(&mut self, port: u16) {
         let client = self.client();
         let start = Instant::now();
         let url = format!("{}/health", self.base_url(port));
         while start.elapsed() < Duration::from_secs(40) {
+            if let Some(child) = self.server.as_mut() {
+                if let Some(status) = child
+                    .try_wait()
+                    .expect("failed to inspect generated server status")
+                {
+                    panic!(
+                        "server exited before becoming ready with status {}. stdout: {} stderr: {}",
+                        status,
+                        self.stdout_log.display(),
+                        self.stderr_log.display()
+                    );
+                }
+            }
             if let Ok(response) = client.get(&url).send() {
                 if response.status().is_success() {
                     return;
@@ -226,6 +263,14 @@ impl GeneratedApp {
         );
     }
 
+    fn project_binary_path(&self) -> PathBuf {
+        self.built_binary_path.clone().unwrap_or_else(|| {
+            panic!(
+                "generated server binary path is unavailable; call cargo_build before start_server"
+            )
+        })
+    }
+
     fn record_command(&self, label: &str, stdout: &[u8], stderr: &[u8]) {
         let path = self.artifact_dir.join(format!("{label}.log"));
         let content = format!(
@@ -235,6 +280,21 @@ impl GeneratedApp {
         );
         fs::write(path, content).expect("failed to write command log");
     }
+}
+
+fn resolve_built_executable(stdout: &[u8]) -> Option<PathBuf> {
+    String::from_utf8_lossy(stdout)
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|message| message["reason"] == "compiler-artifact")
+        .filter(|message| {
+            message["target"]["kind"]
+                .as_array()
+                .map(|kinds| kinds.iter().any(|kind| kind.as_str() == Some("bin")))
+                .unwrap_or(false)
+        })
+        .filter_map(|message| message["executable"].as_str().map(PathBuf::from))
+        .next_back()
 }
 
 impl Drop for GeneratedApp {

@@ -21,7 +21,7 @@ fn neutral_shell_pipeline() {
     // PHASE 1: scaffold a fresh generated app.
     let mut app = GeneratedApp::new("neutral_shell_pipeline", "neutral_shell_pipeline");
     app.scaffold_neutral();
-    app.cargo_check("Compile generated neutral app");
+    app.cargo_build("Build generated neutral app");
 
     // PHASE 2: boot the generated server and verify shell endpoints.
     let port = app.start_server();
@@ -108,7 +108,7 @@ fn mixed_runtime_pipeline() {
     );
     app.phase("Seed non-empty mixed demo data");
     app.write_file("src/data/mod.rs", seeded_mixed_data_module());
-    app.cargo_check("Compile generated mixed app");
+    app.cargo_build("Build generated mixed app");
 
     // PHASE 2: boot the generated server and verify the mixed runtime surface.
     let port = app.start_server();
@@ -170,7 +170,7 @@ fn standard_solver_pipeline() {
     app.phase("Seed non-empty standard demo data");
     app.write_file("src/data/mod.rs", seeded_standard_data_module());
     app.write_file("solver.toml", short_runtime_solver_config());
-    app.cargo_check("Compile generated standard app");
+    app.cargo_build("Build generated standard app");
 
     // PHASE 2: boot the generated server and run real data through the solver.
     let port = app.start_server();

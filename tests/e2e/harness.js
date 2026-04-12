@@ -123,6 +123,31 @@ function usePublishedDeps() {
   return value && ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+function resolveBuiltExecutable(buildStdout) {
+  let executable = null;
+  for (const line of buildStdout.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      const message = JSON.parse(line);
+      if (message.reason !== 'compiler-artifact') {
+        continue;
+      }
+      if (!Array.isArray(message.target?.kind) || !message.target.kind.includes('bin')) {
+        continue;
+      }
+      if (typeof message.executable === 'string' && message.executable.length > 0) {
+        executable = message.executable;
+      }
+    } catch (_err) {}
+  }
+  if (!executable) {
+    throw new Error('cargo build succeeded but did not report a binary executable');
+  }
+  return executable;
+}
+
 function resolveLocalSolverforgePaths() {
   if (usePublishedDeps()) {
     return null;
@@ -199,10 +224,24 @@ function allocatePort() {
   });
 }
 
-async function waitForHealth(baseUrl, suite) {
+async function waitForHealth({ baseUrl, suite, child, stdoutPath, stderrPath }) {
   phase(suite, 'Wait for readiness');
+  let spawnError = null;
+  child.once('error', (error) => {
+    spawnError = error;
+  });
   const started = Date.now();
   while (Date.now() - started < 40000) {
+    if (spawnError) {
+      throw new Error(
+        `Server failed to launch: ${spawnError.message}. stdout: ${stdoutPath} stderr: ${stderrPath}`
+      );
+    }
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(
+        `Server exited before readiness (exitCode=${child.exitCode}, signal=${child.signalCode}). stdout: ${stdoutPath} stderr: ${stderrPath}`
+      );
+    }
     try {
       const response = await fetch(`${baseUrl}/health`);
       if (response.ok) {
@@ -253,17 +292,31 @@ async function scaffoldScenario(name, generatorCommands) {
     fs.writeFileSync(path.join(projectDir, 'src', 'data', 'mod.rs'), seededStandardDataModule);
   }
 
-  phase(suite, 'Compile generated app');
-  const cargoCheck = spawnSync('cargo', ['check'], {
+  phase(suite, 'Build generated app');
+  const cargoBuild = spawnSync('cargo', ['build', '--message-format=json-render-diagnostics'], {
     cwd: projectDir,
     encoding: 'utf8',
   });
+  let executablePath = null;
+  let executableResolveError = null;
+  if (cargoBuild.status === 0) {
+    try {
+      executablePath = resolveBuiltExecutable(cargoBuild.stdout || '');
+    } catch (error) {
+      executableResolveError = error;
+    }
+  }
   fs.writeFileSync(
-    path.join(scenarioArtifactDir, '03-cargo-check.log'),
-    `=== STDOUT ===\n${cargoCheck.stdout || ''}\n=== STDERR ===\n${cargoCheck.stderr || ''}\n`
+    path.join(scenarioArtifactDir, '03-cargo-build.log'),
+    `=== EXECUTABLE ===\n${executablePath || ''}\n=== STDOUT ===\n${cargoBuild.stdout || ''}\n=== STDERR ===\n${cargoBuild.stderr || ''}\n`
   );
-  if (cargoCheck.status !== 0) {
-    throw new Error(`cargo check failed for ${name}`);
+  if (cargoBuild.status !== 0) {
+    throw new Error(`cargo build failed for ${name}`);
+  }
+  if (executableResolveError) {
+    throw new Error(
+      `${executableResolveError.message}. See ${path.join(scenarioArtifactDir, '03-cargo-build.log')}`
+    );
   }
 
   phase(suite, 'Boot generated server');
@@ -272,13 +325,15 @@ async function scaffoldScenario(name, generatorCommands) {
   const stderrPath = path.join(scenarioArtifactDir, 'server.stderr.log');
   const stdout = fs.openSync(stdoutPath, 'w');
   const stderr = fs.openSync(stderrPath, 'w');
-  const child = spawn('cargo', ['run', '--quiet'], {
+  const child = spawn(executablePath, [], {
     cwd: projectDir,
     env: { ...process.env, PORT: String(port) },
     stdio: ['ignore', stdout, stderr],
   });
+  fs.closeSync(stdout);
+  fs.closeSync(stderr);
   const baseUrl = `http://127.0.0.1:${port}`;
-  await waitForHealth(baseUrl, suite);
+  await waitForHealth({ baseUrl, suite, child, stdoutPath, stderrPath });
 
   return {
     suite,
