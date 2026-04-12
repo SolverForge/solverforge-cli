@@ -2,12 +2,13 @@
 
 ## Scaffolding Surface
 
-The standalone CLI ships two built-in scaffold families only:
+The standalone CLI currently ships one built-in scaffold path only:
 
-- `solverforge new <name> --standard`
-- `solverforge new <name> --list`
+- `solverforge new <name>`
 
 Domain-specific examples such as employee scheduling and vehicle routing are intentionally out of scope for the built-in scaffold catalog. They belong in quickstarts.
+
+That built-in scaffold is a neutral shell. Users shape it afterward through facts, entities, variables, constraints, generated data, and `solverforge.app.toml` instead of selecting a starter family up front.
 
 ## Frontend Rule
 
@@ -25,12 +26,14 @@ The scaffold may still own thin composition code for domain-specific projections
 
 ## Generated Project Shape
 
-Both built-in scaffold families should generate:
+The built-in neutral scaffold should generate:
 
 - `Cargo.toml` with published `solverforge` and `solverforge-ui` dependencies
-- `src/api/` exposing the REST/SSE contract expected by `solverforge-ui`
+- `solverforge.app.toml` as the scaffolded app/domain contract
+- `src/api/` exposing the retained `/jobs` REST/SSE contract expected by `solverforge-ui`
 - `static/index.html` loading `/sf/sf.css` and `/sf/sf.js`
 - `static/app.js` containing only app composition and view-specific rendering
+- `static/generated/ui-model.json` as the compiler-owned view/model projection
 - `static/sf-config.json` as the preserved customization seam
 
 ## `sf-config.json`
@@ -44,7 +47,6 @@ The CLI may extend the config only for scaffold-owned rendering concerns. It sho
 
 ## RC Defaults
 
-`default_template` values should align with the problem-type surface:
+`.solverforgerc` still carries a legacy `default_template` field in the parser for compatibility with older configs and tests, but it is not part of the current public scaffold surface and does not define multiple starter families today.
 
-- `"standard"`
-- `"list"`
+Do not extend docs or new features around `default_template` unless the public scaffold model changes again.
