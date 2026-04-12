@@ -9,5 +9,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.54.2"
-  }
+  },
+  "version": "1.1.1"
 }
