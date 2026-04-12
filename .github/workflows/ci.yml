@@ -42,8 +42,11 @@ jobs:
       - name: Build CLI
         run: cargo build --locked
 
-      - name: Run Rust tests
-        run: cargo test --locked
+      - name: Run CLI unit tests
+        run: cargo test --locked --bin solverforge
+
+      - name: Run scaffold contract tests
+        run: cargo test --locked --test scaffold_test -- --nocapture --test-threads=1
 
   integration:
     name: Integration Tests
