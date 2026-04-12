@@ -70,8 +70,8 @@ The runtime and browser suites both scaffold fresh temp apps, mutate them
 through the real CLI, boot the generated servers on random ports, and clean up
 automatically. Failure artifacts are written under `target/test-artifacts/`.
 During end-to-end validation, the generated temp apps are pinned to the local
-`solverforge-rs` and `solverforge-ui` sibling checkouts so the CLI can validate
-the current cross-repo contract before every runtime release lands on crates.io.
+`solverforge-rs` and `solverforge-ui` sibling checkouts when those repos are
+present. Otherwise the same suites validate against the published crate targets.
 
 Current scenario coverage:
 

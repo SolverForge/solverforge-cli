@@ -31,7 +31,7 @@ When changing templates or scaffold behavior, follow the current repo reality ov
 Use standard Rust style with 4-space indentation and `rustfmt` output as the source of truth. Prefer `snake_case` for modules, files, functions, and test names; use `PascalCase` for types and enums. Keep CLI flags, generated file names, and module names descriptive and consistent with existing commands such as `generate_constraint` and `sf_config`.
 
 ## Testing Guidelines
-Add narrow unit tests beside the code under `#[cfg(test)]` when validating parsing, rewriting, or template helpers. Put end-to-end CLI behavior in `tests/`, following existing names like `*_test.rs` and `test_*` functions. When changing scaffolding or generated code, cover both file creation and key output content assertions.
+Add narrow unit tests close to the code in sibling test files or `#[cfg(test)]` child modules when validating parsing, rewriting, or template helpers. Put end-to-end CLI behavior in `tests/`, following existing names like `*_test.rs` and `test_*` functions. When changing scaffolding or generated code, cover both file creation and key output content assertions.
 
 Prefer a small number of readable, high-signal end-to-end phases over a large number of narrow tests. The main generated-app suites are:
 
