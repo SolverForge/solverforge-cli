@@ -1,0 +1,161 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.1.1)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  SF_USE_PUBLISHED_DEPS: "1"
+
+jobs:
+  test:
+    name: Validate Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Verify release metadata
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            EXPECTED_VERSION="${{ github.event.inputs.version }}"
+          else
+            EXPECTED_VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+
+          MANIFEST_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          PACKAGE_JSON_VERSION=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' package.json | head -1)
+
+          if [ "$MANIFEST_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "::error::Cargo.toml version ${MANIFEST_VERSION} does not match release version ${EXPECTED_VERSION}"
+            exit 1
+          fi
+
+          if [ "$PACKAGE_JSON_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "::error::package.json version ${PACKAGE_JSON_VERSION} does not match release version ${EXPECTED_VERSION}"
+            exit 1
+          fi
+
+          cargo metadata --locked --format-version 1 >/dev/null
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pre-commit
+        shell: bash
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: make install-e2e
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build CLI
+        run: cargo build --locked
+
+      - name: Run CLI unit tests
+        run: cargo test --locked --bin solverforge
+
+      - name: Run scaffold contract tests
+        run: cargo test --locked --test scaffold_test -- --nocapture --test-threads=1
+
+      - name: Run pre-commit
+        run: make pre-commit
+
+      - name: Run full integration validation
+        run: make test-full
+
+      - name: Upload integration artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-artifacts
+          path: target/test-artifacts
+          if-no-files-found: ignore
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [test]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        shell: bash
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"* %s (%h)" "$PREV_TAG"..HEAD)
+          else
+            CHANGELOG=$(git log --pretty=format:"* %s (%h)" -20)
+          fi
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: v${{ steps.version.outputs.version }}
+          body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## Installation
+
+            **Cargo**
+            ```bash
+            cargo install solverforge-cli --version ${{ steps.version.outputs.version }}
+            ```
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}

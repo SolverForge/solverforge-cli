@@ -3,9 +3,10 @@
 Default entry point for new SolverForge projects.
 
 Use this CLI to scaffold, grow, and manage SolverForge applications. Generated
-projects currently target `solverforge 0.8.3` and `solverforge-ui 0.4.2` as
-their crate dependency versions, and that target policy is part of the product surface rather
-than an invisible implementation detail.
+projects currently target `solverforge 0.8.4`, `solverforge-ui 0.4.3`, and
+`solverforge-maps 2.1.3` as their crate dependency versions, and that target
+policy is part of the product surface rather than an invisible implementation
+detail.
 
 This package has its own version. That version is not the same thing as the
 SolverForge runtime version or source that newly scaffolded projects target.
@@ -70,8 +71,9 @@ The runtime and browser suites both scaffold fresh temp apps, mutate them
 through the real CLI, boot the generated servers on random ports, and clean up
 automatically. Failure artifacts are written under `target/test-artifacts/`.
 During end-to-end validation, the generated temp apps are pinned to the local
-`solverforge-rs` and `solverforge-ui` sibling checkouts when those repos are
-present. Otherwise the same suites validate against the published crate targets.
+`solverforge-rs`, `solverforge-ui`, and `solverforge-maps` sibling checkouts
+when those repos are present. Otherwise the same suites validate against the
+published crate targets.
 
 Current scenario coverage:
 

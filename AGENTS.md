@@ -7,7 +7,7 @@
 `solverforge-cli` is the default entry point for new SolverForge applications. Treat the CLI as its own versioned product, distinct from the runtime crates and UI assets that generated projects target.
 
 Current scaffold policy:
-- generated projects currently target `solverforge 0.8.3` and `solverforge-ui 0.4.2` as their crate dependency versions
+- generated projects currently target `solverforge 0.8.4`, `solverforge-ui 0.4.3`, and `solverforge-maps 2.1.3` as their crate dependency versions
 - `solverforge new <name>` is the only public scaffold path and produces a neutral shell
 - users shape the app afterward through facts, entities, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
@@ -56,13 +56,13 @@ Current end-to-end scenario policy:
 Do not claim mixed seeded solving is supported until the underlying runtime actually supports that combination.
 
 For scaffold changes, prefer assertions that check the generated contract directly:
-- dependency wiring for `solverforge` and `solverforge-ui`
+- dependency wiring for `solverforge`, `solverforge-ui`, and `solverforge-maps`
 - CLI version vs runtime target messaging
 - generated README version/runtime source disclosure
 - typed solver SSE payload shape and typed frontend hooks
 - `solverforge generate data` ownership boundaries:
   `src/data/mod.rs` is a stable wrapper and `src/generated/data_seed.rs` is compiler-owned
-- scaffolded `cargo check` against the current local runtime/UI worktrees when those sibling repos are present, otherwise against the published crate targets
+- scaffolded `cargo check` against the current local runtime/UI/maps worktrees when those sibling repos are present, otherwise against the published crate targets
 
 ## Commit & Pull Request Guidelines
 Follow the commit style already used in history: `fix: ...`, `refactor: ...`, `style: ...`, `chore: ...`. Keep commits scoped to one behavior change. PRs should explain user-visible CLI impact, list verification commands run, and link the relevant issue. Include concrete examples when flags, generated files, or template output change.

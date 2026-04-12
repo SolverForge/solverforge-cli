@@ -130,11 +130,16 @@ function resolveLocalSolverforgePaths() {
 
   const runtimePath = path.join(workspaceRoot(), 'solverforge-rs', 'crates', 'solverforge');
   const uiPath = path.join(workspaceRoot(), 'solverforge-ui');
+  const mapsPath = path.join(workspaceRoot(), 'solverforge-maps');
   if (!fs.existsSync(runtimePath) || !fs.existsSync(uiPath)) {
     return null;
   }
 
-  return { runtimePath, uiPath };
+  return {
+    runtimePath,
+    uiPath,
+    mapsPath: fs.existsSync(mapsPath) ? mapsPath : null,
+  };
 }
 
 function pinGeneratedProjectToLocalSolverforge(projectDir) {
@@ -154,6 +159,9 @@ function pinGeneratedProjectToLocalSolverforge(projectDir) {
       }
       if (trimmed.startsWith('solverforge-ui = ')) {
         return `solverforge-ui = { path = "${tomlPath(localPaths.uiPath)}" }`;
+      }
+      if (trimmed.startsWith('solverforge-maps = ') && localPaths.mapsPath) {
+        return `solverforge-maps = { path = "${tomlPath(localPaths.mapsPath)}" }`;
       }
       return line;
     })

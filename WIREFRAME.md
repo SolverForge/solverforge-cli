@@ -28,7 +28,7 @@ The scaffold may still own thin composition code for domain-specific projections
 
 The built-in neutral scaffold should generate:
 
-- `Cargo.toml` with published `solverforge` and `solverforge-ui` dependencies
+- `Cargo.toml` with published `solverforge`, `solverforge-ui`, and `solverforge-maps` dependencies
 - `solverforge.app.toml` as the scaffolded app/domain contract
 - `src/api/` exposing the retained `/jobs` REST/SSE contract expected by `solverforge-ui`
 - `static/index.html` loading `/sf/sf.css` and `/sf/sf.js`

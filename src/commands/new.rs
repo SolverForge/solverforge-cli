@@ -5,7 +5,8 @@ use std::process::Command;
 use crate::error::{is_rust_keyword, CliError, CliResult};
 use crate::output;
 use crate::scaffold_target::{
-    RUNTIME_SOURCE_PATH, RUNTIME_TARGET_DISPLAY, RUNTIME_TARGET_LABEL, UI_SOURCE_PATH,
+    MAPS_SOURCE_PATH, RUNTIME_SOURCE_PATH, RUNTIME_TARGET_DISPLAY, RUNTIME_TARGET_LABEL,
+    UI_SOURCE_PATH,
 };
 use crate::template;
 
@@ -88,6 +89,7 @@ fn scaffold(
     let vars: &[(&str, &str)] = &[
         ("solverforge_dep", &solverforge_dep_spec()),
         ("solverforge_ui_dep", &solverforge_ui_dep_spec()),
+        ("solverforge_maps_dep", &solverforge_maps_dep_spec()),
         ("project_name", project_name),
         ("crate_name", crate_name),
         ("solverforge_cli_version", env!("CARGO_PKG_VERSION")),
@@ -172,11 +174,15 @@ fn scaffold(
 }
 
 fn solverforge_dep_spec() -> String {
-    "{ version = \"0.8.3\", features = [\"serde\", \"console\", \"verbose-logging\"] }".to_string()
+    "{ version = \"0.8.4\", features = [\"serde\", \"console\", \"verbose-logging\"] }".to_string()
 }
 
 fn solverforge_ui_dep_spec() -> String {
-    "{ version = \"0.4.2\" }".to_string()
+    "{ version = \"0.4.3\" }".to_string()
+}
+
+fn solverforge_maps_dep_spec() -> String {
+    "{ version = \"2.1.3\" }".to_string()
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {
@@ -289,6 +295,10 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
     readme.push_str(&format!(
         "- Frontend UI dependency currently wired into `Cargo.toml`: `{}`\n\n",
         UI_SOURCE_PATH
+    ));
+    readme.push_str(&format!(
+        "- Maps dependency currently wired into `Cargo.toml`: `{}`\n\n",
+        MAPS_SOURCE_PATH
     ));
     readme.push_str(&format!(
         "This project was scaffolded by `solverforge-cli`, and it currently targets `{}` through the configured crate dependency targets.\n\n",

@@ -17,6 +17,7 @@ pub fn pin_generated_project_to_local_solverforge(project_dir: &Path) -> bool {
         .join("crates")
         .join("solverforge")]);
     let ui_path = find_existing_path(&[workspace_root.join("solverforge-ui")]);
+    let maps_path = find_existing_path(&[workspace_root.join("solverforge-maps")]);
 
     let (Some(runtime_path), Some(ui_path)) = (runtime_path, ui_path) else {
         return false;
@@ -29,6 +30,12 @@ pub fn pin_generated_project_to_local_solverforge(project_dir: &Path) -> bool {
         toml_path(&runtime_path)
     );
     let ui_line = format!("solverforge-ui = {{ path = \"{}\" }}", toml_path(&ui_path));
+    let maps_line = maps_path.map(|maps_path| {
+        format!(
+            "solverforge-maps = {{ path = \"{}\" }}",
+            toml_path(&maps_path)
+        )
+    });
 
     let rewritten = cargo_toml
         .lines()
@@ -38,6 +45,8 @@ pub fn pin_generated_project_to_local_solverforge(project_dir: &Path) -> bool {
                 runtime_line.clone()
             } else if trimmed.starts_with("solverforge-ui = ") {
                 ui_line.clone()
+            } else if trimmed.starts_with("solverforge-maps = ") {
+                maps_line.clone().unwrap_or_else(|| line.to_string())
             } else {
                 line.to_string()
             }
