@@ -32,6 +32,22 @@ fn legacy_data_loader_stub() -> &'static str {
     "/* Data loading module.\n\n   Replace `load()` with code that reads your real inputs and constructs the\n   domain objects your API or solver layer needs. */\n\npub fn load() -> Result<(), Box<dyn std::error::Error>> {\n    Ok(())\n}\n"
 }
 
+fn remove_module_export(path: &std::path::Path, export_line: &str) {
+    let current = std::fs::read_to_string(path).expect("failed to read module file");
+    let updated = current
+        .lines()
+        .filter(|line| line.trim_end_matches('\r') != export_line)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let trailing_newline = current.ends_with('\n') || current.ends_with("\r\n");
+    let final_content = if trailing_newline && !updated.is_empty() {
+        format!("{updated}\n")
+    } else {
+        updated
+    };
+    std::fs::write(path, final_content).expect("failed to rewrite module file");
+}
+
 #[test]
 fn test_version_output_distinguishes_cli_from_runtime_target() {
     let output = cli_command()
@@ -608,10 +624,7 @@ fn test_generate_data_migrates_legacy_owned_loader_and_backfills_lib_export() {
     .unwrap();
 
     let lib_path = project_dir.join("src").join("lib.rs");
-    let legacy_lib = std::fs::read_to_string(&lib_path)
-        .unwrap()
-        .replace("pub mod generated;\n", "");
-    std::fs::write(&lib_path, legacy_lib).unwrap();
+    remove_module_export(&lib_path, "pub mod generated;");
 
     let fact_status = cli_command()
         .args(["generate", "fact", "resource"])
@@ -679,10 +692,7 @@ fn test_generate_data_preserves_customized_legacy_loader() {
     .unwrap();
 
     let lib_path = project_dir.join("src").join("lib.rs");
-    let legacy_lib = std::fs::read_to_string(&lib_path)
-        .unwrap()
-        .replace("pub mod generated;\n", "");
-    std::fs::write(&lib_path, legacy_lib).unwrap();
+    remove_module_export(&lib_path, "pub mod generated;");
 
     let fact_status = cli_command()
         .args(["generate", "fact", "resource"])
