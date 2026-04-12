@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [1.1.2](///compare/v1.1.1...v1.1.2) (2026-04-12)
+
+
+### Bug Fixes
+
+* **release:** align scaffold targets and add tag publishing 376ffa4
+
 ## 1.1.1 (2026-04-12)
 
 
