@@ -3,7 +3,7 @@
 Default entry point for new SolverForge projects.
 
 Use this CLI to scaffold, grow, and manage SolverForge applications. Generated
-projects currently target `solverforge 0.8.1` and `solverforge-ui 0.4.2` as
+projects currently target `solverforge 0.8.3` and `solverforge-ui 0.4.2` as
 their crate dependency versions, and that target policy is part of the product surface rather
 than an invisible implementation detail.
 

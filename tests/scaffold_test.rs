@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const RUNTIME_DEP_LABEL: &str = "crate target: solverforge 0.8.1";
+const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.8.3";
 const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.4.2";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -91,7 +91,7 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
     assert!(
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
-            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.8.1")
+            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.8.3")
             && stdout.contains(RUNTIME_DEP_LABEL)
             && stdout.contains(UI_DEP_LABEL),
         "version output should distinguish the CLI version from the scaffold runtime target: {}",
@@ -201,7 +201,7 @@ fn test_new_creates_neutral_project_files() {
     );
     assert!(
         cargo_toml.contains(
-            "solverforge = { version = \"0.8.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+            "solverforge = { version = \"0.8.3\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
         ) && cargo_toml.contains("solverforge-ui = { version = \"0.4.2\" }"),
         "unified scaffold should point at the current SolverForge and solverforge-ui crate targets: {}",
         cargo_toml
@@ -274,7 +274,7 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
         readme.contains(&format!(
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
-        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.8.1`")
+        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.8.3`")
             && readme.contains(RUNTIME_DEP_LABEL)
             && readme.contains(UI_DEP_LABEL)
             && readme.contains("configured crate dependency targets")
