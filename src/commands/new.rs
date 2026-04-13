@@ -174,7 +174,7 @@ fn scaffold(
 }
 
 fn solverforge_dep_spec() -> String {
-    "{ version = \"0.8.4\", features = [\"serde\", \"console\", \"verbose-logging\"] }".to_string()
+    "{ version = \"0.8.5\", features = [\"serde\", \"console\", \"verbose-logging\"] }".to_string()
 }
 
 fn solverforge_ui_dep_spec() -> String {
