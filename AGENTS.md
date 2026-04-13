@@ -76,9 +76,11 @@ Generated apps should behave like production references, not toy demos.
 Keep these rules aligned across the single neutral scaffold and all generated
 domain shapes that users create afterward:
 - backend services track best solution separately from live status telemetry
-- status endpoints return `currentScore`, `bestScore`, and solver status
-- SSE uses typed events: `progress`, `best_solution`, `finished`
-- frontends use `onProgress(meta)`, `onSolution(solution, meta)`, and `onComplete(solution, meta)`
+- status endpoints return `currentScore`, `bestScore`, solver status, and latest snapshot revision
+- SSE payloads carry typed lifecycle metadata including `eventType`, `eventSequence`, `lifecycleState`, and `snapshotRevision`
+- retained lifecycle events include `progress`, `best_solution`, `pause_requested`, `paused`, `resumed`, `completed`, `cancelled`, and `failed`
+- frontends use lifecycle-aware hooks including `onProgress(meta)`, `onSolution(snapshot, meta)`, `onPaused(snapshot, meta)`, `onResumed(meta)`, `onCancelled(snapshot, meta)`, `onComplete(snapshot, meta)`, and `onFailure(message, meta, snapshot, analysis)`
+- snapshot-bound analysis and retained `/jobs/{id}/snapshot` flows stay aligned with the shared UI backend contract
 - progress-only events update status, not the rendered board
 
 Do not reintroduce:
