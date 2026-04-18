@@ -10,7 +10,7 @@ mod local_dependencies;
 
 use local_dependencies::{pin_generated_project_to_local_solverforge, USE_PUBLISHED_DEPS_ENV};
 
-const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.8.5";
+const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.8.8";
 const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.4.3";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.3";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -62,7 +62,7 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
     assert!(
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
-            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.8.5")
+            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.8.8")
             && stdout.contains(RUNTIME_DEP_LABEL)
             && stdout.contains(UI_DEP_LABEL)
             && stdout.contains(MAPS_DEP_LABEL),
@@ -173,7 +173,7 @@ fn test_new_creates_neutral_project_files() {
     );
     assert!(
         cargo_toml.contains(
-            "solverforge = { version = \"0.8.5\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+            "solverforge = { version = \"0.8.8\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
         ) && cargo_toml.contains("solverforge-ui = { version = \"0.4.3\" }")
             && cargo_toml.contains("solverforge-maps = { version = \"2.1.3\" }"),
         "unified scaffold should point at the current SolverForge, solverforge-ui, and solverforge-maps crate targets: {}",
@@ -247,7 +247,7 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
         readme.contains(&format!(
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
-        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.8.5`")
+        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.8.8`")
             && readme.contains(RUNTIME_DEP_LABEL)
             && readme.contains(UI_DEP_LABEL)
             && readme.contains(MAPS_DEP_LABEL)

@@ -7,7 +7,7 @@
 `solverforge-cli` is the default entry point for new SolverForge applications. Treat the CLI as its own versioned product, distinct from the runtime crates and UI assets that generated projects target.
 
 Current scaffold policy:
-- generated projects currently target `solverforge 0.8.5`, `solverforge-ui 0.4.3`, and `solverforge-maps 2.1.3` as their crate dependency versions
+- generated projects currently target `solverforge 0.8.8`, `solverforge-ui 0.4.3`, and `solverforge-maps 2.1.3` as their crate dependency versions
 - `solverforge new <name>` is the only public scaffold path and produces a neutral shell
 - users shape the app afterward through facts, entities, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
