@@ -364,7 +364,7 @@ fn test_new_creates_neutral_project_files() {
             && plan_rs.contains("@solverforge:begin solution-collections")
             && plan_rs.contains("@solverforge:begin solution-constructor-params")
             && plan_rs.contains("@solverforge:begin solution-constructor-init"),
-        "neutral scaffold should start with a score-only plan shell: {plan_rs}"
+        "neutral scaffold should start with an empty managed planning solution: {plan_rs}"
     );
     assert!(
         main_rs.contains("solverforge::console::init()")
