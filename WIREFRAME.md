@@ -13,7 +13,7 @@ not expose scaffold-family flags.
 Current generated projects target:
 
 - `solverforge 0.9.0`
-- `solverforge-ui 0.6.0`
+- `solverforge-ui 0.6.1`
 - `solverforge-maps 2.1.3`
 
 The CLI version is separate from those targets and must remain visible in

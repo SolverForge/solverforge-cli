@@ -17,11 +17,11 @@ use dependency_overrides::{
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
 const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.9.0";
-const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.6.0";
+const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.6.1";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.3";
 const SOLVERFORGE_DEP_SPEC: &str =
     r#"{ version = "0.9.0", features = ["serde", "console", "verbose-logging"] }"#;
-const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.6.0" }"#;
+const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.6.1" }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.3" }"#;
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -185,7 +185,7 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
             && stdout.contains("Scaffold runtime target: SolverForge crate target 0.9.0")
-            && stdout.contains("Scaffold UI target: solverforge-ui 0.6.0")
+            && stdout.contains("Scaffold UI target: solverforge-ui 0.6.1")
             && stdout.contains("Scaffold maps target: solverforge-maps 2.1.3")
             && stdout.contains(RUNTIME_DEP_LABEL)
             && stdout.contains(UI_DEP_LABEL)
@@ -351,7 +351,7 @@ fn test_new_creates_neutral_project_files() {
     assert!(
         cargo_toml.contains(
             "solverforge = { version = \"0.9.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
-        ) && cargo_toml.contains("solverforge-ui = { version = \"0.6.0\" }")
+        ) && cargo_toml.contains("solverforge-ui = { version = \"0.6.1\" }")
             && cargo_toml.contains("solverforge-maps = { version = \"2.1.3\" }"),
         "unified scaffold should point at the current SolverForge, solverforge-ui, and solverforge-maps crate targets: {}",
         cargo_toml
@@ -506,7 +506,7 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
         )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.9.0`")
-            && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.6.0`")
+            && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.6.1`")
             && readme
                 .contains("SolverForge maps target for this scaffold: `solverforge-maps 2.1.3`")
             && readme.contains(RUNTIME_DEP_LABEL)
