@@ -14,7 +14,7 @@ module.exports = async function globalSetup() {
       '--entity',
       'Task',
       '--kind',
-      'standard',
+      'scalar',
       '--range',
       'resources',
       '--allows-unassigned',
@@ -33,7 +33,7 @@ module.exports = async function globalSetup() {
       'items',
     ],
   ]);
-  const standard = await scaffoldScenario('standard-solver', [
+  const scalar = await scaffoldScenario('scalar-solver', [
     ['generate', 'fact', 'resource'],
     ['generate', 'entity', 'task'],
     [
@@ -43,7 +43,7 @@ module.exports = async function globalSetup() {
       '--entity',
       'Task',
       '--kind',
-      'standard',
+      'scalar',
       '--range',
       'resources',
       '--allows-unassigned',
@@ -54,11 +54,11 @@ module.exports = async function globalSetup() {
     scenarios: {
       neutral,
       mixed,
-      standard,
+      scalar,
     },
   });
   writeState({
-    children: [neutral, mixed, standard].map((scenario) => ({
+    children: [neutral, mixed, scalar].map((scenario) => ({
       name: scenario.name,
       pid: scenario.pid,
       tmpRoot: scenario.tmpRoot,

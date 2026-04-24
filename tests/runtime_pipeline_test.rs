@@ -5,11 +5,44 @@ use serde_json::Value;
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
-use support::generated_app::{seeded_mixed_data_module, seeded_standard_data_module, GeneratedApp};
+use support::generated_app::{seeded_mixed_data_module, seeded_scalar_data_module, GeneratedApp};
 
 fn test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn fetch_demo_catalog(client: &Client, base_url: &str) -> Value {
+    client
+        .get(format!("{base_url}/demo-data"))
+        .send()
+        .expect("demo data catalog request failed")
+        .error_for_status()
+        .expect("demo data catalog should be successful")
+        .json()
+        .expect("demo data catalog should be JSON")
+}
+
+fn fetch_demo_data(client: &Client, base_url: &str, demo_id: &str) -> Value {
+    client
+        .get(format!("{base_url}/demo-data/{demo_id}"))
+        .send()
+        .expect("demo data request failed")
+        .error_for_status()
+        .expect("demo data should be successful")
+        .json()
+        .expect("demo data should be JSON")
+}
+
+fn assert_demo_catalog(catalog: &Value, default_id: &str, available_ids: &[&str]) {
+    assert_eq!(catalog["defaultId"], default_id);
+    let actual_ids = catalog["availableIds"]
+        .as_array()
+        .expect("availableIds should be an array")
+        .iter()
+        .map(|value| value.as_str().expect("available id should be a string"))
+        .collect::<Vec<_>>();
+    assert_eq!(actual_ids, available_ids);
 }
 
 #[test]
@@ -48,15 +81,20 @@ fn neutral_shell_pipeline() {
         .expect("info should return JSON");
     assert_eq!(info["solverEngine"], "SolverForge");
 
-    let demo: Value = client
-        .get(format!("{base_url}/demo-data/STANDARD"))
-        .send()
-        .expect("demo data request failed")
-        .error_for_status()
-        .expect("demo data should be successful")
-        .json()
-        .expect("demo data should be JSON");
-    assert!(demo["score"].is_null());
+    let catalog = fetch_demo_catalog(&client, &base_url);
+    assert_demo_catalog(&catalog, "STANDARD", &["SMALL", "STANDARD", "LARGE"]);
+
+    let default_demo = fetch_demo_data(
+        &client,
+        &base_url,
+        catalog["defaultId"]
+            .as_str()
+            .expect("defaultId should be a string"),
+    );
+    assert!(default_demo["score"].is_null());
+
+    let large_demo = fetch_demo_data(&client, &base_url, "LARGE");
+    assert!(large_demo["score"].is_null());
 
     app.mark_success();
 }
@@ -73,7 +111,7 @@ fn mixed_runtime_pipeline() {
     app.run_cli("Generate fact resources", &["generate", "fact", "resource"]);
     app.run_cli("Generate entity tasks", &["generate", "entity", "task"]);
     app.run_cli(
-        "Generate standard variable",
+        "Generate scalar variable",
         &[
             "generate",
             "variable",
@@ -81,7 +119,7 @@ fn mixed_runtime_pipeline() {
             "--entity",
             "Task",
             "--kind",
-            "standard",
+            "scalar",
             "--range",
             "resources",
             "--allows-unassigned",
@@ -107,7 +145,7 @@ fn mixed_runtime_pipeline() {
         ],
     );
     app.phase("Seed non-empty mixed demo data");
-    app.write_file("src/data/mod.rs", seeded_mixed_data_module());
+    app.write_file("src/data/data_seed.rs", seeded_mixed_data_module());
     app.cargo_build("Build generated mixed app");
 
     // PHASE 2: boot the generated server and verify the mixed runtime surface.
@@ -115,14 +153,16 @@ fn mixed_runtime_pipeline() {
     let client: Client = app.client();
     let base_url = app.base_url(port);
 
-    let demo: Value = client
-        .get(format!("{base_url}/demo-data/STANDARD"))
-        .send()
-        .expect("demo data request failed")
-        .error_for_status()
-        .expect("demo data should be successful")
-        .json()
-        .expect("demo data should be JSON");
+    let catalog = fetch_demo_catalog(&client, &base_url);
+    assert_demo_catalog(&catalog, "STANDARD", &["SMALL", "STANDARD", "LARGE"]);
+
+    let demo = fetch_demo_data(
+        &client,
+        &base_url,
+        catalog["defaultId"]
+            .as_str()
+            .expect("defaultId should be a string"),
+    );
     assert!(demo["resources"].is_array());
     assert!(demo["tasks"].is_array());
     assert!(demo["items"].is_array());
@@ -142,18 +182,18 @@ fn mixed_runtime_pipeline() {
 }
 
 #[test]
-fn standard_solver_pipeline() {
+fn scalar_solver_pipeline() {
     let _guard = test_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    // PHASE 1: scaffold and build a standard-variable generated app through real CLI commands.
-    let mut app = GeneratedApp::new("standard_solver_pipeline", "standard_solver_pipeline");
+    // PHASE 1: scaffold and build a scalar-variable generated app through real CLI commands.
+    let mut app = GeneratedApp::new("scalar_solver_pipeline", "scalar_solver_pipeline");
     app.scaffold_neutral();
     app.run_cli("Generate fact resources", &["generate", "fact", "resource"]);
     app.run_cli("Generate entity tasks", &["generate", "entity", "task"]);
     app.run_cli(
-        "Generate standard variable",
+        "Generate scalar variable",
         &[
             "generate",
             "variable",
@@ -161,39 +201,38 @@ fn standard_solver_pipeline() {
             "--entity",
             "Task",
             "--kind",
-            "standard",
+            "scalar",
             "--range",
             "resources",
             "--allows-unassigned",
         ],
     );
-    app.phase("Seed non-empty standard demo data");
-    app.write_file("src/data/mod.rs", seeded_standard_data_module());
+    app.phase("Seed non-empty scalar demo data");
+    app.write_file("src/data/data_seed.rs", seeded_scalar_data_module());
     app.write_file("solver.toml", short_runtime_solver_config());
-    app.cargo_build("Build generated standard app");
+    app.cargo_build("Build generated scalar app");
 
     // PHASE 2: boot the generated server and run real data through the solver.
     let port = app.start_server();
     let client: Client = app.client();
     let base_url = app.base_url(port);
 
-    let demo: Value = client
-        .get(format!("{base_url}/demo-data/STANDARD"))
-        .send()
-        .expect("demo data request failed")
-        .error_for_status()
-        .expect("demo data should be successful")
-        .json()
-        .expect("demo data should be JSON");
-    assert!(demo["resources"].as_array().map(|rows| rows.len() >= 8) == Some(true));
-    assert!(demo["tasks"].as_array().map(|rows| rows.len() >= 48) == Some(true));
+    let catalog = fetch_demo_catalog(&client, &base_url);
+    assert_demo_catalog(&catalog, "STANDARD", &["SMALL", "STANDARD", "LARGE"]);
 
-    let live_job_id = app.create_job_from_demo(&client, port, "STANDARD");
-    let solving = wait_for_job_snapshot(&client, &base_url, &live_job_id);
+    let demo = fetch_demo_data(&client, &base_url, "LARGE");
+    assert!(demo["resources"].as_array().map(|rows| rows.len() >= 16) == Some(true));
+    assert!(demo["tasks"].as_array().map(|rows| rows.len() >= 192) == Some(true));
+
+    let live_job_id = app.create_job_from_demo(&client, port, "LARGE");
+    let solving = wait_for_live_job_snapshot(&client, &base_url, &live_job_id);
     assert_eq!(solving["lifecycleState"], "SOLVING");
     assert!(solving["snapshotRevision"].as_u64().is_some());
     assert!(solving.get("currentScore").is_some());
     assert!(solving.get("bestScore").is_some());
+    assert!(solving["telemetry"]["movesGenerated"].is_number());
+    assert!(solving["telemetry"]["generationMs"].is_number());
+    assert!(solving["telemetry"]["evaluationMs"].is_number());
 
     let latest_snapshot = client
         .get(format!("{base_url}/jobs/{live_job_id}/snapshot"))
@@ -218,9 +257,29 @@ fn standard_solver_pipeline() {
         "expected seeded tasks in retained snapshot"
     );
 
+    let live_delete_status = client
+        .delete(format!("{base_url}/jobs/{live_job_id}"))
+        .send()
+        .expect("live delete request failed")
+        .status();
+    assert_eq!(live_delete_status.as_u16(), 409);
+
     let latest_revision = latest_snapshot["snapshotRevision"]
         .as_u64()
         .expect("latest snapshot should expose a revision");
+    let solving_bootstrap = app.read_first_sse_event(&client, port, &live_job_id);
+    assert_eq!(
+        solving_bootstrap["eventType"], "best_solution",
+        "live reconnect bootstrap should replay the latest retained snapshot, not the last score-only progress event"
+    );
+    assert!(solving_bootstrap["snapshotRevision"].as_u64().is_some());
+    assert!(
+        solving_bootstrap["solution"]["tasks"]
+            .as_array()
+            .map(|rows| !rows.is_empty())
+            == Some(true),
+        "live reconnect bootstrap should carry a renderable solution payload"
+    );
     let live_analysis = client
         .get(format!(
             "{base_url}/jobs/{live_job_id}/analysis?snapshot_revision={latest_revision}"
@@ -270,6 +329,13 @@ fn standard_solver_pipeline() {
         Some(paused_revision)
     );
 
+    let paused_delete_status = client
+        .delete(format!("{base_url}/jobs/{live_job_id}"))
+        .send()
+        .expect("paused delete request failed")
+        .status();
+    assert_eq!(paused_delete_status.as_u16(), 409);
+
     let paused_analysis = client
         .get(format!(
             "{base_url}/jobs/{live_job_id}/analysis?snapshot_revision={paused_revision}"
@@ -318,6 +384,13 @@ fn standard_solver_pipeline() {
         "cancelled"
     );
 
+    let cancelled_cancel_status = client
+        .post(format!("{base_url}/jobs/{live_job_id}/cancel"))
+        .send()
+        .expect("cancel after terminal request failed")
+        .status();
+    assert_eq!(cancelled_cancel_status.as_u16(), 409);
+
     let delete_status = client
         .delete(format!("{base_url}/jobs/{live_job_id}"))
         .send()
@@ -329,6 +402,15 @@ fn standard_solver_pipeline() {
             .get(format!("{base_url}/jobs/{live_job_id}"))
             .send()
             .expect("deleted job lookup failed")
+            .status()
+            .as_u16(),
+        404
+    );
+    assert_eq!(
+        client
+            .get(format!("{base_url}/jobs/{live_job_id}/status"))
+            .send()
+            .expect("deleted job status lookup failed")
             .status()
             .as_u16(),
         404
@@ -371,6 +453,13 @@ fn standard_solver_pipeline() {
         "completed"
     );
 
+    let completed_cancel_status = client
+        .post(format!("{base_url}/jobs/{completed_job_id}/cancel"))
+        .send()
+        .expect("completed cancel request failed")
+        .status();
+    assert_eq!(completed_cancel_status.as_u16(), 409);
+
     let completed_delete_status = client
         .delete(format!("{base_url}/jobs/{completed_job_id}"))
         .send()
@@ -381,7 +470,7 @@ fn standard_solver_pipeline() {
     app.mark_success();
 }
 
-fn wait_for_job_snapshot(client: &Client, base_url: &str, id: &str) -> Value {
+fn wait_for_live_job_snapshot(client: &Client, base_url: &str, id: &str) -> Value {
     let started = Instant::now();
     loop {
         let status: Value = client
@@ -402,7 +491,7 @@ fn wait_for_job_snapshot(client: &Client, base_url: &str, id: &str) -> Value {
         }
         assert!(
             started.elapsed() < Duration::from_secs(20),
-            "timed out waiting for job {id} to expose a retained snapshot: {status:?}"
+            "timed out waiting for live job {id} to expose a retained snapshot before reaching a terminal state: {status:?}"
         );
         thread::sleep(Duration::from_millis(100));
     }
@@ -441,7 +530,8 @@ type = "local_search"
 type = "late_acceptance"
 late_acceptance_size = 400
 [phases.forager]
-accepted_count_limit = 4
+type = "accepted_count"
+limit = 4
 
 [termination]
 seconds_spent_limit = 5

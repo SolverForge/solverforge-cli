@@ -20,15 +20,46 @@ use crate::domain::{Container, Item, Plan, Resource, Task};
 pub enum DemoData {
     Small,
     Standard,
+    Large,
+}
+
+const AVAILABLE_DEMO_DATA: &[DemoData] = &[DemoData::Small, DemoData::Standard, DemoData::Large];
+const DEFAULT_DEMO_DATA: DemoData = DemoData::Standard;
+
+pub fn default_demo_data() -> DemoData {
+    DEFAULT_DEMO_DATA
+}
+
+pub fn available_demo_data() -> &'static [DemoData] {
+    AVAILABLE_DEMO_DATA
+}
+
+impl DemoData {
+    pub fn id(self) -> &'static str {
+        match self {
+            DemoData::Small => "SMALL",
+            DemoData::Standard => "STANDARD",
+            DemoData::Large => "LARGE",
+        }
+    }
+
+    pub fn default_demo_data() -> Self {
+        default_demo_data()
+    }
+
+    pub fn available_demo_data() -> &'static [Self] {
+        available_demo_data()
+    }
 }
 
 impl FromStr for DemoData {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_uppercase().as_str() {
+        match s.to_ascii_uppercase().as_str() {
             "SMALL" => Ok(DemoData::Small),
             "STANDARD" => Ok(DemoData::Standard),
+            "LARGE" => Ok(DemoData::Large),
             _ => Err(()),
         }
     }
@@ -38,6 +69,7 @@ pub fn generate(demo: DemoData) -> Plan {
     match demo {
         DemoData::Small => generate_plan(2, 3, 2, 4),
         DemoData::Standard => generate_plan(3, 6, 3, 8),
+        DemoData::Large => generate_plan(6, 12, 6, 24),
     }
 }
 
@@ -59,7 +91,7 @@ fn generate_plan(n_resources: usize, n_tasks: usize, n_containers: usize, n_item
 }
 `;
 
-const seededStandardDataModule = `/* Seeded standard-variable demo data for Playwright end-to-end tests. */
+const seededScalarDataModule = `/* Seeded scalar-variable demo data for Playwright end-to-end tests. */
 
 use std::str::FromStr;
 
@@ -69,15 +101,46 @@ use crate::domain::{Plan, Resource, Task};
 pub enum DemoData {
     Small,
     Standard,
+    Large,
+}
+
+const AVAILABLE_DEMO_DATA: &[DemoData] = &[DemoData::Small, DemoData::Standard, DemoData::Large];
+const DEFAULT_DEMO_DATA: DemoData = DemoData::Standard;
+
+pub fn default_demo_data() -> DemoData {
+    DEFAULT_DEMO_DATA
+}
+
+pub fn available_demo_data() -> &'static [DemoData] {
+    AVAILABLE_DEMO_DATA
+}
+
+impl DemoData {
+    pub fn id(self) -> &'static str {
+        match self {
+            DemoData::Small => "SMALL",
+            DemoData::Standard => "STANDARD",
+            DemoData::Large => "LARGE",
+        }
+    }
+
+    pub fn default_demo_data() -> Self {
+        default_demo_data()
+    }
+
+    pub fn available_demo_data() -> &'static [Self] {
+        available_demo_data()
+    }
 }
 
 impl FromStr for DemoData {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_uppercase().as_str() {
+        match s.to_ascii_uppercase().as_str() {
             "SMALL" => Ok(DemoData::Small),
             "STANDARD" => Ok(DemoData::Standard),
+            "LARGE" => Ok(DemoData::Large),
             _ => Err(()),
         }
     }
@@ -87,6 +150,7 @@ pub fn generate(demo: DemoData) -> Plan {
     match demo {
         DemoData::Small => generate_plan(4, 16),
         DemoData::Standard => generate_plan(8, 48),
+        DemoData::Large => generate_plan(16, 192),
     }
 }
 
@@ -285,11 +349,11 @@ async function scaffoldScenario(name, generatorCommands) {
 
   if (name === 'mixed-pipeline') {
     phase(suite, 'Seed non-empty mixed demo data');
-    fs.writeFileSync(path.join(projectDir, 'src', 'data', 'mod.rs'), seededMixedDataModule);
+    fs.writeFileSync(path.join(projectDir, 'src', 'data', 'data_seed.rs'), seededMixedDataModule);
   }
-  if (name === 'standard-solver') {
-    phase(suite, 'Seed non-empty standard demo data');
-    fs.writeFileSync(path.join(projectDir, 'src', 'data', 'mod.rs'), seededStandardDataModule);
+  if (name === 'scalar-solver') {
+    phase(suite, 'Seed non-empty scalar demo data');
+    fs.writeFileSync(path.join(projectDir, 'src', 'data', 'data_seed.rs'), seededScalarDataModule);
   }
 
   phase(suite, 'Build generated app');
