@@ -1,9 +1,14 @@
+use crate::managed_block;
+
+const CUSTOM_ENTITY_TEMPLATE_PATH: &str = ".solverforge/templates/entity.rs.tmpl";
+const CUSTOM_SOLUTION_TEMPLATE_PATH: &str = ".solverforge/templates/solution.rs.tmpl";
+
 pub(crate) fn generate_entity(
     pascal: &str,
     planning_variable: Option<&str>,
     extra_fields: &[(String, String)],
-) -> String {
-    // Check for a custom override in `.solverforge/templates/entity.rs.tmpl`.
+) -> Result<String, String> {
+    // Custom entity overrides are supported only when they keep the canonical managed blocks.
     let snake = pascal_to_snake(pascal);
     let fields_repr: String = extra_fields
         .iter()
@@ -16,7 +21,11 @@ pub(crate) fn generate_entity(
         ("FIELDS", &fields_repr),
     ];
     if let Some(custom) = crate::template::load_custom("entity", vars) {
-        return custom;
+        return validate_generated_source(
+            custom,
+            CUSTOM_ENTITY_TEMPLATE_PATH,
+            managed_block::ENTITY_REQUIRED_BLOCKS,
+        );
     }
     let var_field = if let Some(var) = planning_variable {
         format!(
@@ -28,7 +37,7 @@ pub(crate) fn generate_entity(
     };
 
     let var_init = if let Some(var) = planning_variable {
-        format!(", {}: None", var)
+        format!("            {}: None,\n", var)
     } else {
         String::new()
     };
@@ -45,13 +54,14 @@ pub(crate) fn generate_entity(
 
     let extra_field_inits: String = extra_fields
         .iter()
-        .map(|(n, _)| format!(", {}", n))
+        .map(|(n, _)| format!("            {},\n", n))
         .collect();
 
     let test_module = generate_entity_test(pascal, planning_variable, extra_fields);
 
-    format!(
-        r#"use serde::{{Deserialize, Serialize}};
+    validate_generated_source(
+        format!(
+            r#"use serde::{{Deserialize, Serialize}};
 use solverforge::prelude::*;
 
 /// TODO — describe this entity.
@@ -60,14 +70,23 @@ use solverforge::prelude::*;
 pub struct {pascal} {{
     #[planning_id]
     pub id: String,
-{var_field}{extra_field_defs}}}
+{extra_field_defs}    // @solverforge:begin entity-variables
+{var_field}    // @solverforge:end entity-variables
+}}
 
 impl {pascal} {{
     pub fn new(id: impl Into<String>{extra_field_params}) -> Self {{
-        Self {{ id: id.into(){var_init}{extra_field_inits} }}
+        Self {{
+            id: id.into(),
+{extra_field_inits}            // @solverforge:begin entity-variable-init
+{var_init}            // @solverforge:end entity-variable-init
+        }}
     }}
 }}
 {test_module}"#
+        ),
+        "built-in entity template",
+        managed_block::ENTITY_REQUIRED_BLOCKS,
     )
 }
 
@@ -126,31 +145,65 @@ impl {pascal} {{
     )
 }
 
-pub(crate) fn generate_solution(pascal: &str, score: &str) -> String {
-    // Check for a custom override in `.solverforge/templates/solution.rs.tmpl`.
+pub(crate) fn generate_solution(pascal: &str, score: &str) -> Result<String, String> {
+    // Custom solution overrides are supported only when they keep the canonical managed blocks.
     let snake = pascal_to_snake(pascal);
     let vars: &[(&str, &str)] = &[("NAME", pascal), ("SNAKE_NAME", &snake), ("FIELDS", score)];
     if let Some(custom) = crate::template::load_custom("solution", vars) {
-        return custom;
+        return validate_generated_source(
+            custom,
+            CUSTOM_SOLUTION_TEMPLATE_PATH,
+            managed_block::SOLUTION_REQUIRED_BLOCKS,
+        );
     }
-    format!(
-        r#"use serde::{{Deserialize, Serialize}};
+    validate_generated_source(
+        format!(
+            r#"use serde::{{Deserialize, Serialize}};
 use solverforge::prelude::*;
 
-#[planning_solution]
+// @solverforge:begin solution-imports
+// @solverforge:end solution-imports
+
+#[planning_solution(
+    constraints = "crate::constraints::create_constraints",
+    solver_toml = "../../solver.toml"
+)]
 #[derive(Serialize, Deserialize)]
 pub struct {pascal} {{
+    // @solverforge:begin solution-collections
+    // @solverforge:end solution-collections
     #[planning_score]
     pub score: Option<{score}>,
 }}
 
 impl {pascal} {{
-    pub fn new() -> Self {{
-        Self {{ score: None }}
+    #[rustfmt::skip]
+    pub fn new(
+        // @solverforge:begin solution-constructor-params
+        // @solverforge:end solution-constructor-params
+    ) -> Self {{
+        Self {{
+            // @solverforge:begin solution-constructor-init
+            // @solverforge:end solution-constructor-init
+            score: None,
+        }}
     }}
 }}
 "#
+        ),
+        "built-in solution template",
+        managed_block::SOLUTION_REQUIRED_BLOCKS,
     )
+}
+
+fn validate_generated_source(
+    src: String,
+    source_label: &str,
+    required_blocks: &[&str],
+) -> Result<String, String> {
+    managed_block::require_blocks(&src, required_blocks)
+        .map_err(|err| format!("{source_label} is invalid: {err}"))?;
+    Ok(src)
 }
 
 fn generate_entity_test(

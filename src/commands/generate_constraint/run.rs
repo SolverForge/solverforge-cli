@@ -2,11 +2,12 @@ use std::fs;
 use std::path::Path;
 
 use super::domain::parse_domain;
-use super::mod_rewriter::{extract_types, rewrite_mod};
+use super::mod_rewriter::rewrite_mod;
 use super::skeleton::generate_skeleton;
 use super::utils::{snake_to_title, validate_name};
 use super::wizard::resolve_pattern_and_hardness;
 use crate::app_spec;
+use crate::commands::generate_domain::is_soft_score;
 use crate::error::{CliError, CliResult};
 use crate::output;
 
@@ -64,21 +65,20 @@ pub fn run(
         source: e,
     })?;
 
-    // Parse domain model; fall back gracefully
-    let domain = parse_domain();
-
-    // Resolve solution/score types: prefer domain parser, fall back to mod.rs extraction
-    let (solution_type, score_type) = if let Some(ref d) = domain {
-        (d.solution_type.clone(), d.score_type.clone())
-    } else {
-        extract_types(&mod_src)
-    };
+    let domain = parse_domain().map_err(CliError::general)?;
+    let solution_type = domain.solution_type.clone();
+    let score_type = domain.score_type.clone();
 
     let constraint_name = snake_to_title(name);
 
     // Determine pattern + hardness
     let (pattern, is_soft) =
         resolve_pattern_and_hardness(soft, unary, pair, join, balance, reward, &domain)?;
+    if !is_soft && is_soft_score(&score_type) {
+        return Err(CliError::general(
+            "SoftScore supports only soft generated constraints; pass --soft or choose a score type with hard levels",
+        ));
+    }
 
     if matches!(
         pattern,
@@ -87,10 +87,7 @@ pub fn run(
             | super::skeleton::Pattern::Balance
             | super::skeleton::Pattern::Reward
             | super::skeleton::Pattern::Join
-    ) && domain
-        .as_ref()
-        .map(|d| d.entities.is_empty())
-        .unwrap_or(true)
+    ) && domain.entities.is_empty()
     {
         return Err(CliError::with_hint(
             "constraint generation needs at least one planning entity collection",
@@ -98,9 +95,7 @@ pub fn run(
         ));
     }
 
-    if matches!(pattern, super::skeleton::Pattern::Join)
-        && domain.as_ref().map(|d| d.facts.is_empty()).unwrap_or(true)
-    {
+    if matches!(pattern, super::skeleton::Pattern::Join) && domain.facts.is_empty() {
         return Err(CliError::with_hint(
             "join constraints need at least one problem fact collection",
             "run `solverforge generate fact ...` first",
@@ -115,8 +110,10 @@ pub fn run(
         &solution_type,
         &score_type,
         &constraint_name,
-        domain.as_ref(),
+        Some(&domain),
     );
+
+    let new_mod = rewrite_mod(&mod_src, name).map_err(CliError::general)?;
 
     if pretend {
         println!("Would create src/constraints/{}.rs", name);
@@ -129,8 +126,6 @@ pub fn run(
         source: e,
     })?;
 
-    // Rewrite mod.rs
-    let new_mod = rewrite_mod(&mod_src, name);
     fs::write(&mod_path, &new_mod).map_err(|e| CliError::IoError {
         context: "failed to write src/constraints/mod.rs".to_string(),
         source: e,

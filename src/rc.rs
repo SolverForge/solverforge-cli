@@ -6,8 +6,6 @@ use crate::error::CliResult;
 // Project root takes precedence over home directory.
 #[derive(Debug, Default)]
 pub struct RcConfig {
-    // Default template name (e.g. "standard" or "list")
-    pub default_template: Option<String>,
     // Default server port
     pub port: Option<u16>,
     // Disable colored output
@@ -20,7 +18,7 @@ impl RcConfig {
     // Returns true if no preferences were set.
     #[cfg(test)]
     pub fn is_empty(&self) -> bool {
-        self.default_template.is_none() && self.port.is_none() && !self.no_color && !self.quiet
+        self.port.is_none() && !self.no_color && !self.quiet
     }
 }
 
@@ -68,10 +66,6 @@ fn parse_rc(contents: &str) -> CliResult<RcConfig> {
     };
 
     let mut cfg = RcConfig::default();
-
-    if let Some(toml::Value::String(s)) = table.get("default_template") {
-        cfg.default_template = Some(s.clone());
-    }
 
     if let Some(toml::Value::Integer(n)) = table.get("port") {
         if *n > 0 && *n <= 65535 {

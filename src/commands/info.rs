@@ -18,55 +18,47 @@ pub fn run() -> CliResult {
     output::print_heading(&format!("Project: {}", project_name));
     println!();
 
-    // Parse domain model
-    match parse_domain() {
-        Some(domain) => {
-            println!("  Solution:    {}", domain.solution_type);
-            println!("  Score type:  {}", domain.score_type);
-            println!();
+    let domain = parse_domain().map_err(CliError::general)?;
+    println!("  Solution:    {}", domain.solution_type);
+    println!("  Score type:  {}", domain.score_type);
+    println!();
 
-            if !domain.entities.is_empty() {
-                println!("  Entities:");
-                for entity in &domain.entities {
-                    let mut solvable_fields = Vec::new();
-                    solvable_fields.extend(
-                        entity
-                            .planning_vars
-                            .iter()
-                            .map(|field| format!("{} [standard]", field.field)),
-                    );
-                    solvable_fields.extend(
-                        entity
-                            .list_vars
-                            .iter()
-                            .map(|field| format!("{} [list]", field.field)),
-                    );
+    if !domain.entities.is_empty() {
+        println!("  Entities:");
+        for entity in &domain.entities {
+            let mut solvable_fields = Vec::new();
+            solvable_fields.extend(
+                entity
+                    .scalar_vars
+                    .iter()
+                    .map(|field| format!("{} [scalar]", field.field)),
+            );
+            solvable_fields.extend(
+                entity
+                    .list_vars
+                    .iter()
+                    .map(|field| format!("{} [list]", field.field)),
+            );
 
-                    if solvable_fields.is_empty() {
-                        println!("    - {}", entity.item_type);
-                    } else {
-                        println!(
-                            "    - {} (solvable fields: {})",
-                            entity.item_type,
-                            solvable_fields.join(", ")
-                        );
-                    }
-                }
-                println!();
-            }
-
-            if !domain.facts.is_empty() {
-                println!("  Facts:");
-                for fact in &domain.facts {
-                    println!("    - {}", fact.item_type);
-                }
-                println!();
+            if solvable_fields.is_empty() {
+                println!("    - {}", entity.item_type);
+            } else {
+                println!(
+                    "    - {} (solvable fields: {})",
+                    entity.item_type,
+                    solvable_fields.join(", ")
+                );
             }
         }
-        None => {
-            println!("  No planning solution found in src/domain/");
-            println!();
+        println!();
+    }
+
+    if !domain.facts.is_empty() {
+        println!("  Facts:");
+        for fact in &domain.facts {
+            println!("    - {}", fact.item_type);
         }
+        println!();
     }
 
     // List constraints

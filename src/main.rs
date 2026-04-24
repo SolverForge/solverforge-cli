@@ -4,6 +4,7 @@ use clap_complete::Shell;
 mod app_spec;
 mod commands;
 mod error;
+mod managed_block;
 mod output;
 mod rc;
 mod scaffold_target;
@@ -16,11 +17,18 @@ use scaffold_target::LONG_VERSION_TEXT;
 
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+fn parse_variable_kind(value: &str) -> Result<String, String> {
+    match value {
+        "scalar" => Ok("scalar".to_string()),
+        "list" => Ok("list".to_string()),
+        _ => Err("valid values: scalar, list".to_string()),
+    }
+}
+
 const EXAMPLES: &str = "\x1b[1mExamples:\x1b[0m
   solverforge new my-optimizer
   solverforge generate entity shift --planning-variable employee_idx
   solverforge generate constraint no_overlap --pair --hard
-  solverforge generate scaffold shift employee_idx:usize --entity --constraint no_overlap --pair
   solverforge server
   solverforge info
   solverforge check
@@ -123,15 +131,12 @@ enum Command {
     Routes,
     /// Manage solver configuration (solver.toml)
     #[command(
-        after_help = "Examples:\n  solverforge config show\n  solverforge config set termination.time_spent_seconds 60"
+        after_help = "Examples:\n  solverforge config show\n  solverforge config set termination.seconds_spent_limit 60"
     )]
     Config {
         #[command(subcommand)]
         subcommand: ConfigSubcommand,
     },
-    /// Interactive REPL console (deprecated compatibility alias)
-    #[command(hide = true)]
-    Console,
     /// Generate shell completions
     #[command(
         after_help = "Examples:\n  solverforge completions bash >> ~/.bashrc\n  solverforge completions zsh >> ~/.zshrc\n  solverforge completions fish > ~/.config/fish/completions/solverforge.fish"
@@ -146,9 +151,9 @@ enum Command {
 enum ConfigSubcommand {
     /// Print the contents of solver.toml
     Show,
-    /// Set a key in solver.toml (e.g. termination.time_spent_seconds = 60)
+    /// Set a key in solver.toml (e.g. termination.seconds_spent_limit = 60)
     Set {
-        /// Dotted key path (e.g. termination.time_spent_seconds)
+        /// Dotted key path (e.g. termination.seconds_spent_limit)
         key: String,
         /// New value
         value: String,
@@ -259,7 +264,7 @@ enum GenerateResource {
     },
     /// Add a planning variable field to an existing entity
     #[command(
-        after_help = "Examples:\n  solverforge generate variable employee_idx --entity Shift --kind standard --range employees --allows-unassigned\n  solverforge generate variable stops --entity Route --kind list --elements visits"
+        after_help = "Examples:\n  solverforge generate variable employee_idx --entity Shift --kind scalar --range employees --allows-unassigned\n  solverforge generate variable stops --entity Route --kind list --elements visits"
     )]
     Variable {
         /// Field name in snake_case (e.g. preferred_shift)
@@ -269,11 +274,11 @@ enum GenerateResource {
         #[arg(long, value_name = "ENTITY_TYPE")]
         entity: String,
 
-        /// Variable kind
-        #[arg(long, value_parser = ["standard", "list"])]
+        /// Variable kind (`scalar` or `list`)
+        #[arg(long, value_parser = parse_variable_kind)]
         kind: String,
 
-        /// Standard-variable value range collection (e.g. employees)
+        /// Scalar-variable value range collection (e.g. employees)
         #[arg(long, value_name = "FACT_COLLECTION")]
         range: Option<String>,
 
@@ -281,14 +286,14 @@ enum GenerateResource {
         #[arg(long, value_name = "FACT_COLLECTION")]
         elements: Option<String>,
 
-        /// Allow leaving the standard variable unassigned
+        /// Allow leaving the scalar variable unassigned
         #[arg(long, default_value_t = false)]
         allows_unassigned: bool,
     },
     /// Change the score type in the existing planning solution
     #[command(after_help = "Examples:\n  solverforge generate score HardSoftDecimalScore")]
     Score {
-        /// Score type (e.g. HardSoftScore, HardSoftDecimalScore, HardMediumSoftScore, SimpleScore)
+        /// Score type (e.g. HardSoftScore, HardSoftDecimalScore, HardMediumSoftScore, SoftScore, BendableScore<2, 3>)
         score_type: String,
     },
     /// Regenerate compiler-owned demo data from the project model
@@ -303,37 +308,6 @@ enum GenerateResource {
         /// Default dataset size exposed by the generated demo data
         #[arg(long, value_parser = ["small", "standard", "large"])]
         size: Option<String>,
-    },
-    /// Compound generator: entity + optional constraint + optional twin entity in one go
-    #[command(
-        after_help = "Examples:\n  solverforge generate scaffold shift employee_idx:usize --entity --constraint no_overlap --pair\n  solverforge generate scaffold task resource_idx:usize --entity"
-    )]
-    Scaffold {
-        /// Entity name in snake_case (e.g. shift)
-        name: String,
-
-        /// Fields in \"name:Type\" format. The first field becomes the planning variable.
-        fields: Vec<String>,
-
-        /// Also generate a planning entity for this name
-        #[arg(long)]
-        entity: bool,
-
-        /// Also generate a constraint with this name
-        #[arg(long, value_name = "CONSTRAINT_NAME")]
-        constraint: Option<String>,
-
-        /// Also generate a paired twin entity named `<name>_pair`
-        #[arg(long)]
-        pair: bool,
-
-        /// Overwrite if resources already exist
-        #[arg(long, short)]
-        force: bool,
-
-        /// Preview changes without writing files
-        #[arg(long)]
-        pretend: bool,
     },
 }
 
@@ -489,27 +463,6 @@ fn main() {
         Command::Config {
             subcommand: ConfigSubcommand::Set { key, value },
         } => commands::config::run_set(&key, &value),
-        Command::Console => commands::console::run(),
-        Command::Generate {
-            resource:
-                GenerateResource::Scaffold {
-                    name,
-                    fields,
-                    entity,
-                    constraint,
-                    pair,
-                    force,
-                    pretend,
-                },
-        } => commands::generate_scaffold::run(
-            &name,
-            &fields,
-            entity,
-            constraint.as_deref(),
-            pair,
-            force,
-            pretend,
-        ),
         Command::Completions { shell } => {
             let mut cmd = Cli::command();
             clap_complete::generate(shell, &mut cmd, "solverforge", &mut std::io::stdout());

@@ -1,339 +1,476 @@
-use std::fs;
-use std::path::Path;
+use std::collections::{BTreeMap, BTreeSet};
 
-use super::utils::{find_file_for_type, pluralize};
-use crate::commands::generate_constraint::parse_domain;
-use crate::output;
+use crate::managed_block;
 
-/// Adds `mod <name>; pub use <name>::<Pascal>;` to `src/domain/mod.rs`.
-pub(crate) fn update_domain_mod(mod_name: &str, pascal: &str) -> Result<(), String> {
-    let mod_path = Path::new("src/domain/mod.rs");
-    if !mod_path.exists() {
-        return Ok(()); // nothing to wire
-    }
+const DOMAIN_EXPORTS_BLOCK: &str = "domain-exports";
+const SOLUTION_IMPORTS_BLOCK: &str = "solution-imports";
+const SOLUTION_COLLECTIONS_BLOCK: &str = "solution-collections";
+const SOLUTION_CONSTRUCTOR_PARAMS_BLOCK: &str = "solution-constructor-params";
+const SOLUTION_CONSTRUCTOR_INIT_BLOCK: &str = "solution-constructor-init";
+const ENTITY_VARIABLES_BLOCK: &str = "entity-variables";
+const ENTITY_VARIABLE_INIT_BLOCK: &str = "entity-variable-init";
 
-    let src = fs::read_to_string(mod_path)
-        .map_err(|e| format!("failed to read src/domain/mod.rs: {}", e))?;
+type DomainUseMap = BTreeMap<String, Vec<String>>;
 
-    let mod_line = format!("mod {};", mod_name);
-    let use_line = format!("pub use {}::{};", mod_name, pascal);
-
-    if src.contains(&mod_line) {
-        return Ok(()); // already present
-    }
-
-    let new_src = format!("{}\n{}\n{}\n", src.trim_end(), mod_line, use_line);
-    fs::write(mod_path, new_src).map_err(|e| format!("failed to write src/domain/mod.rs: {}", e))
+#[derive(Debug, Clone)]
+struct DomainExportSurface {
+    module_names: Vec<String>,
+    use_map: DomainUseMap,
 }
 
-/// Inserts a `#[annotation] pub <plural>: Vec<Type>` field into the solution struct,
-/// adds a `use super::Type;` import, and updates the `new()` constructor.
-pub(crate) fn wire_collection_into_solution(
-    name: &str,
+pub(crate) fn rewrite_domain_mod_source(
+    src: &str,
+    mod_name: &str,
     pascal: &str,
-    annotation: &str,
-) -> Result<(), String> {
-    let domain = parse_domain();
-    let solution_type = match &domain {
-        Some(d) => d.solution_type.clone(),
-        None => return Ok(()), // no solution yet, nothing to wire
-    };
-
-    let domain_dir = Path::new("src/domain");
-    let solution_file = match find_file_for_type(domain_dir, &solution_type) {
-        Ok(f) => f,
-        Err(_) => return Ok(()),
-    };
-
-    let src = fs::read_to_string(&solution_file)
-        .map_err(|e| format!("failed to read {}: {}", solution_file.display(), e))?;
-
-    let plural = pluralize(name);
-    let field_block = format!(
-        "    #[{}]\n    pub {}: Vec<{}>,",
-        annotation, plural, pascal
-    );
-
-    // Skip if already wired
-    if src.contains(&format!("pub {}: Vec<{}>", plural, pascal)) {
-        return Ok(());
+    solution_module_name: Option<&str>,
+) -> Result<String, String> {
+    let mut surface = DomainExportSurface::parse(src)?;
+    let module_names = &mut surface.module_names;
+    let use_map = &mut surface.use_map;
+    if !module_names.iter().any(|existing| existing == mod_name) {
+        module_names.push(mod_name.to_string());
+    }
+    ensure_primary_use_line(use_map, mod_name, pascal);
+    if let Some(solution_module_name) = solution_module_name {
+        move_name_to_end(module_names, solution_module_name);
     }
 
-    let new_src = insert_field_and_import(&src, &solution_type, pascal, &plural, &field_block)?;
-    fs::write(&solution_file, new_src)
-        .map_err(|e| format!("failed to write {}: {}", solution_file.display(), e))?;
+    managed_block::replace_block(
+        src,
+        DOMAIN_EXPORTS_BLOCK,
+        &render_domain_export_block(module_names, use_map)?,
+    )
+}
 
-    output::print_update(solution_file.to_str().unwrap());
+pub(crate) fn remove_domain_mod_entry_source(
+    src: &str,
+    mod_name: &str,
+    solution_module_name: Option<&str>,
+) -> Result<String, String> {
+    let mut surface = DomainExportSurface::parse(src)?;
+    let module_names = &mut surface.module_names;
+    let use_map = &mut surface.use_map;
+    module_names.retain(|name| name != mod_name);
+    use_map.remove(mod_name);
+    if let Some(solution_module_name) = solution_module_name {
+        move_name_to_end(module_names, solution_module_name);
+    }
+
+    managed_block::replace_block(
+        src,
+        DOMAIN_EXPORTS_BLOCK,
+        &render_domain_export_block(module_names, use_map)?,
+    )
+}
+
+pub(crate) fn validate_domain_mod_source(src: &str) -> Result<Vec<String>, String> {
+    let manifest_body = planning_model_manifest_body(src)?;
+    validate_planning_model_manifest(manifest_body)?;
+    Ok(DomainExportSurface::parse(manifest_body)?.module_names)
+}
+
+fn planning_model_manifest_body(src: &str) -> Result<&str, String> {
+    let macro_start = src.find("solverforge::planning_model!").ok_or_else(|| {
+        "src/domain/mod.rs must declare solverforge::planning_model! { ... }".to_string()
+    })?;
+    let after_macro = macro_start + "solverforge::planning_model!".len();
+    let open_offset = src[after_macro..].find('{').ok_or_else(|| {
+        "src/domain/mod.rs must declare solverforge::planning_model! { ... }".to_string()
+    })?;
+    let open = after_macro + open_offset;
+    let close = matching_brace(src, open).ok_or_else(|| {
+        "src/domain/mod.rs planning_model! manifest has an unclosed body".to_string()
+    })?;
+
+    Ok(&src[open + 1..close])
+}
+
+fn matching_brace(src: &str, open: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for (offset, ch) in src[open..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(open + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn validate_planning_model_manifest(manifest_body: &str) -> Result<(), String> {
+    if !manifest_body.contains("root = \"src/domain\"") {
+        return Err(
+            "src/domain/mod.rs planning_model! manifest must set root = \"src/domain\"".into(),
+        );
+    }
     Ok(())
 }
 
-/// Inserts the field block before the `#[planning_score]` field (or before the closing `}`),
-/// adds the import, and patches the `new()` constructor.
+fn render_domain_export_block(
+    module_names: &[String],
+    use_map: &DomainUseMap,
+) -> Result<String, String> {
+    if module_names.is_empty() {
+        return Ok(String::new());
+    }
+
+    let module_lines = module_names
+        .iter()
+        .map(|name| format!("mod {name};"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let use_lines = module_names
+        .iter()
+        .map(|name| managed_use_lines_for(use_map, name))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(format!("{module_lines}\n\n{use_lines}"))
+}
+
+fn parse_managed_mod_line(line: &str) -> Option<&str> {
+    line.strip_prefix("mod ")?.strip_suffix(';')
+}
+
+fn parse_managed_use_line(line: &str) -> Option<(String, &str)> {
+    let rest = line.strip_prefix("pub use ")?;
+    let rest = rest.strip_prefix("self::").unwrap_or(rest);
+    let module_name = if let Some((module_name, _)) = rest.split_once("::") {
+        module_name
+    } else if let Some((module_name, _)) = rest.split_once(' ') {
+        module_name
+    } else {
+        rest.strip_suffix(';')?
+    };
+    if !is_simple_ident(module_name) {
+        return None;
+    }
+    Some((module_name.to_string(), line))
+}
+
+fn move_name_to_end(names: &mut Vec<String>, target: &str) {
+    if let Some(index) = names.iter().position(|name| name == target) {
+        let name = names.remove(index);
+        names.push(name);
+    }
+}
+
+fn push_use_line(use_map: &mut DomainUseMap, module_name: &str, line: String) {
+    let lines = use_map.entry(module_name.to_string()).or_default();
+    lines.push(line);
+}
+
+fn ensure_primary_use_line(use_map: &mut DomainUseMap, module_name: &str, type_name: &str) {
+    let lines = use_map.entry(module_name.to_string()).or_default();
+    if !lines
+        .iter()
+        .any(|existing| is_primary_use_line(module_name, type_name, existing))
+    {
+        lines.insert(0, canonical_primary_use_line(module_name, type_name));
+    }
+}
+
+fn managed_use_lines_for(use_map: &DomainUseMap, module_name: &str) -> Result<Vec<String>, String> {
+    use_map
+        .get(module_name)
+        .cloned()
+        .filter(|lines| !lines.is_empty())
+        .ok_or_else(|| format!("missing managed re-export for module '{module_name}'"))
+}
+
+impl DomainExportSurface {
+    fn parse(src: &str) -> Result<Self, String> {
+        let block = managed_block::read_block(src, DOMAIN_EXPORTS_BLOCK)?;
+        let mut module_names = Vec::new();
+        let mut use_map = DomainUseMap::new();
+        let mut seen_modules = BTreeSet::new();
+        let mut seen_use_lines = BTreeSet::new();
+
+        for line in block.lines().map(str::trim).filter(|line| !line.is_empty()) {
+            if let Some(name) = parse_managed_mod_line(line) {
+                if !seen_modules.insert(name.to_string()) {
+                    return Err(format!(
+                        "duplicate managed module entry for module '{name}'"
+                    ));
+                }
+                module_names.push(name.to_string());
+                continue;
+            }
+            if let Some((name, use_line)) = parse_managed_use_line(line) {
+                if !seen_use_lines.insert(use_line.trim().to_string()) {
+                    return Err(format!(
+                        "duplicate managed re-export line in block '{DOMAIN_EXPORTS_BLOCK}': {use_line}"
+                    ));
+                }
+                push_use_line(&mut use_map, &name, use_line.to_string());
+                continue;
+            }
+            return Err(format!(
+                "unsupported line in managed domain block '{DOMAIN_EXPORTS_BLOCK}': {line}"
+            ));
+        }
+
+        for name in use_map.keys() {
+            if !seen_modules.contains(name) {
+                return Err(format!(
+                    "managed domain block contains a re-export for undeclared module '{name}'"
+                ));
+            }
+        }
+
+        for name in &module_names {
+            let use_lines = use_map.get(name).ok_or_else(|| {
+                format!(
+                    "managed domain block is missing the primary re-export '{}' for module '{name}'",
+                    canonical_primary_use_line(name, &super::snake_to_pascal(name))
+                )
+            })?;
+            let type_name = super::snake_to_pascal(name);
+            if !use_lines
+                .iter()
+                .any(|line| is_primary_use_line(name, &type_name, line))
+            {
+                return Err(format!(
+                    "managed domain block is missing the primary re-export '{}' for module '{name}'",
+                    canonical_primary_use_line(name, &type_name)
+                ));
+            }
+        }
+
+        Ok(Self {
+            module_names,
+            use_map,
+        })
+    }
+}
+
+fn canonical_primary_use_line(module_name: &str, type_name: &str) -> String {
+    format!("pub use {module_name}::{type_name};")
+}
+
+fn is_primary_use_line(module_name: &str, type_name: &str, line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed == canonical_primary_use_line(module_name, type_name)
+        || trimmed == format!("pub use self::{module_name}::{type_name};")
+}
+
+fn is_simple_ident(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+#[cfg(test)]
 pub(crate) fn insert_field_and_import(
     src: &str,
-    solution_type: &str,
+    _solution_type: &str,
     pascal: &str,
     _plural: &str,
     field_block: &str,
 ) -> Result<String, String> {
-    // 1. Add import after last `use` line (or at top of file)
-    let src = add_import(src, &format!("use super::{};", pascal));
-
-    // 2. Insert field into struct before `#[planning_score]` or before last field's `}`
-    let src = insert_struct_field(&src, solution_type, field_block)?;
-
-    rebuild_solution_constructor(&src)
+    let (annotation, field_name, _type_name) = parse_collection_field_block(field_block)?;
+    wire_solution_collection_source(src, pascal, &field_name, &annotation)
 }
 
-fn rebuild_solution_constructor(src: &str) -> Result<String, String> {
-    let collection_fields: Vec<(String, String)> =
-        src.lines().filter_map(parse_solution_vec_field).collect();
-    let new_signature = if collection_fields.is_empty() {
-        "    pub fn new() -> Self {".to_string()
-    } else {
-        format!(
-            "    pub fn new({}) -> Self {{",
-            collection_fields
-                .iter()
-                .map(|(field, ty)| format!("{field}: Vec<{ty}>"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    };
-    let new_body = if collection_fields.is_empty() {
-        "        Self { score: None }".to_string()
-    } else {
-        format!(
-            "        Self {{ {}, score: None }}",
-            collection_fields
-                .iter()
-                .map(|(field, _)| format!("{field}: {field}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    };
-
-    let lines: Vec<String> = src.lines().map(|line| line.to_string()).collect();
-    let fn_start = lines
-        .iter()
-        .position(|line| line.contains("pub fn new("))
-        .ok_or_else(|| "could not find solution constructor".to_string())?;
-    let mut fn_end = None;
-    let mut depth = 0i32;
-    for (idx, line) in lines.iter().enumerate().skip(fn_start) {
-        depth += line.chars().filter(|&c| c == '{').count() as i32;
-        depth -= line.chars().filter(|&c| c == '}').count() as i32;
-        if idx > fn_start && depth == 0 {
-            fn_end = Some(idx);
-            break;
-        }
-    }
-    let fn_end = fn_end.ok_or_else(|| "could not find constructor end".to_string())?;
-
-    let mut out = Vec::new();
-    out.extend(lines[..fn_start].iter().cloned());
-    out.push(new_signature);
-    out.push(new_body);
-    out.push("    }".to_string());
-    out.extend(lines[fn_end + 1..].iter().cloned());
-    Ok(out.join("\n") + "\n")
-}
-
-fn parse_solution_vec_field(line: &str) -> Option<(String, String)> {
-    let trimmed = line.trim();
-    if !trimmed.starts_with("pub ") || trimmed.contains("score:") {
-        return None;
-    }
-    let trimmed = trimmed.trim_start_matches("pub ").trim_end_matches(',');
-    let colon = trimmed.find(':')?;
-    let field = trimmed[..colon].trim().to_string();
-    let type_part = trimmed[colon + 1..].trim();
-    if type_part.starts_with("Vec<") && type_part.ends_with('>') {
-        Some((field, type_part[4..type_part.len() - 1].to_string()))
-    } else {
-        None
-    }
-}
-
-pub(crate) fn add_import(src: &str, import: &str) -> String {
-    if src.contains(import) {
-        return src.to_string();
-    }
-    // Insert after the last `use ` line
-    let mut lines: Vec<&str> = src.lines().collect();
-    let last_use = lines
-        .iter()
-        .rposition(|l| l.trim_start().starts_with("use "));
-    let insert_at = last_use.map(|i| i + 1).unwrap_or(0);
-    lines.insert(insert_at, import);
-    lines.join("\n") + "\n"
-}
-
-pub(crate) fn insert_struct_field(
+pub(crate) fn unwire_collection_from_solution_source(
     src: &str,
-    _solution_type: &str,
-    field_block: &str,
+    field_name: &str,
+    type_name: &str,
 ) -> Result<String, String> {
-    // Insert before `#[planning_score]` if it exists, else before the last `}` of a struct block
-    if let Some(pos) = src.find("    #[planning_score]") {
-        let mut result = src.to_string();
-        result.insert_str(pos, &format!("{}\n", field_block));
-        return Ok(result);
+    let import_line = format!("use super::{type_name};");
+    let param_line = format!("        {field_name}: Vec<{type_name}>,");
+    let field_line = format!("pub {field_name}: Vec<{type_name}>");
+    let init_none = format!("{field_name}: None,");
+    let init_vec = format!("{field_name}: Vec::new(),");
+    let init_direct = format!("{field_name},");
+
+    let src = remove_exact_line_from_block(src, SOLUTION_IMPORTS_BLOCK, &import_line)?;
+    let src = remove_entry_from_block(&src, SOLUTION_COLLECTIONS_BLOCK, |line| {
+        line.trim().starts_with(&field_line)
+    })?;
+    let src = remove_exact_line_from_block(&src, SOLUTION_CONSTRUCTOR_PARAMS_BLOCK, &param_line)?;
+    remove_entry_from_block(src.as_str(), SOLUTION_CONSTRUCTOR_INIT_BLOCK, |line| {
+        let trimmed = line.trim();
+        trimmed == init_none || trimmed == init_vec || trimmed == init_direct
+    })
+}
+
+pub(crate) fn wire_solution_collection_source(
+    src: &str,
+    pascal: &str,
+    field_name: &str,
+    annotation: &str,
+) -> Result<String, String> {
+    let import_line = format!("use super::{pascal};");
+    let field_line = format!("    pub {field_name}: Vec<{pascal}>,");
+    if block_contains(src, SOLUTION_COLLECTIONS_BLOCK, |line| {
+        line.trim() == field_line.trim()
+    })? {
+        return Ok(src.to_string());
     }
 
-    // Find the closing `}` of the struct definition by locating `pub struct` and tracking brace depth
-    let lines: Vec<&str> = src.lines().collect();
-    let struct_line = lines.iter().position(|l| l.contains("pub struct "));
-    if let Some(start) = struct_line {
-        let mut depth = 0;
-        let mut struct_close = None;
-        for (i, line) in lines.iter().enumerate().skip(start) {
-            for ch in line.chars() {
-                match ch {
-                    '{' => depth += 1,
-                    '}' => {
-                        depth -= 1;
-                        if depth == 0 {
-                            struct_close = Some(i);
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if struct_close.is_some() {
-                break;
-            }
-        }
-        if let Some(i) = struct_close {
-            let mut result_lines = lines.to_vec();
-            let field_lines: Vec<&str> = field_block.lines().collect();
-            for (j, fl) in field_lines.iter().enumerate() {
-                result_lines.insert(i + j, fl);
-            }
-            return Ok(result_lines.join("\n") + "\n");
-        }
-    }
+    let annotation_line = format!("    #[{annotation}]");
+    let param_line = format!("        {field_name}: Vec<{pascal}>,");
+    let init_line = format!("            {field_name},");
 
-    Err("could not find insertion point in solution struct".to_string())
+    let src = append_unique_line(src, SOLUTION_IMPORTS_BLOCK, &import_line)?;
+    let src = append_unique_lines(
+        &src,
+        SOLUTION_COLLECTIONS_BLOCK,
+        &[annotation_line, field_line],
+    )?;
+    let src = append_unique_line(&src, SOLUTION_CONSTRUCTOR_PARAMS_BLOCK, &param_line)?;
+    append_unique_line(&src, SOLUTION_CONSTRUCTOR_INIT_BLOCK, &init_line)
 }
 
 #[cfg(test)]
-/// Adds a `#[planning_variable]` field to an existing entity struct and patches `new()`.
+fn parse_collection_field_block(field_block: &str) -> Result<(String, String, String), String> {
+    let lines = field_block
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    if lines.len() != 2 {
+        return Err(
+            "collection field block must contain exactly an attribute and a field".to_string(),
+        );
+    }
+
+    let annotation = lines[0]
+        .strip_prefix("#[")
+        .and_then(|value| value.strip_suffix(']'))
+        .ok_or_else(|| "collection field block is missing a Rust attribute".to_string())?;
+
+    let field_line = lines[1]
+        .strip_prefix("pub ")
+        .and_then(|value| value.strip_suffix(','))
+        .ok_or_else(|| "collection field block is missing a public Vec field".to_string())?;
+    let (field_name, ty_part) = field_line
+        .split_once(':')
+        .ok_or_else(|| "collection field block has an invalid field declaration".to_string())?;
+    let ty_part = ty_part.trim();
+    let ty_name = ty_part
+        .strip_prefix("Vec<")
+        .and_then(|value| value.strip_suffix('>'))
+        .ok_or_else(|| "collection field block must declare a Vec collection".to_string())?;
+
+    Ok((
+        annotation.to_string(),
+        field_name.trim().to_string(),
+        ty_name.to_string(),
+    ))
+}
+
+fn append_unique_line(src: &str, label: &str, line: &str) -> Result<String, String> {
+    let mut lines = read_non_empty_block_lines(src, label)?;
+    if !lines.iter().any(|existing| existing.trim() == line.trim()) {
+        lines.push(line.to_string());
+    }
+    managed_block::replace_block(src, label, &lines.join("\n"))
+}
+
+fn append_unique_lines(src: &str, label: &str, new_lines: &[String]) -> Result<String, String> {
+    let mut lines = read_non_empty_block_lines(src, label)?;
+    lines.extend(new_lines.iter().cloned());
+    managed_block::replace_block(src, label, &lines.join("\n"))
+}
+
+fn remove_exact_line_from_block(src: &str, label: &str, line: &str) -> Result<String, String> {
+    let mut lines = read_non_empty_block_lines(src, label)?;
+    lines.retain(|existing| existing.trim() != line.trim());
+    managed_block::replace_block(src, label, &lines.join("\n"))
+}
+
+fn remove_entry_from_block<F>(src: &str, label: &str, mut matches: F) -> Result<String, String>
+where
+    F: FnMut(&str) -> bool,
+{
+    let mut lines = read_non_empty_block_lines(src, label)?;
+    if let Some(index) = lines.iter().position(|line| matches(line)) {
+        let start = find_entry_start(&lines, index);
+        lines.drain(start..=index);
+    }
+    managed_block::replace_block(src, label, &lines.join("\n"))
+}
+
+fn block_contains<F>(src: &str, label: &str, mut predicate: F) -> Result<bool, String>
+where
+    F: FnMut(&str) -> bool,
+{
+    Ok(read_non_empty_block_lines(src, label)?
+        .iter()
+        .any(|line| predicate(line)))
+}
+
+fn read_non_empty_block_lines(src: &str, label: &str) -> Result<Vec<String>, String> {
+    Ok(managed_block::read_block(src, label)?
+        .lines()
+        .map(|line| line.to_string())
+        .filter(|line| !line.trim().is_empty())
+        .collect())
+}
+
+fn find_entry_start(lines: &[String], index: usize) -> usize {
+    let mut start = index;
+    while start > 0 && is_attached_prefix_line(lines[start - 1].trim()) {
+        start -= 1;
+    }
+    start
+}
+
+fn is_attached_prefix_line(line: &str) -> bool {
+    line.starts_with("#[")
+        || line.starts_with("#!")
+        || line.starts_with("///")
+        || line.starts_with("//")
+        || line.starts_with("/*")
+        || line.starts_with('*')
+        || line.starts_with("*/")
+}
+
+#[cfg(test)]
 pub(crate) fn inject_planning_variable(
     src: &str,
     entity: &str,
     field: &str,
 ) -> Result<String, String> {
-    inject_standard_variable(src, entity, field, "", true)
+    inject_scalar_variable(src, entity, field, "", true)
 }
 
-pub(crate) fn inject_standard_variable(
+pub(crate) fn inject_scalar_variable(
     src: &str,
     entity: &str,
     field: &str,
     range: &str,
     allows_unassigned: bool,
 ) -> Result<String, String> {
+    let field_line = format!("    pub {field}: Option<usize>,");
+    if block_contains(src, ENTITY_VARIABLES_BLOCK, |line| {
+        line.trim() == field_line.trim()
+    })? {
+        return Err(format!("field '{field}' already exists in {entity}"));
+    }
+
     let annotation = if range.is_empty() {
-        format!(
-            "    #[planning_variable(allows_unassigned = {})]",
-            allows_unassigned
-        )
+        format!("    #[planning_variable(allows_unassigned = {allows_unassigned})]")
     } else {
         format!(
-            "    #[planning_variable(value_range = \"{}\", allows_unassigned = {})]",
-            range, allows_unassigned
+            "    #[planning_variable(value_range = \"{range}\", allows_unassigned = {allows_unassigned})]"
         )
     };
-    let field_block = format!("{}\n    pub {}: Option<usize>,", annotation, field);
-    if src.contains(&format!("pub {}: Option<usize>", field)) {
-        return Err(format!("field '{}' already exists in {}", field, entity));
-    }
+    let init_line = format!("            {field}: None,");
 
-    // Insert before closing `}` of the struct
-    let src = insert_struct_field(src, entity, &field_block)?;
-
-    // Patch new(): add `, <field>: None` to Self { ... }
-    // Actually patch Self init with `field: None`
-    let field_none = format!("{}: None,", field);
-    let src = if src.contains(&field_none) {
-        src
-    } else {
-        add_self_none_init(&src, field)
-    };
-
-    Ok(src)
-}
-
-pub(crate) fn add_self_none_init(src: &str, field: &str) -> String {
-    let field_init = format!("{}: None,", field);
-    if src.contains(&field_init) {
-        return src.to_string();
-    }
-
-    // Find `Self {` that is a struct literal (has content after `{` on the same line),
-    // not a block opener like `-> Self {` (where `{` is at end of line).
-    let self_pos = src
-        .match_indices("Self {")
-        .find(|(pos, _)| {
-            let after_brace = &src[pos + "Self {".len()..];
-            // It's a struct literal if the char immediately after `{` is not `\n` or `\r`
-            after_brace
-                .chars()
-                .next()
-                .map(|c| c != '\n' && c != '\r')
-                .unwrap_or(false)
-        })
-        .map(|(pos, _)| pos);
-
-    if let Some(self_pos) = self_pos {
-        let after_self = &src[self_pos..];
-        let mut depth = 0;
-        let mut close_pos = None;
-        for (i, ch) in after_self.char_indices() {
-            match ch {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        close_pos = Some(self_pos + i);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        if let Some(close) = close_pos {
-            let indent = "            ";
-            // Check if we need to add a comma to the previous field
-            let before_close = &src[..close];
-            let trimmed = before_close.trim_end();
-            let needs_comma = !trimmed.ends_with(',') && !trimmed.ends_with('{');
-
-            if needs_comma {
-                // Find where to add the comma (right before any whitespace at the end)
-                let content_end = before_close.trim_end().len();
-                let with_comma = format!("{},", &src[..content_end]);
-                return format!(
-                    "{}\n{}{}: None,\n{}",
-                    with_comma,
-                    indent,
-                    field,
-                    &src[close..]
-                );
-            } else {
-                return format!(
-                    "{}{}{}: None,\n{}",
-                    &src[..close],
-                    indent,
-                    field,
-                    &src[close..]
-                );
-            }
-        }
-    }
-    src.to_string()
+    let src = append_unique_lines(src, ENTITY_VARIABLES_BLOCK, &[annotation, field_line])?;
+    append_unique_line(&src, ENTITY_VARIABLE_INIT_BLOCK, &init_line)
 }
 
 pub(crate) fn inject_list_variable(
@@ -342,117 +479,35 @@ pub(crate) fn inject_list_variable(
     field: &str,
     elements: &str,
 ) -> Result<String, String> {
-    let field_block = format!(
-        "    #[planning_list_variable(element_collection = \"{}\")]\n    pub {}: Vec<usize>,",
-        elements, field
-    );
-    if src.contains(&format!("pub {}: Vec<usize>", field)) {
-        return Err(format!("field '{}' already exists in {}", field, entity));
+    let field_line = format!("    pub {field}: Vec<usize>,");
+    if block_contains(src, ENTITY_VARIABLES_BLOCK, |line| {
+        line.trim() == field_line.trim()
+    })? {
+        return Err(format!("field '{field}' already exists in {entity}"));
     }
 
-    let src = insert_struct_field(src, entity, &field_block)?;
-    let field_init = format!("{}: Vec::new(),", field);
-    let src = if src.contains(&field_init) {
-        src
-    } else {
-        add_self_vec_init(&src, field)
-    };
+    let annotation = format!("    #[planning_list_variable(element_collection = \"{elements}\")]");
+    let init_line = format!("            {field}: Vec::new(),");
 
-    Ok(src)
+    let src = append_unique_lines(src, ENTITY_VARIABLES_BLOCK, &[annotation, field_line])?;
+    append_unique_line(&src, ENTITY_VARIABLE_INIT_BLOCK, &init_line)
 }
 
 pub(crate) fn remove_variable_field(src: &str, field: &str) -> Result<String, String> {
-    if !src.contains(&format!("pub {}", field)) {
-        return Err(format!("field '{}' not found", field));
+    let field_prefix = format!("pub {field}:");
+    if !block_contains(src, ENTITY_VARIABLES_BLOCK, |line| {
+        line.trim().starts_with(&field_prefix)
+    })? {
+        return Err(format!("field '{field}' not found"));
     }
 
-    let mut lines: Vec<String> = src.lines().map(|line| line.to_string()).collect();
-    let mut i = 0;
-    while i < lines.len() {
-        let trimmed = lines[i].trim().to_string();
-        if trimmed.starts_with(&format!("pub {}:", field)) {
-            let mut start = i;
-            while start > 0 && lines[start - 1].trim_start().starts_with("#[") {
-                start -= 1;
-            }
-            lines.drain(start..=i);
-            i = start;
-            continue;
-        }
-        if trimmed.contains(&format!("{}: None,", field))
-            || trimmed.contains(&format!("{}: Vec::new(),", field))
-        {
-            lines.remove(i);
-            continue;
-        }
-        i += 1;
-    }
-
-    Ok(lines.join("\n") + "\n")
-}
-
-fn add_self_vec_init(src: &str, field: &str) -> String {
-    let field_init = format!("{}: Vec::new(),", field);
-    if src.contains(&field_init) {
-        return src.to_string();
-    }
-
-    let self_pos = src
-        .match_indices("Self {")
-        .find(|(pos, _)| {
-            let after_brace = &src[pos + "Self {".len()..];
-            after_brace
-                .chars()
-                .next()
-                .map(|c| c != '\n' && c != '\r')
-                .unwrap_or(false)
-        })
-        .map(|(pos, _)| pos);
-
-    if let Some(self_pos) = self_pos {
-        let after_self = &src[self_pos..];
-        let mut depth = 0;
-        let mut close_pos = None;
-        for (i, ch) in after_self.char_indices() {
-            match ch {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        close_pos = Some(self_pos + i);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-        if let Some(close) = close_pos {
-            let indent = "            ";
-            let before_close = &src[..close];
-            let trimmed = before_close.trim_end();
-            let needs_comma = !trimmed.ends_with(',') && !trimmed.ends_with('{');
-            if needs_comma {
-                let content_end = before_close.trim_end().len();
-                let with_comma = format!("{},", &src[..content_end]);
-                return format!(
-                    "{}\n{}{}: Vec::new(),\n{}",
-                    with_comma,
-                    indent,
-                    field,
-                    &src[close..]
-                );
-            }
-            return format!(
-                "{}{}{}: Vec::new(),\n{}",
-                &src[..close],
-                indent,
-                field,
-                &src[close..]
-            );
-        }
-    }
-
-    src.to_string()
+    let src = remove_entry_from_block(src, ENTITY_VARIABLES_BLOCK, |line| {
+        line.trim().starts_with(&field_prefix)
+    })?;
+    remove_entry_from_block(src.as_str(), ENTITY_VARIABLE_INIT_BLOCK, |line| {
+        let trimmed = line.trim();
+        trimmed == format!("{field}: None,") || trimmed == format!("{field}: Vec::new(),")
+    })
 }
 
 /// Replaces the score type in the solution file.
@@ -461,11 +516,53 @@ pub(crate) fn replace_score_type(
     old_score: &str,
     new_score: &str,
 ) -> Result<String, String> {
-    if !src.contains(old_score) {
+    let updated = if old_score.chars().all(is_rust_identifier_char) {
+        replace_identifier(src, old_score, new_score)
+    } else {
+        src.replace(old_score, new_score)
+    };
+    if updated == src {
         return Err(format!(
-            "score type '{}' not found in solution file",
-            old_score
+            "score type '{old_score}' not found in solution file"
         ));
     }
-    Ok(src.replace(old_score, new_score))
+    Ok(updated)
+}
+
+fn replace_identifier(src: &str, from: &str, to: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    let mut start = 0;
+
+    for (idx, _) in src.match_indices(from) {
+        let before = src[..idx].chars().next_back();
+        let after = src[idx + from.len()..].chars().next();
+        if before.is_some_and(is_rust_identifier_char) || after.is_some_and(is_rust_identifier_char)
+        {
+            continue;
+        }
+        out.push_str(&src[start..idx]);
+        out.push_str(to);
+        start = idx + from.len();
+    }
+
+    out.push_str(&src[start..]);
+    out
+}
+
+fn is_rust_identifier_char(ch: char) -> bool {
+    ch == '_' || ch.is_ascii_alphanumeric()
+}
+
+#[cfg(test)]
+pub(crate) fn add_import(src: &str, import: &str) -> String {
+    if src.contains(import) {
+        return src.to_string();
+    }
+    let mut lines: Vec<&str> = src.lines().collect();
+    let last_use = lines
+        .iter()
+        .rposition(|line| line.trim_start().starts_with("use "));
+    let insert_at = last_use.map(|index| index + 1).unwrap_or(0);
+    lines.insert(insert_at, import);
+    lines.join("\n") + "\n"
 }

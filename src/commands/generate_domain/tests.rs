@@ -1,9 +1,10 @@
 use super::{
     generators::{generate_entity, generate_fact, generate_solution},
-    run::{generate_data_loader_stub, remove_default_scaffold},
+    run::remove_neutral_scaffold,
     utils::{pluralize, snake_to_pascal, validate_score_type},
     wiring::{add_import, replace_score_type},
 };
+use crate::managed_block;
 use crate::test_support;
 
 #[test]
@@ -33,24 +34,29 @@ fn test_validate_score_type() {
     assert!(validate_score_type("HardSoftScore").is_ok());
     assert!(validate_score_type("HardSoftDecimalScore").is_ok());
     assert!(validate_score_type("HardMediumSoftScore").is_ok());
-    assert!(validate_score_type("SimpleScore").is_ok());
-    assert!(validate_score_type("BendableScore").is_ok());
+    assert!(validate_score_type("SoftScore").is_ok());
+    assert!(validate_score_type("BendableScore<2, 3>").is_ok());
+    assert!(validate_score_type("SimpleScore").is_err());
+    assert!(validate_score_type("BendableScore").is_err());
     assert!(validate_score_type("FakeScore").is_err());
 }
 
 #[test]
 fn test_generate_entity_no_var() {
-    let src = generate_entity("Shift", None, &[]);
+    let src = generate_entity("Shift", None, &[]).expect("built-in entity template should render");
     assert!(src.contains("#[planning_entity]"));
     assert!(src.contains("pub struct Shift"));
     assert!(src.contains("#[planning_id]"));
     assert!(src.contains("pub id: String"));
     assert!(!src.contains("#[planning_variable]"));
+    assert!(src.contains("@solverforge:begin entity-variables"));
+    assert!(src.contains("@solverforge:end entity-variable-init"));
 }
 
 #[test]
 fn test_generate_entity_with_var() {
-    let src = generate_entity("Shift", Some("employee_idx"), &[]);
+    let src = generate_entity("Shift", Some("employee_idx"), &[])
+        .expect("built-in entity template should render");
     assert!(src.contains("#[planning_variable(allows_unassigned = true)]"));
     assert!(src.contains("pub employee_idx: Option<usize>"));
     assert!(src.contains("employee_idx: None"));
@@ -68,11 +74,60 @@ fn test_generate_fact() {
 
 #[test]
 fn test_generate_solution() {
-    let src = generate_solution("Schedule", "HardSoftDecimalScore");
-    assert!(src.contains("#[planning_solution]"));
+    let src = generate_solution("Schedule", "HardSoftDecimalScore")
+        .expect("built-in solution template should render");
+    assert!(src.contains("#[planning_solution("));
+    assert!(src.contains("constraints = \"crate::constraints::create_constraints\""));
+    assert!(src.contains("solver_toml = \"../../solver.toml\""));
     assert!(src.contains("pub struct Schedule"));
     assert!(src.contains("#[planning_score]"));
     assert!(src.contains("pub score: Option<HardSoftDecimalScore>"));
+    assert!(src.contains("@solverforge:begin solution-collections"));
+    assert!(src.contains("@solverforge:begin solution-constructor-init"));
+}
+
+#[test]
+fn test_generate_entity_output_satisfies_managed_block_contract() {
+    let src = generate_entity("Shift", Some("employee_idx"), &[])
+        .expect("built-in entity template should render");
+    managed_block::require_blocks(&src, managed_block::ENTITY_REQUIRED_BLOCKS)
+        .expect("entity output should keep canonical managed blocks");
+}
+
+#[test]
+fn test_generate_solution_output_satisfies_managed_block_contract() {
+    let src = generate_solution("Schedule", "HardSoftDecimalScore")
+        .expect("built-in solution template should render");
+    managed_block::require_blocks(&src, managed_block::SOLUTION_REQUIRED_BLOCKS)
+        .expect("solution output should keep canonical managed blocks");
+}
+
+#[test]
+fn test_free_form_entity_template_output_is_rejected() {
+    let err = managed_block::require_blocks(
+        "pub struct Shift {\n    pub id: String,\n}\n",
+        managed_block::ENTITY_REQUIRED_BLOCKS,
+    )
+    .expect_err("free-form entity output should be rejected");
+
+    assert_eq!(
+        err,
+        "missing or duplicated managed block markers for 'entity-variables'"
+    );
+}
+
+#[test]
+fn test_free_form_solution_template_output_is_rejected() {
+    let err = managed_block::require_blocks(
+        "pub struct Schedule {\n    pub score: Option<HardSoftScore>,\n}\n",
+        managed_block::SOLUTION_REQUIRED_BLOCKS,
+    )
+    .expect_err("free-form solution output should be rejected");
+
+    assert_eq!(
+        err,
+        "missing or duplicated managed block markers for 'solution-imports'"
+    );
 }
 
 #[test]
@@ -103,7 +158,7 @@ fn test_replace_score_type() {
 #[test]
 fn test_replace_score_type_missing() {
     let src = "pub score: Option<HardSoftScore>,\n";
-    let result = replace_score_type(src, "SimpleScore", "HardSoftScore");
+    let result = replace_score_type(src, "SoftScore", "HardSoftScore");
     assert!(result.is_err());
 }
 
@@ -111,7 +166,8 @@ fn test_replace_score_type_missing() {
 fn test_inject_second_planning_variable() {
     use super::wiring::inject_planning_variable;
 
-    let src = generate_entity("Surgery", Some("room_idx"), &[]);
+    let src = generate_entity("Surgery", Some("room_idx"), &[])
+        .expect("built-in entity template should render");
     let result =
         inject_planning_variable(&src, "Surgery", "slot_idx").expect("inject should succeed");
 
@@ -138,7 +194,7 @@ fn test_inject_second_planning_variable() {
 fn test_inject_list_variable() {
     use super::wiring::inject_list_variable;
 
-    let src = generate_entity("Route", None, &[]);
+    let src = generate_entity("Route", None, &[]).expect("built-in entity template should render");
     let result =
         inject_list_variable(&src, "Route", "stops", "visits").expect("inject should succeed");
 
@@ -151,7 +207,8 @@ fn test_inject_list_variable() {
 fn test_remove_variable_field() {
     use super::wiring::{inject_list_variable, inject_planning_variable, remove_variable_field};
 
-    let src = generate_entity("Route", Some("driver_idx"), &[]);
+    let src = generate_entity("Route", Some("driver_idx"), &[])
+        .expect("built-in entity template should render");
     let src = inject_list_variable(&src, "Route", "stops", "visits").expect("list inject");
     let src = inject_planning_variable(&src, "Route", "backup_idx").expect("var inject");
     let result = remove_variable_field(&src, "stops").expect("remove should succeed");
@@ -172,22 +229,212 @@ fn test_update_domain_mod_format() {
 }
 
 #[test]
+fn test_rewrite_domain_mod_source_groups_mods_before_uses() {
+    use super::wiring::rewrite_domain_mod_source;
+
+    let src = r#"// @solverforge:begin domain-exports
+mod plan;
+
+pub use plan::Plan;
+// @solverforge:end domain-exports
+"#;
+
+    let rewritten = rewrite_domain_mod_source(src, "task", "Task", Some("plan")).unwrap();
+
+    assert_eq!(
+        rewritten,
+        "// @solverforge:begin domain-exports\nmod task;\nmod plan;\n\npub use task::Task;\npub use plan::Plan;\n// @solverforge:end domain-exports\n"
+    );
+}
+
+#[test]
+fn test_rewrite_domain_mod_source_preserves_user_owned_tail_content() {
+    use super::wiring::rewrite_domain_mod_source;
+
+    let src = r#"// header
+// @solverforge:begin domain-exports
+mod plan;
+
+pub use plan::Plan;
+// @solverforge:end domain-exports
+
+pub use self::plan::Helper;
+
+#[cfg(test)]
+mod domain_tests;
+"#;
+
+    let rewritten = rewrite_domain_mod_source(src, "resource", "Resource", Some("plan")).unwrap();
+
+    assert_eq!(
+        rewritten,
+        "// header\n// @solverforge:begin domain-exports\nmod resource;\nmod plan;\n\npub use resource::Resource;\npub use plan::Plan;\n// @solverforge:end domain-exports\n\npub use self::plan::Helper;\n\n#[cfg(test)]\nmod domain_tests;\n"
+    );
+}
+
+#[test]
+fn test_rewrite_domain_mod_source_preserves_self_uses_and_multiple_exports() {
+    use super::wiring::rewrite_domain_mod_source;
+
+    let src = r#"// @solverforge:begin domain-exports
+mod plan;
+
+pub use self::plan::Plan;
+pub use self::plan::PlanBuilder;
+// @solverforge:end domain-exports
+"#;
+
+    let rewritten = rewrite_domain_mod_source(src, "task", "Task", Some("plan")).unwrap();
+
+    assert!(rewritten.contains("pub use task::Task;"));
+    assert!(rewritten.contains("pub use self::plan::Plan;"));
+    assert!(rewritten.contains("pub use self::plan::PlanBuilder;"));
+}
+
+#[test]
+fn test_rewrite_domain_mod_source_requires_managed_exports() {
+    use super::wiring::rewrite_domain_mod_source;
+
+    let src = r#"// domain exports
+mod plan;
+
+pub use self::plan::Plan;
+pub use self::plan::PlanBuilder;
+
+#[cfg(test)]
+mod tests;
+"#;
+
+    let err = rewrite_domain_mod_source(src, "task", "Task", Some("plan"))
+        .expect_err("unmanaged domain mod should fail");
+
+    assert_eq!(
+        err,
+        "missing or duplicated managed block markers for 'domain-exports'"
+    );
+}
+
+#[test]
+fn test_rewrite_domain_mod_source_requires_primary_re_export_for_each_module() {
+    use super::wiring::rewrite_domain_mod_source;
+
+    let src = r#"// @solverforge:begin domain-exports
+mod task;
+mod plan;
+
+pub use plan::Plan;
+pub use self::plan::PlanBuilder;
+// @solverforge:end domain-exports
+"#;
+
+    let err = rewrite_domain_mod_source(src, "resource", "Resource", Some("plan"))
+        .expect_err("missing primary re-export should fail");
+
+    assert_eq!(
+        err,
+        "managed domain block is missing the primary re-export 'pub use task::Task;' for module 'task'"
+    );
+}
+
+#[test]
+fn test_validate_domain_mod_source_rejects_undeclared_re_export() {
+    use super::wiring::validate_domain_mod_source;
+
+    let src = r#"solverforge::planning_model! {
+    root = "src/domain";
+
+    // @solverforge:begin domain-exports
+mod task;
+mod plan;
+
+pub use task::Task;
+pub use plan::Plan;
+pub use helper::Helper;
+// @solverforge:end domain-exports
+}
+"#;
+
+    let err = validate_domain_mod_source(src).expect_err("undeclared re-export should fail");
+
+    assert_eq!(
+        err,
+        "managed domain block contains a re-export for undeclared module 'helper'"
+    );
+}
+
+#[test]
+fn test_validate_domain_mod_source_accepts_planning_model_manifest() {
+    use super::wiring::validate_domain_mod_source;
+
+    let src = r#"solverforge::planning_model! {
+    root = "src/domain";
+
+    // @solverforge:begin domain-exports
+mod task;
+mod plan;
+
+pub use task::Task;
+pub use plan::Plan;
+// @solverforge:end domain-exports
+}
+"#;
+
+    let modules = validate_domain_mod_source(src).expect("manifest should validate");
+
+    assert_eq!(modules, vec!["task".to_string(), "plan".to_string()]);
+}
+
+#[test]
+fn test_validate_domain_mod_source_requires_managed_block_inside_manifest() {
+    use super::wiring::validate_domain_mod_source;
+
+    let src = r#"solverforge::planning_model! {
+    root = "src/domain";
+}
+
+// @solverforge:begin domain-exports
+mod task;
+pub use task::Task;
+// @solverforge:end domain-exports
+"#;
+
+    let err =
+        validate_domain_mod_source(src).expect_err("managed block outside manifest should fail");
+
+    assert_eq!(
+        err,
+        "missing or duplicated managed block markers for 'domain-exports'"
+    );
+}
+
+#[test]
 fn test_wire_collection_into_solution_updates_neutral_constructor() {
     use super::wiring::insert_field_and_import;
 
     let src = r#"use serde::{Deserialize, Serialize};
 use solverforge::prelude::*;
+// @solverforge:begin solution-imports
+// @solverforge:end solution-imports
 
 #[planning_solution]
 #[derive(Serialize, Deserialize)]
 pub struct Plan {
+    // @solverforge:begin solution-collections
+    // @solverforge:end solution-collections
     #[planning_score]
     pub score: Option<HardSoftScore>,
 }
 
 impl Plan {
-    pub fn new() -> Self {
-        Self { score: None }
+    pub fn new(
+        // @solverforge:begin solution-constructor-params
+        // @solverforge:end solution-constructor-params
+    ) -> Self {
+        Self {
+            // @solverforge:begin solution-constructor-init
+            // @solverforge:end solution-constructor-init
+            score: None,
+        }
     }
 }
 "#;
@@ -202,22 +449,86 @@ impl Plan {
     .expect("insert should succeed");
 
     assert!(
-        result.contains("pub fn new(resources: Vec<Resource>) -> Self"),
+        result.contains("        resources: Vec<Resource>,"),
         "{result}"
     );
-    assert!(result.contains("resources: resources"), "{result}");
+    assert!(result.contains("            resources,"), "{result}");
+    assert!(result.contains("use super::Resource;"), "{result}");
 }
 
 #[test]
-fn test_generate_data_loader_stub_is_compile_safe() {
-    let stub = generate_data_loader_stub();
-    assert!(stub.contains("pub fn load() -> Result<(), Box<dyn std::error::Error>>"));
-    assert!(stub.contains("Ok(())"));
-    assert!(!stub.contains("todo!"));
+fn test_wire_collection_into_solution_requires_managed_blocks() {
+    use super::wiring::insert_field_and_import;
+
+    let src = r#"use serde::{Deserialize, Serialize};
+use solverforge::prelude::*;
+
+#[planning_solution]
+#[derive(Serialize, Deserialize)]
+pub struct Plan {
+    #[planning_score]
+    pub score: Option<HardSoftScore>,
+}
+
+impl Plan {
+    pub fn new(
+    ) -> Self {
+        Self {
+            score: None,
+        }
+    }
+}
+"#;
+
+    let err = insert_field_and_import(
+        src,
+        "Plan",
+        "Resource",
+        "resources",
+        "    #[problem_fact_collection]\n    pub resources: Vec<Resource>,",
+    )
+    .expect_err("unmanaged solution should fail");
+
+    assert_eq!(
+        err,
+        "missing or duplicated managed block markers for 'solution-collections'"
+    );
 }
 
 #[test]
-fn test_remove_default_scaffold_rewrites_data_module_without_todo() {
+fn test_variable_injection_requires_managed_blocks() {
+    use super::wiring::inject_scalar_variable;
+
+    let src = r#"use serde::{Deserialize, Serialize};
+use solverforge::prelude::*;
+
+#[planning_entity]
+#[derive(Serialize, Deserialize)]
+pub struct Task {
+    #[planning_id]
+    pub id: String,
+}
+
+impl Task {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+        }
+    }
+}
+"#;
+
+    let err = inject_scalar_variable(src, "Task", "resource_idx", "resources", true)
+        .expect_err("unmanaged entity should fail");
+
+    assert_eq!(
+        err,
+        "missing or duplicated managed block markers for 'entity-variables'"
+    );
+}
+
+#[test]
+fn test_remove_neutral_scaffold_preserves_user_owned_data_wrapper() {
     let guard = test_support::lock_cwd();
 
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
@@ -226,6 +537,8 @@ fn test_remove_default_scaffold_rewrites_data_module_without_todo() {
     std::fs::create_dir_all(tmp.path().join("src/domain")).expect("failed to create domain dir");
     std::fs::create_dir_all(tmp.path().join("src/constraints"))
         .expect("failed to create constraints dir");
+    std::fs::create_dir_all(tmp.path().join("src/api")).expect("failed to create api dir");
+    std::fs::create_dir_all(tmp.path().join("src/solver")).expect("failed to create solver dir");
     std::fs::create_dir_all(tmp.path().join("src/data")).expect("failed to create data dir");
     std::fs::write(
         tmp.path().join("src/domain/mod.rs"),
@@ -234,9 +547,13 @@ fn test_remove_default_scaffold_rewrites_data_module_without_todo() {
     .expect("failed to write domain mod");
     std::fs::write(
         tmp.path().join("src/domain/plan.rs"),
-        "// Rename this to something domain-specific\n",
+        "// @solverforge:neutral-solution\n",
     )
     .expect("failed to write plan");
+    std::fs::write(tmp.path().join("src/domain/task.rs"), "placeholder")
+        .expect("failed to write task");
+    std::fs::write(tmp.path().join("src/domain/resource.rs"), "placeholder")
+        .expect("failed to write resource");
     std::fs::write(
         tmp.path().join("src/constraints/all_assigned.rs"),
         "placeholder",
@@ -247,21 +564,76 @@ fn test_remove_default_scaffold_rewrites_data_module_without_todo() {
         "mod all_assigned;\n(all_assigned::constraint(),)\n",
     )
     .expect("failed to write constraints mod");
+    let custom_data_wrapper = r#"mod data_seed;
+
+pub use data_seed::{generate, DemoData};
+
+pub fn custom_source() -> &'static str {
+    "csv"
+}
+"#;
+    std::fs::write(tmp.path().join("src/data/mod.rs"), custom_data_wrapper)
+        .expect("failed to write data mod");
     std::fs::write(
-        tmp.path().join("src/data/mod.rs"),
-        "todo!(\"Implement data loading\")\n",
+        tmp.path().join("src/api/dto.rs"),
+        "use solverforge::{HardSoftScore, SolverStatus};\nuse crate::domain::Plan;\npub struct PlanDto;\npub fn dto(plan: &Plan, status: &SolverStatus<HardSoftScore>) {}\n",
     )
-    .expect("failed to write data mod");
+    .expect("failed to write dto");
+    std::fs::write(
+        tmp.path().join("src/solver/service.rs"),
+        "use solverforge::{HardSoftScore, SolverEventMetadata, SolverStatus};\nuse crate::domain::Plan;\nstatic MANAGER: SolverManager<Plan> = SolverManager::new();\nfn status() -> SolverStatus<HardSoftScore> {}\nfn event(metadata: &SolverEventMetadata<HardSoftScore>) {}\n",
+    )
+    .expect("failed to write service");
+    std::fs::write(
+        tmp.path().join("src/lib.rs"),
+        "/* Plan solution */\npub mod domain;\n",
+    )
+    .expect("failed to write lib");
 
     std::env::set_current_dir(tmp.path()).expect("failed to enter temp dir");
-    let result = remove_default_scaffold();
+    let result = remove_neutral_scaffold("Schedule", "HardSoftDecimalScore");
     std::env::set_current_dir(original_dir).expect("failed to restore current dir");
     drop(guard);
 
-    result.expect("remove_default_scaffold should succeed");
+    result.expect("remove_neutral_scaffold should succeed");
 
     let data_mod = std::fs::read_to_string(tmp.path().join("src/data/mod.rs"))
-        .expect("failed to read rewritten data mod");
-    assert!(data_mod.contains("Ok(())"));
-    assert!(!data_mod.contains("todo!"));
+        .expect("failed to read data mod");
+    assert_eq!(data_mod, custom_data_wrapper);
+
+    let domain_mod = std::fs::read_to_string(tmp.path().join("src/domain/mod.rs"))
+        .expect("failed to read rewritten domain mod");
+    assert!(domain_mod.contains("@solverforge:begin domain-exports"));
+    assert!(!tmp.path().join("src/domain/plan.rs").exists());
+    assert!(tmp.path().join("src/domain/task.rs").exists());
+    assert!(tmp.path().join("src/domain/resource.rs").exists());
+    assert!(tmp.path().join("src/constraints/all_assigned.rs").exists());
+
+    let constraints_mod = std::fs::read_to_string(tmp.path().join("src/constraints/mod.rs"))
+        .expect("failed to read rewritten constraints mod");
+    assert!(constraints_mod.contains("@solverforge:begin constraint-modules"));
+    assert!(constraints_mod.contains("use crate::domain::Schedule;"));
+    assert!(constraints_mod.contains("ConstraintSet<Schedule, HardSoftDecimalScore>"));
+
+    let dto = std::fs::read_to_string(tmp.path().join("src/api/dto.rs"))
+        .expect("failed to read rewritten dto");
+    assert!(dto.contains("use crate::domain::Schedule;"));
+    assert!(dto.contains("plan: &Schedule"));
+    assert!(dto.contains("SolverStatus<HardSoftDecimalScore>"));
+    assert!(!dto.contains("HardSoftScore,"));
+    assert!(!dto.contains("<HardSoftScore>"));
+    assert!(
+        dto.contains("pub struct PlanDto;"),
+        "rewrite should not rename DTO type names: {dto}"
+    );
+    let service = std::fs::read_to_string(tmp.path().join("src/solver/service.rs"))
+        .expect("failed to read rewritten service");
+    assert!(service.contains("SolverManager<Schedule>"));
+    assert!(service.contains("SolverStatus<HardSoftDecimalScore>"));
+    assert!(service.contains("SolverEventMetadata<HardSoftDecimalScore>"));
+    assert!(!service.contains("HardSoftScore,"));
+    assert!(!service.contains("<HardSoftScore>"));
+    let lib = std::fs::read_to_string(tmp.path().join("src/lib.rs"))
+        .expect("failed to read rewritten lib");
+    assert!(lib.contains("Schedule solution"));
 }

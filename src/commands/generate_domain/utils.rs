@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::Path;
 
 use crate::error::{CliError, CliResult};
@@ -7,8 +6,8 @@ pub(crate) const KNOWN_SCORE_TYPES: &[&str] = &[
     "HardSoftScore",
     "HardSoftDecimalScore",
     "HardMediumSoftScore",
-    "SimpleScore",
-    "BendableScore",
+    "SoftScore",
+    "BendableScore<N, M>",
 ];
 
 /// Converts `snake_case` to `PascalCase`.
@@ -47,7 +46,7 @@ pub(crate) fn pluralize(name: &str) -> String {
 }
 
 pub(crate) fn validate_score_type(score: &str) -> CliResult {
-    if KNOWN_SCORE_TYPES.contains(&score) {
+    if is_supported_score_type(score) {
         Ok(())
     } else {
         Err(CliError::InvalidScoreType {
@@ -55,6 +54,32 @@ pub(crate) fn validate_score_type(score: &str) -> CliResult {
             known: KNOWN_SCORE_TYPES,
         })
     }
+}
+
+pub(crate) fn is_soft_score(score: &str) -> bool {
+    score.trim() == "SoftScore"
+}
+
+fn is_supported_score_type(score: &str) -> bool {
+    let score = score.trim();
+    matches!(
+        score,
+        "HardSoftScore" | "HardSoftDecimalScore" | "HardMediumSoftScore" | "SoftScore"
+    ) || parse_bendable_score(score).is_some()
+}
+
+fn parse_bendable_score(score: &str) -> Option<(usize, usize)> {
+    let inner = score
+        .strip_prefix("BendableScore<")?
+        .strip_suffix('>')?
+        .trim();
+    let mut parts = inner.split(',');
+    let hard = parts.next()?.trim().parse::<usize>().ok()?;
+    let soft = parts.next()?.trim().parse::<usize>().ok()?;
+    if parts.next().is_some() || hard == 0 || soft == 0 {
+        return None;
+    }
+    Some((hard, soft))
 }
 
 pub(crate) fn ensure_domain_dir(domain_dir: &Path) -> CliResult {
@@ -71,21 +96,5 @@ pub(crate) fn find_file_for_type(
     domain_dir: &Path,
     type_name: &str,
 ) -> Result<std::path::PathBuf, String> {
-    let needle = format!("pub struct {}", type_name);
-    let entries =
-        fs::read_dir(domain_dir).map_err(|e| format!("failed to read src/domain/: {}", e))?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
-            continue;
-        }
-        if let Ok(src) = fs::read_to_string(&path) {
-            if src.contains(&needle) {
-                return Ok(path);
-            }
-        }
-    }
-
-    Err(format!("struct '{}' not found in src/domain/", type_name))
+    crate::commands::generate_constraint::domain::find_file_for_type(domain_dir, type_name)
 }

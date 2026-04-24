@@ -1303,10 +1303,12 @@ dependencies = [
  "dialoguer",
  "include_dir",
  "owo-colors",
+ "quote",
  "reqwest",
  "serde",
  "serde_json",
  "strsim",
+ "syn",
  "tempfile",
  "toml",
 ]

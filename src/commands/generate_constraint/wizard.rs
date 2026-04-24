@@ -11,7 +11,7 @@ pub(crate) fn resolve_pattern_and_hardness(
     join: bool,
     balance: bool,
     reward: bool,
-    domain: &Option<DomainModel>,
+    domain: &DomainModel,
 ) -> Result<(Pattern, bool), String> {
     let explicit_pattern: Option<Pattern> = match (unary, pair, join, balance, reward) {
         (true, _, _, _, _) => Some(Pattern::Unary),
@@ -38,51 +38,45 @@ pub(crate) fn resolve_pattern_and_hardness(
     }
 }
 
-fn run_wizard(soft_flag: bool, domain: &Option<DomainModel>) -> Result<(Pattern, bool), String> {
-    // Print domain summary
-    if let Some(d) = domain {
-        println!("{} Scanning domain model...", "▸".bright_green());
-        println!();
-        println!("  Found: {}", d.solution_type.bright_white().bold());
-        for e in &d.entities {
-            let mut solvable_fields = Vec::new();
-            solvable_fields.extend(
-                e.planning_vars
-                    .iter()
-                    .map(|field| format!("{} [standard]", field.field)),
-            );
-            solvable_fields.extend(
-                e.list_vars
-                    .iter()
-                    .map(|field| format!("{} [list]", field.field)),
-            );
-            let var_info = if solvable_fields.is_empty() {
-                String::new()
-            } else {
-                format!("  — solvable fields: {}", solvable_fields.join(", "))
-            };
-            println!(
-                "    Entities:  {} ({}){}",
-                e.field_name.bright_cyan(),
-                e.item_type,
-                var_info
-            );
-        }
-        for f in &d.facts {
-            println!(
-                "    Facts:     {} ({})",
-                f.field_name.bright_cyan(),
-                f.item_type
-            );
-        }
-        println!();
+fn run_wizard(soft_flag: bool, domain: &DomainModel) -> Result<(Pattern, bool), String> {
+    println!("{} Scanning domain model...", "▸".bright_green());
+    println!();
+    println!("  Found: {}", domain.solution_type.bright_white().bold());
+    for e in &domain.entities {
+        let mut solvable_fields = Vec::new();
+        solvable_fields.extend(
+            e.scalar_vars
+                .iter()
+                .map(|field| format!("{} [scalar]", field.field)),
+        );
+        solvable_fields.extend(
+            e.list_vars
+                .iter()
+                .map(|field| format!("{} [list]", field.field)),
+        );
+        let var_info = if solvable_fields.is_empty() {
+            String::new()
+        } else {
+            format!("  — solvable fields: {}", solvable_fields.join(", "))
+        };
+        println!(
+            "    Entities:  {} ({}){}",
+            e.field_name.bright_cyan(),
+            e.item_type,
+            var_info
+        );
     }
+    for f in &domain.facts {
+        println!(
+            "    Facts:     {} ({})",
+            f.field_name.bright_cyan(),
+            f.item_type
+        );
+    }
+    println!();
 
     // Pattern selection
-    let has_join = domain
-        .as_ref()
-        .map(|d| !d.facts.is_empty())
-        .unwrap_or(false);
+    let has_join = !domain.facts.is_empty();
 
     let mut pattern_options: Vec<(&str, Pattern)> = vec![
         (

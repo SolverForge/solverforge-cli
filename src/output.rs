@@ -27,7 +27,6 @@ pub fn is_quiet() -> bool {
     verbosity() == 0
 }
 
-#[allow(dead_code)]
 pub fn is_verbose() -> bool {
     verbosity() >= 2
 }
@@ -128,13 +127,6 @@ pub fn print_skip(path: &str) {
     }
 }
 
-#[allow(dead_code)]
-pub fn print_identical(path: &str) {
-    if !is_quiet() {
-        println!("  {} {}", colorize_yellow("identical"), colorize_cyan(path));
-    }
-}
-
 pub fn print_status(verb: &str, message: &str) {
     if !is_quiet() {
         println!("      {} {}", colorize_green(verb), message);
@@ -143,13 +135,6 @@ pub fn print_status(verb: &str, message: &str) {
 
 pub fn print_error(message: &str) {
     eprintln!("{}: {}", colorize_red("error"), message);
-}
-
-#[allow(dead_code)]
-pub fn print_error_with_hint(message: &str, hint: &str) {
-    eprintln!("{}: {}", colorize_red("error"), message);
-    eprintln!();
-    eprintln!("  {}: {}", colorize_yellow("hint"), hint);
 }
 
 pub fn print_success(message: &str) {
@@ -166,13 +151,6 @@ pub fn print_heading(message: &str) {
 
 pub fn print_dim(message: &str) {
     if !is_quiet() {
-        println!("{}", colorize_dim(message));
-    }
-}
-
-#[allow(dead_code)]
-pub fn print_verbose(message: &str) {
-    if is_verbose() {
         println!("{}", colorize_dim(message));
     }
 }

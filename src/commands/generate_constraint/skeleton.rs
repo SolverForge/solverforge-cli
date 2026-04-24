@@ -33,7 +33,7 @@ pub(crate) fn generate_skeleton(
         .map(|e| e.item_type.as_str())
         .unwrap_or(solution_type);
     let planning_var = entity
-        .and_then(|e| e.planning_vars.first())
+        .and_then(|e| e.scalar_vars.first())
         .map(|s| s.field.as_str())
         .unwrap_or("value");
 
@@ -63,9 +63,9 @@ pub(crate) fn generate_skeleton(
     };
 
     let penalty_expr = if is_soft {
-        format!("{score_type}::ONE_SOFT")
+        format!("<{score_type} as Score>::one_soft()")
     } else {
-        format!("{score_type}::ONE_HARD")
+        format!("<{score_type} as Score>::one_hard()")
     };
 
     let (body, helpers) = match pattern {
@@ -138,7 +138,7 @@ fn fact_items(solution: &{solution_type}) -> &[{fact_type}] {{
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
         .for_each(|s: &{solution_type}| s.{entity_field}.as_slice())
         .balance(|e: &{entity_type}| e.{planning_var})
-        .penalize({score_type}::of_soft(1))
+        .penalize({penalty_expr})
         .named("{constraint_name}")"#
             ),
             String::new(),

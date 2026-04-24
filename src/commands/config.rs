@@ -60,7 +60,7 @@ pub fn run_set(key: &str, value: &str) -> CliResult {
     Ok(())
 }
 
-// Navigate and set a dotted key path (e.g. "termination.time_spent_seconds") in a toml::Value.
+// Navigate and set a dotted key path (e.g. "termination.seconds_spent_limit") in a toml::Value.
 fn set_toml_key(doc: &mut toml::Value, key: &str, value: &str) -> CliResult {
     let parts: Vec<&str> = key.splitn(2, '.').collect();
 

@@ -6,13 +6,11 @@ use super::*;
 #[test]
 fn test_parse_rc_full() {
     let toml = r#"
-default_template = "standard"
 port = 8080
 no_color = true
 quiet = false
 "#;
     let cfg = parse_rc(toml).unwrap();
-    assert_eq!(cfg.default_template.as_deref(), Some("standard"));
     assert_eq!(cfg.port, Some(8080));
     assert!(cfg.no_color);
     assert!(!cfg.quiet);
