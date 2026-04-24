@@ -11,13 +11,15 @@ pub struct Container {
     #[planning_id]
     pub id: String,
     pub name: String,
+    // @solverforge:begin entity-variables
     /// Ordered sequence of item positions assigned to this container.
     ///
     /// This field declares the list variable the solver may reorder.
-    /// `solver.toml` still controls search strategy; the list starter only
+    /// `solver.toml` still controls search strategy; the list scaffold only
     /// changes the sample app shape and example domain.
     #[planning_list_variable(element_collection = "item_facts")]
     pub items: Vec<usize>,
+    // @solverforge:end entity-variables
 }
 
 impl Container {
@@ -25,7 +27,9 @@ impl Container {
         Self {
             id: id.into(),
             name: name.into(),
+            // @solverforge:begin entity-variable-init
             items: Vec::new(),
+            // @solverforge:end entity-variable-init
         }
     }
 }

@@ -8,7 +8,8 @@ type = "local_search"
 type = "late_acceptance"
 late_acceptance_size = 400
 [phases.forager]
-accepted_count_limit = 4
+type = "accepted_count"
+limit = 4
 
 [termination]
 seconds_spent_limit = 30

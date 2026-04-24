@@ -75,8 +75,21 @@ async fn info() -> Json<InfoResponse> {
     })
 }
 
-async fn list_demo_data() -> Json<Vec<&'static str>> {
-    Json(vec!["STANDARD", "SMALL"])
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DemoDataCatalogResponse {
+    default_id: &'static str,
+    available_ids: Vec<&'static str>,
+}
+
+async fn list_demo_data() -> Json<DemoDataCatalogResponse> {
+    Json(DemoDataCatalogResponse {
+        default_id: DemoData::default_demo_data().id(),
+        available_ids: DemoData::available_demo_data()
+            .iter()
+            .map(|demo| demo.id())
+            .collect(),
+    })
 }
 
 async fn get_demo_data(Path(id): Path<String>) -> Result<Json<PlanDto>, StatusCode> {
@@ -95,9 +108,10 @@ async fn create_job(
     State(state): State<Arc<AppState>>,
     Json(dto): Json<PlanDto>,
 ) -> Result<Json<CreateJobResponse>, StatusCode> {
+    let plan = dto.to_domain().map_err(|_| StatusCode::BAD_REQUEST)?;
     let id = state
         .solver
-        .start_job(dto.to_domain())
+        .start_job(plan)
         .map_err(status_from_solver_error)?;
     Ok(Json(CreateJobResponse { id }))
 }

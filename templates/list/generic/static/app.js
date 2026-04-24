@@ -3,43 +3,85 @@
 (async function () {
   'use strict';
 
-  var config = await fetch('/sf-config.json').then(function (r) { return r.json(); });
+  var SLOT_MINUTES = 60;
+  var DEFAULT_VIEWPORT_SLOTS = 12;
+  var TIMELINE_TONES = ['emerald', 'blue', 'amber', 'rose', 'violet', 'slate'];
+
+  var config = await fetch('/sf-config.json').then(function (response) { return response.json(); });
 
   var app = document.getElementById('sf-app');
   var currentPlan = null;
+  var lastAnalysis = null;
+  var bootstrapError = null;
+  var demoCatalog = { defaultId: null, availableIds: [] };
+  var sequenceTimeline = null;
 
-  // Backend and solver
   var backend = SF.createBackend({ baseUrl: '' });
-  var statusBar = SF.createStatusBar({ constraints: config.constraints });
+  var statusBar = SF.createStatusBar({ constraints: config.constraints || [] });
   var solver = SF.createSolver({
     backend: backend,
     statusBar: statusBar,
-    onSolution: function (snapshot) { renderAll(snapshot && snapshot.solution ? snapshot.solution : null); },
-    onPaused: function (snapshot) { renderAll(snapshot && snapshot.solution ? snapshot.solution : null); },
-    onCancelled: function (snapshot) { renderAll(snapshot && snapshot.solution ? snapshot.solution : null); },
-    onComplete: function (snapshot) { renderAll(snapshot && snapshot.solution ? snapshot.solution : null); },
-    onError: function (message) { console.error('Solver lifecycle failed:', message); },
+    onProgress: function (meta) {
+      syncLifecycleMarkers(meta);
+    },
+    onPauseRequested: function (meta) {
+      syncLifecycleMarkers(meta);
+    },
+    onSolution: function (snapshot, meta) {
+      renderAll(snapshot && snapshot.solution ? snapshot.solution : null);
+      syncLifecycleMarkers(meta);
+    },
+    onPaused: function (snapshot, meta) {
+      renderAll(snapshot && snapshot.solution ? snapshot.solution : null);
+      syncLifecycleMarkers(meta);
+    },
+    onResumed: function (meta) {
+      syncLifecycleMarkers(meta);
+    },
+    onCancelled: function (snapshot, meta) {
+      renderAll(snapshot && snapshot.solution ? snapshot.solution : null);
+      syncLifecycleMarkers(meta);
+    },
+    onComplete: function (snapshot, meta) {
+      renderAll(snapshot && snapshot.solution ? snapshot.solution : null);
+      syncLifecycleMarkers(meta);
+    },
+    onFailure: function (message, meta, snapshot, analysis) {
+      renderAll(snapshot && snapshot.solution ? snapshot.solution : null);
+      if (analysis) {
+        lastAnalysis = analysis;
+      }
+      console.error('Solver job failed:', message);
+      syncLifecycleMarkers(meta);
+    },
+    onAnalysis: function (analysis) {
+      lastAnalysis = analysis;
+      syncLifecycleMarkers();
+    },
+    onError: function (message) {
+      console.error('Solver lifecycle failed:', message);
+      syncLifecycleMarkers();
+    },
   });
 
-  // Header
   var header = SF.createHeader({
     logo: '/sf/img/ouroboros.svg',
     title: config.title,
     subtitle: config.subtitle,
     tabs: [
-      { id: 'sequences', label: 'Sequences', icon: 'fa-list-ol', active: true },
+      { id: 'timeline', label: 'Timeline', icon: 'fa-list-ol', active: true },
       { id: 'data', label: 'Data', icon: 'fa-table' },
       { id: 'api', label: 'REST API', icon: 'fa-book' },
     ],
     actions: {
       onSolve: function () { loadAndSolve(); },
-      onPause: function () { solver.pause().catch(function (err) { console.error('Pause failed:', err); }); },
-      onResume: function () { solver.resume().catch(function (err) { console.error('Resume failed:', err); }); },
-      onCancel: function () { solver.cancel().catch(function (err) { console.error('Cancel failed:', err); }); },
+      onPause: function () { pauseSolve(); },
+      onResume: function () { resumeSolve(); },
+      onCancel: function () { cancelSolve(); },
       onAnalyze: function () { openAnalysis(); },
     },
     onTabChange: function (tab) {
-      sequencesPanel.style.display = tab === 'sequences' ? '' : 'none';
+      sequencesPanel.style.display = tab === 'timeline' ? '' : 'none';
       dataPanel.style.display = tab === 'data' ? '' : 'none';
       apiPanel.style.display = tab === 'api' ? '' : 'none';
     },
@@ -48,75 +90,102 @@
   statusBar.bindHeader(header);
   app.appendChild(statusBar.el);
 
-  // Sequences panel (hero)
+  var bootstrapNotice = SF.el('div', {
+    className: 'sf-content',
+    style: {
+      display: 'none',
+      padding: '16px',
+      marginBottom: '16px',
+      borderRadius: '12px',
+      border: '1px solid #dc2626',
+      background: '#fef2f2',
+      color: '#991b1b',
+    },
+  });
+  app.appendChild(bootstrapNotice);
+
   var sequencesPanel = SF.el('div', { className: 'sf-content' });
   var sequencesContainer = SF.el('div', { id: 'sf-sequences' });
   sequencesPanel.appendChild(sequencesContainer);
   app.appendChild(sequencesPanel);
 
-  // Data panel
   var dataPanel = SF.el('div', { className: 'sf-content', style: { display: 'none' } });
   var tablesContainer = SF.el('div', { id: 'sf-tables' });
   dataPanel.appendChild(tablesContainer);
   app.appendChild(dataPanel);
 
-  // API panel
   var apiPanel = SF.el('div', { className: 'sf-content', style: { display: 'none' } });
-  var guide = SF.createApiGuide({
-    endpoints: [
-      { method: 'GET', path: '/demo-data/STANDARD', description: 'Fetch demo data', curl: 'curl http://localhost:7860/demo-data/STANDARD' },
-      { method: 'POST', path: '/jobs', description: 'Create a retained solving job', curl: 'curl -X POST -H "Content-Type: application/json" http://localhost:7860/jobs -d @plan.json' },
-      { method: 'GET', path: '/jobs/{id}', description: 'Get current job summary', curl: 'curl http://localhost:7860/jobs/{id}' },
-      { method: 'GET', path: '/jobs/{id}/snapshot', description: 'Fetch the latest retained snapshot', curl: 'curl http://localhost:7860/jobs/{id}/snapshot' },
-      { method: 'GET', path: '/jobs/{id}/analysis?snapshot_revision={n}', description: 'Analyze an exact snapshot revision', curl: 'curl "http://localhost:7860/jobs/{id}/analysis?snapshot_revision=3"' },
-      { method: 'POST', path: '/jobs/{id}/pause', description: 'Request an exact runtime pause', curl: 'curl -X POST http://localhost:7860/jobs/{id}/pause' },
-      { method: 'POST', path: '/jobs/{id}/resume', description: 'Resume a paused retained job', curl: 'curl -X POST http://localhost:7860/jobs/{id}/resume' },
-      { method: 'POST', path: '/jobs/{id}/cancel', description: 'Cancel a live or paused job', curl: 'curl -X POST http://localhost:7860/jobs/{id}/cancel' },
-      { method: 'DELETE', path: '/jobs/{id}', description: 'Delete a terminal retained job', curl: 'curl -X DELETE http://localhost:7860/jobs/{id}' },
-      { method: 'GET', path: '/jobs/{id}/events', description: 'Stream job lifecycle updates (SSE)', curl: 'curl -N http://localhost:7860/jobs/{id}/events' },
-    ],
-  });
-  apiPanel.appendChild(guide);
+  var apiGuideContainer = SF.el('div');
+  apiPanel.appendChild(apiGuideContainer);
   app.appendChild(apiPanel);
 
-  // Footer
-  var footer = SF.createFooter({
+  app.appendChild(SF.createFooter({
     links: [
       { label: 'SolverForge', url: 'https://www.solverforge.org' },
       { label: 'Docs', url: 'https://www.solverforge.org/docs' },
     ],
-  });
-  app.appendChild(footer);
+  }));
 
-  // Analysis modal
   var analysisModal = SF.createModal({ title: 'Score Analysis', width: '700px' });
+  renderApiGuide();
+  updateSolveActionAvailability();
+  bootstrapDemoData();
 
-  // Load demo data on startup
-  fetch('/demo-data/STANDARD')
-    .then(function (r) { return r.json(); })
-    .then(function (data) { renderAll(data); })
-    .catch(function () {});
+  window.addEventListener('beforeunload', destroySequenceTimeline);
 
   function loadAndSolve() {
+    if (solver.isRunning() || solver.getLifecycleState() === 'PAUSED' || !canSolve()) return;
     cleanupTerminalJob()
-      .then(function () {
-        if (currentPlan) return currentPlan;
-        return fetch('/demo-data/STANDARD').then(function (r) { return r.json(); });
+      .then(function (data) {
+        if (data) return data;
+        if (currentPlan) return clonePlan(currentPlan);
+        if (!demoCatalog.defaultId) {
+          return Promise.reject(new Error('demo data catalog is unavailable'));
+        }
+        return fetchDemoPlan(demoCatalog.defaultId);
       })
       .then(function (data) {
         return solver.start(clonePlan(data));
       })
+      .then(function () {
+        syncLifecycleMarkers();
+      })
       .catch(function (err) { console.error('Demo load failed:', err); });
+  }
+
+  function pauseSolve() {
+    solver.pause()
+      .then(function () { syncLifecycleMarkers(); })
+      .catch(function (err) { console.error('Pause failed:', err); });
+  }
+
+  function resumeSolve() {
+    solver.resume()
+      .then(function () { syncLifecycleMarkers(); })
+      .catch(function (err) { console.error('Resume failed:', err); });
+  }
+
+  function cancelSolve() {
+    solver.cancel()
+      .then(function () { syncLifecycleMarkers(); })
+      .catch(function (err) { console.error('Cancel failed:', err); });
   }
 
   function cleanupTerminalJob() {
     var state = solver.getLifecycleState();
     if (!solver.getJobId() || state === 'IDLE' || state === 'PAUSED' || solver.isRunning()) {
-      return Promise.resolve();
+      return Promise.resolve(null);
     }
-    return solver.delete().catch(function (err) {
-      console.error('Delete failed:', err);
-    });
+    return solver.delete()
+      .then(function () {
+        lastAnalysis = null;
+        syncLifecycleMarkers();
+        return null;
+      })
+      .catch(function (err) {
+        console.error('Delete failed:', err);
+        throw err;
+      });
   }
 
   function openAnalysis() {
@@ -124,22 +193,11 @@
     if (!id) return;
     solver.analyzeSnapshot()
       .then(function (analysis) {
+        lastAnalysis = analysis;
         analysisModal.setBody(buildAnalysisHtml(analysis));
         analysisModal.open();
       })
       .catch(function () {});
-  }
-
-  function buildAnalysisHtml(analysis) {
-    if (!analysis || !analysis.constraints) return '<p>No analysis available.</p>';
-    var html = '<p><strong>Score:</strong> ' + SF.escHtml(analysis.score) + '</p>';
-    html += '<table class="sf-table"><thead><tr><th>Constraint</th><th>Type</th><th>Score</th><th>Matches</th></tr></thead><tbody>';
-    analysis.constraints.forEach(function (c) {
-      var matchCount = c.matchCount != null ? c.matchCount : (c.matches ? c.matches.length : 0);
-      html += '<tr><td>' + SF.escHtml(c.name) + '</td><td>' + SF.escHtml(c.constraintType || c.type || '') + '</td><td>' + SF.escHtml(c.score) + '</td><td>' + matchCount + '</td></tr>';
-    });
-    html += '</tbody></table>';
-    return html;
   }
 
   function renderAll(data) {
@@ -149,29 +207,282 @@
     renderTables(data);
   }
 
+  function bootstrapDemoData() {
+    fetchDemoCatalog()
+      .then(function (catalog) {
+        demoCatalog = catalog;
+        clearBootstrapError();
+        renderApiGuide();
+        return fetchDemoPlan(catalog.defaultId);
+      })
+      .then(function (data) {
+        renderAll(data);
+        updateSolveActionAvailability();
+      })
+      .catch(function (err) {
+        reportBootstrapError(err);
+      });
+  }
+
+  function fetchDemoCatalog() {
+    return requestJson('/demo-data', 'demo data catalog')
+      .then(function (catalog) {
+        if (!catalog || typeof catalog.defaultId !== 'string' || !Array.isArray(catalog.availableIds)) {
+          throw new Error('demo data catalog is missing defaultId or availableIds');
+        }
+        if (catalog.availableIds.indexOf(catalog.defaultId) === -1) {
+          throw new Error('demo data catalog defaultId is not present in availableIds');
+        }
+        return {
+          defaultId: catalog.defaultId,
+          availableIds: catalog.availableIds.slice(),
+        };
+      });
+  }
+
+  function fetchDemoPlan(demoId) {
+    return requestJson('/demo-data/' + encodeURIComponent(demoId), 'demo data "' + demoId + '"');
+  }
+
+  function requestJson(path, label) {
+    return fetch(path)
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error(label + ' returned HTTP ' + response.status);
+        }
+        return response.json();
+      });
+  }
+
+  function canSolve() {
+    return !bootstrapError && !!demoCatalog.defaultId;
+  }
+
+  function reportBootstrapError(err) {
+    bootstrapError = describeError(err);
+    bootstrapNotice.textContent = 'Demo data bootstrap failed: ' + bootstrapError;
+    bootstrapNotice.style.display = '';
+    app.dataset.bootstrapError = 'true';
+    renderApiGuide();
+    updateSolveActionAvailability();
+    console.error('Demo data bootstrap failed:', err);
+  }
+
+  function clearBootstrapError() {
+    bootstrapError = null;
+    bootstrapNotice.textContent = '';
+    bootstrapNotice.style.display = 'none';
+    delete app.dataset.bootstrapError;
+  }
+
+  function describeError(err) {
+    if (err && err.message) {
+      return err.message;
+    }
+    return String(err || 'unknown error');
+  }
+
+  function updateSolveActionAvailability() {
+    var solveButton = findHeaderButton('Solve');
+    var disabled = !canSolve();
+    if (!solveButton) return;
+    solveButton.disabled = disabled;
+    solveButton.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    solveButton.title = disabled
+      ? (bootstrapError ? 'Demo data bootstrap failed.' : 'Loading demo data catalog...')
+      : '';
+  }
+
+  function findHeaderButton(label) {
+    var buttons = header.querySelectorAll('button');
+    for (var i = 0; i < buttons.length; i += 1) {
+      var text = (buttons[i].textContent || '').trim();
+      if (text === label) {
+        return buttons[i];
+      }
+    }
+    return null;
+  }
+
+  function renderApiGuide() {
+    apiGuideContainer.innerHTML = '';
+    apiGuideContainer.appendChild(SF.createApiGuide({
+      endpoints: buildApiGuideEndpoints(),
+    }));
+  }
+
+  function buildApiGuideEndpoints() {
+    var defaultDemoPath = demoCatalog.defaultId
+      ? '/demo-data/' + demoCatalog.defaultId
+      : '/demo-data/{defaultId}';
+    return [
+      { method: 'GET', path: '/demo-data', description: 'Discover the default and available demo data IDs', curl: buildCurlCommand('GET', '/demo-data') },
+      { method: 'GET', path: defaultDemoPath, description: 'Fetch the discovered default demo data', curl: buildCurlCommand('GET', defaultDemoPath) },
+      { method: 'POST', path: '/jobs', description: 'Create a retained solving job', curl: buildCurlCommand('POST', '/jobs', { json: true, data: '@plan.json' }) },
+      { method: 'GET', path: '/jobs/{id}', description: 'Get current job summary', curl: buildCurlCommand('GET', '/jobs/{id}') },
+      { method: 'GET', path: '/jobs/{id}/snapshot', description: 'Fetch the latest retained snapshot', curl: buildCurlCommand('GET', '/jobs/{id}/snapshot') },
+      { method: 'GET', path: '/jobs/{id}/analysis?snapshot_revision={n}', description: 'Analyze an exact snapshot revision', curl: buildCurlCommand('GET', '/jobs/{id}/analysis?snapshot_revision=3', { quoteUrl: true }) },
+      { method: 'POST', path: '/jobs/{id}/pause', description: 'Request an exact runtime pause', curl: buildCurlCommand('POST', '/jobs/{id}/pause') },
+      { method: 'POST', path: '/jobs/{id}/resume', description: 'Resume a paused retained job', curl: buildCurlCommand('POST', '/jobs/{id}/resume') },
+      { method: 'POST', path: '/jobs/{id}/cancel', description: 'Cancel a live or paused job', curl: buildCurlCommand('POST', '/jobs/{id}/cancel') },
+      { method: 'DELETE', path: '/jobs/{id}', description: 'Delete a terminal retained job', curl: buildCurlCommand('DELETE', '/jobs/{id}') },
+      { method: 'GET', path: '/jobs/{id}/events', description: 'Stream job lifecycle updates (SSE)', curl: buildCurlCommand('GET', '/jobs/{id}/events', { stream: true }) },
+    ];
+  }
+
+  function buildCurlCommand(method, path, options) {
+    var parts = ['curl'];
+    if (options && options.stream) {
+      parts.push('-N');
+    }
+    if (method && method !== 'GET') {
+      parts.push('-X', method);
+    }
+    if (options && options.json) {
+      parts.push('-H', '"Content-Type: application/json"');
+    }
+
+    var url = buildApiUrl(path);
+    parts.push(options && options.quoteUrl ? '"' + url + '"' : url);
+
+    if (options && options.data) {
+      parts.push('-d', options.data);
+    }
+
+    return parts.join(' ');
+  }
+
+  function buildApiUrl(path) {
+    return currentOrigin() + path;
+  }
+
+  function currentOrigin() {
+    return window.location.origin || (window.location.protocol + '//' + window.location.host);
+  }
+
+  function syncLifecycleMarkers(meta) {
+    var jobId = solver.getJobId();
+    var snapshotRevision = solver.getSnapshotRevision();
+    var lifecycleState = meta && meta.lifecycleState ? meta.lifecycleState : solver.getLifecycleState();
+
+    if (jobId) {
+      app.dataset.jobId = String(jobId);
+    } else {
+      delete app.dataset.jobId;
+    }
+    if (snapshotRevision != null) {
+      app.dataset.snapshotRevision = String(snapshotRevision);
+    } else {
+      delete app.dataset.snapshotRevision;
+    }
+    if (lifecycleState && lifecycleState !== 'IDLE') {
+      app.dataset.lifecycleState = lifecycleState;
+    } else {
+      delete app.dataset.lifecycleState;
+    }
+    updateSolveActionAvailability();
+  }
+
+  function buildAnalysisHtml(analysis) {
+    if (!analysis || !analysis.constraints) return '<p>No analysis available.</p>';
+    var html = '<p><strong>Score:</strong> ' + SF.escHtml(analysis.score) + '</p>';
+    html += '<table class="sf-table"><thead><tr><th>Constraint</th><th>Type</th><th>Score</th><th>Matches</th></tr></thead><tbody>';
+    analysis.constraints.forEach(function (constraint) {
+      var matchCount = constraint.matchCount != null ? constraint.matchCount : (constraint.matches ? constraint.matches.length : 0);
+      html += '<tr><td>' + SF.escHtml(constraint.name) + '</td><td>' + SF.escHtml(constraint.constraintType || constraint.type || '') + '</td><td>' + SF.escHtml(constraint.score) + '</td><td>' + matchCount + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+
   function clonePlan(data) {
     return JSON.parse(JSON.stringify(data));
   }
 
   function renderSequences(data) {
     sequencesContainer.innerHTML = '';
+    var payload = buildSequencePayload(data);
+    if (!payload) return;
+
+    sequencesContainer.appendChild(payload.summary);
+    sequencesContainer.appendChild(ensureSequenceTimeline(payload.timeline).el);
+  }
+
+  function ensureSequenceTimeline(timelineConfig) {
+    if (!sequenceTimeline) {
+      sequenceTimeline = SF.rail.createTimeline(timelineConfig);
+      return sequenceTimeline;
+    }
+
+    sequenceTimeline.setModel(timelineConfig.model);
+    return sequenceTimeline;
+  }
+
+  function destroySequenceTimeline() {
+    if (!sequenceTimeline) return;
+    sequenceTimeline.destroy();
+    sequenceTimeline = null;
+  }
+
+  function buildSequencePayload(data) {
     var containers = data.containers || [];
-    if (!containers.length) return;
+    if (!containers.length) return null;
+
     var itemsById = buildItemsById(data);
     var metrics = deriveSequenceMetrics(containers);
     var sortedContainers = containers.slice().sort(compareContainers);
     var horizon = Math.max(metrics.longestSequence, 1);
+    var axis = buildSlotAxis(horizon);
 
-    sequencesContainer.appendChild(buildSequenceOverview(metrics));
-    sequencesContainer.appendChild(SF.rail.createHeader({
-      label: config.entities[0] ? config.entities[0].label : 'Container',
-      labelWidth: 220,
-      columns: Array.from({ length: horizon }, function (_, i) { return String(i + 1); }),
-    }));
-
-    sortedContainers.forEach(function (container) {
-      sequencesContainer.appendChild(buildSequenceCard(container, itemsById, metrics, horizon).el);
+    var lanes = sortedContainers.map(function (container) {
+      var sequence = container.items || [];
+      var firstItem = sequence.length ? describeItem(sequence[0], itemsById).name : '—';
+      var lastItem = sequence.length ? describeItem(sequence[sequence.length - 1], itemsById).name : '—';
+      return {
+        id: 'container-' + String(container.id != null ? container.id : container.name),
+        label: container.name || 'Unnamed container',
+        mode: 'detailed',
+        badges: containerBadges(sequence.length, metrics.longestSequence),
+        stats: [
+          { label: 'Items', value: sequence.length },
+          { label: 'First', value: firstItem },
+          { label: 'Last', value: lastItem },
+        ],
+        items: sequence.map(function (itemId, index) {
+          var item = describeItem(itemId, itemsById);
+          return buildTimelineItem(
+            'container-' + String(container.id || container.name) + '-item-' + String(index),
+            index,
+            item.name,
+            'Position ' + String(index + 1),
+            item.key
+          );
+        }),
+      };
     });
+
+    return {
+      summary: buildSummarySection(
+        ['Containers', 'Items', 'Longest sequence', 'Empty containers', 'Average items / container'],
+        [
+          String(metrics.totalContainers),
+          String(metrics.totalItems),
+          String(metrics.longestSequence),
+          String(metrics.emptyContainers),
+          String(metrics.averageItems),
+        ]
+      ),
+      timeline: {
+        label: config.entities[0] ? config.entities[0].label : 'Container',
+        labelWidth: 280,
+        title: config.title,
+        subtitle: 'Canonical retained timeline for list-variable ownership sequences',
+        model: {
+          axis: axis,
+          lanes: lanes,
+        },
+      },
+    };
   }
 
   function buildItemsById(data) {
@@ -200,72 +511,86 @@
     };
   }
 
-  function compareContainers(a, b) {
-    var aCount = (a.items || []).length;
-    var bCount = (b.items || []).length;
-    if (bCount !== aCount) return bCount - aCount;
-    return String(a.name || '').localeCompare(String(b.name || ''));
+  function compareContainers(left, right) {
+    var leftCount = (left.items || []).length;
+    var rightCount = (right.items || []).length;
+    if (rightCount !== leftCount) return rightCount - leftCount;
+    return String(left.name || '').localeCompare(String(right.name || ''));
   }
 
-  function buildSequenceOverview(metrics) {
+  function buildSummarySection(columns, row) {
     var section = SF.el('div', { className: 'sf-section' });
     section.appendChild(SF.createTable({
-      columns: ['Containers', 'Items', 'Longest sequence', 'Empty containers', 'Average items / container'],
-      rows: [[
-        String(metrics.totalContainers),
-        String(metrics.totalItems),
-        String(metrics.longestSequence),
-        String(metrics.emptyContainers),
-        String(metrics.averageItems),
-      ]],
+      columns: columns,
+      rows: [row],
     }));
     return section;
   }
 
-  function buildSequenceCard(container, itemsById, metrics, horizon) {
-    var sequence = container.items || [];
-    var firstItem = sequence.length ? describeItem(sequence[0], itemsById).name : '—';
-    var lastItem = sequence.length ? describeItem(sequence[sequence.length - 1], itemsById).name : '—';
-    var length = sequence.length;
-    var fullnessPct = metrics.longestSequence > 0
-      ? Math.round((length / metrics.longestSequence) * 100)
-      : 0;
-    var card = SF.rail.createCard({
-      id: 'container-' + String(container.id != null ? container.id : container.name),
-      name: container.name || 'Unnamed container',
-      labelWidth: 220,
-      columns: horizon,
-      type: 'Sequence',
-      badges: containerBadges(length, metrics.longestSequence),
-      gauges: [
-        {
-          label: 'Length',
-          pct: Math.min(fullnessPct, 100),
-          style: length === 0 ? 'heat' : 'load',
-          text: String(length) + '/' + String(Math.max(metrics.longestSequence, 1)),
-        },
-      ],
-      stats: [
-        { label: 'Items', value: length },
-        { label: 'First', value: firstItem },
-        { label: 'Last', value: lastItem },
-      ],
-    });
+  function buildSlotAxis(slotCount) {
+    var normalizedSlots = Math.max(slotCount, 1);
+    var groupSize = normalizedSlots > 24 ? 8 : (normalizedSlots > 12 ? 6 : 4);
+    var days = [];
+    var ticks = [];
 
-    sequence.forEach(function (itemId, index) {
-      var item = describeItem(itemId, itemsById);
-      card.addBlock({
-        id: 'container-' + String(container.id || container.name) + '-item-' + String(index),
-        label: item.name,
-        meta: 'Pos ' + String(index + 1),
-        start: index,
-        end: index + 1,
-        horizon: horizon,
-        color: SF.colors.pick(String(item.key)),
+    for (var startSlot = 0; startSlot < normalizedSlots; startSlot += groupSize) {
+      var endSlot = Math.min(normalizedSlots, startSlot + groupSize);
+      days.push({
+        id: 'window-' + startSlot,
+        label: 'Window ' + String(days.length + 1),
+        subLabel: slotRangeLabel(startSlot, endSlot),
+        startMinute: startSlot * SLOT_MINUTES,
+        endMinute: endSlot * SLOT_MINUTES,
       });
-    });
+    }
 
-    return card;
+    for (var slotIndex = 0; slotIndex < normalizedSlots; slotIndex += 1) {
+      ticks.push({
+        id: 'tick-' + slotIndex,
+        minute: slotIndex * SLOT_MINUTES,
+        label: 'Slot ' + String(slotIndex + 1),
+      });
+    }
+
+    return {
+      startMinute: 0,
+      endMinute: normalizedSlots * SLOT_MINUTES,
+      days: days,
+      ticks: ticks,
+      initialViewport: {
+        startMinute: 0,
+        endMinute: Math.min(normalizedSlots, DEFAULT_VIEWPORT_SLOTS) * SLOT_MINUTES,
+      },
+    };
+  }
+
+  function buildTimelineItem(id, slotIndex, label, meta, toneKey) {
+    return {
+      id: id,
+      startMinute: slotIndex * SLOT_MINUTES,
+      endMinute: (slotIndex + 1) * SLOT_MINUTES,
+      label: String(label),
+      meta: meta || '',
+      tone: toneForKey(toneKey || label),
+    };
+  }
+
+  function slotRangeLabel(startSlot, endSlot) {
+    if (endSlot - startSlot <= 1) {
+      return 'Slot ' + String(startSlot + 1);
+    }
+    return 'Slots ' + String(startSlot + 1) + '-' + String(endSlot);
+  }
+
+  function toneForKey(key) {
+    var text = String(key || '');
+    var hash = 0;
+
+    for (var index = 0; index < text.length; index += 1) {
+      hash = ((hash * 31) + text.charCodeAt(index)) >>> 0;
+    }
+
+    return TIMELINE_TONES[hash % TIMELINE_TONES.length];
   }
 
   function containerBadges(length, longestSequence) {
@@ -290,17 +615,17 @@
   function renderTables(data) {
     tablesContainer.innerHTML = '';
 
-    config.entities.forEach(function (entity) {
+    (config.entities || []).forEach(function (entity) {
       var items = data[entity.plural] || data[entity.name + 's'] || [];
       if (!items.length) return;
       var cols = Object.keys(items[0]);
       var rows = items.map(function (item) {
-        return cols.map(function (k) {
-          var v = item[k];
-          if (v === null || v === undefined) return '—';
-          if (Array.isArray(v)) return v.join(', ');
-          if (typeof v === 'object') return JSON.stringify(v);
-          return String(v);
+        return cols.map(function (key) {
+          var value = item[key];
+          if (value === null || value === undefined) return '—';
+          if (Array.isArray(value)) return value.join(', ');
+          if (typeof value === 'object') return JSON.stringify(value);
+          return String(value);
         });
       });
       var section = SF.el('div', { className: 'sf-section' });
@@ -309,16 +634,16 @@
       tablesContainer.appendChild(section);
     });
 
-    config.facts.forEach(function (fact) {
+    (config.facts || []).forEach(function (fact) {
       var items = data[fact.plural] || data[fact.name + 's'] || [];
       if (!items.length) return;
       var cols = Object.keys(items[0]);
       var rows = items.map(function (item) {
-        return cols.map(function (k) {
-          var v = item[k];
-          if (v === null || v === undefined) return '—';
-          if (typeof v === 'object') return JSON.stringify(v);
-          return String(v);
+        return cols.map(function (key) {
+          var value = item[key];
+          if (value === null || value === undefined) return '—';
+          if (typeof value === 'object') return JSON.stringify(value);
+          return String(value);
         });
       });
       var section = SF.el('div', { className: 'sf-section' });
@@ -327,5 +652,4 @@
       tablesContainer.appendChild(section);
     });
   }
-
 })();

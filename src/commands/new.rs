@@ -5,13 +5,14 @@ use std::process::Command;
 use crate::error::{is_rust_keyword, CliError, CliResult};
 use crate::output;
 use crate::scaffold_target::{
-    MAPS_SOURCE_PATH, RUNTIME_SOURCE_PATH, RUNTIME_TARGET_DISPLAY, RUNTIME_TARGET_LABEL,
-    UI_SOURCE_PATH,
+    MAPS_CRATE_VERSION, MAPS_SOURCE_PATH, MAPS_TARGET_LABEL, RUNTIME_CRATE_VERSION,
+    RUNTIME_SOURCE_PATH, RUNTIME_TARGET_DISPLAY, RUNTIME_TARGET_LABEL, UI_CRATE_VERSION,
+    UI_SOURCE_PATH, UI_TARGET_LABEL,
 };
 use crate::template;
 
 // Keep the neutral scaffold embedded so generated apps are self-contained at build time.
-static UNIFIED_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/standard/generic");
+static UNIFIED_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/scalar/generic");
 
 pub fn run(name: &str, skip_git: bool, skip_readme: bool, quiet: bool) -> CliResult {
     let crate_name = to_crate_name(name);
@@ -23,7 +24,7 @@ pub fn run(name: &str, skip_git: bool, skip_readme: bool, quiet: bool) -> CliRes
         name,
         &crate_name,
         &UNIFIED_TEMPLATE,
-        "neutral shell",
+        "neutral scaffold",
         skip_git,
         skip_readme,
         quiet,
@@ -101,7 +102,7 @@ fn scaffold(
     template::render(template_dir, dest, vars)?;
 
     // Write .gitignore
-    let gitignore_content = "/target\n**/*.rs.bk\nCargo.lock\n";
+    let gitignore_content = "/target\n**/*.rs.bk\n";
     std::fs::write(dest.join(".gitignore"), gitignore_content).map_err(|e| CliError::IoError {
         context: "failed to write .gitignore".to_string(),
         source: e,
@@ -174,15 +175,17 @@ fn scaffold(
 }
 
 fn solverforge_dep_spec() -> String {
-    "{ version = \"0.8.8\", features = [\"serde\", \"console\", \"verbose-logging\"] }".to_string()
+    format!(
+        "{{ version = \"{RUNTIME_CRATE_VERSION}\", features = [\"serde\", \"console\", \"verbose-logging\"] }}"
+    )
 }
 
 fn solverforge_ui_dep_spec() -> String {
-    "{ version = \"0.4.3\" }".to_string()
+    format!("{{ version = \"{UI_CRATE_VERSION}\" }}")
 }
 
 fn solverforge_maps_dep_spec() -> String {
-    "{ version = \"2.1.3\" }".to_string()
+    format!("{{ version = \"{MAPS_CRATE_VERSION}\" }}")
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {
@@ -230,16 +233,16 @@ fn print_template_guidance(project_name: &str) {
 
     println!("    solverforge server");
     println!();
-    println!("  This starter includes:");
-    println!("    - One neutral app shell for standard, list, or mixed modeling");
-    println!("    - Variable-driven views generated from solverforge.app.toml");
+    println!("  This scaffold includes:");
+    println!("    - One neutral app shell for scalar, list, or mixed modeling");
+    println!("    - Variable-driven timeline and data views generated from solverforge.app.toml");
     println!("    - Retained job lifecycle with pause, resume, cancel, and delete");
     println!("    - Typed SSE lifecycle events and snapshot-bound score analysis");
     println!("    - solverforge.app.toml for the scaffolded domain contract");
     println!("    - solver.toml as the search-strategy layer");
     println!("    solverforge generate entity task");
     println!("    solverforge generate fact resource");
-    println!("    solverforge generate variable resource_idx --entity Task --kind standard --range resources --allows-unassigned");
+    println!("    solverforge generate variable resource_idx --entity Task --kind scalar --range resources --allows-unassigned");
 
     println!();
 }
@@ -276,7 +279,7 @@ fn print_file_tree(root: &Path, dir: &Path) -> CliResult {
 fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String {
     let mut readme = format!("# {}\n\n", project_name);
     readme.push_str(&format!(
-        "A SolverForge constraint optimization project (starter: `{}`).\n\n",
+        "A SolverForge constraint optimization project (scaffold: `{}`).\n\n",
         label
     ));
     readme.push_str("## Versioning\n\n");
@@ -289,11 +292,19 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
         RUNTIME_TARGET_LABEL
     ));
     readme.push_str(&format!(
-        "- Runtime dependency currently wired into `Cargo.toml`: `{}`\n\n",
+        "- SolverForge UI target for this scaffold: `{}`\n",
+        UI_TARGET_LABEL
+    ));
+    readme.push_str(&format!(
+        "- SolverForge maps target for this scaffold: `{}`\n",
+        MAPS_TARGET_LABEL
+    ));
+    readme.push_str(&format!(
+        "- Runtime dependency currently wired into `Cargo.toml`: `{}`\n",
         RUNTIME_SOURCE_PATH
     ));
     readme.push_str(&format!(
-        "- Frontend UI dependency currently wired into `Cargo.toml`: `{}`\n\n",
+        "- Frontend UI dependency currently wired into `Cargo.toml`: `{}`\n",
         UI_SOURCE_PATH
     ));
     readme.push_str(&format!(

@@ -1,15 +1,15 @@
 use serde::{Deserialize, Serialize};
 use solverforge::prelude::*;
+
+// @solverforge:neutral-solution
 // @solverforge:begin solution-imports
-use super::Container;
-use super::Item;
 // @solverforge:end solution-imports
 
-/// The root planning solution: items + containers + score.
+/// The root planning solution.
 ///
-/// Rename this to something domain-specific (Route, Schedule, Assignment, …).
-/// The list field on `Container` declares what is solvable; this root type
-/// groups the sample data and score for the scaffold.
+/// Fresh projects start as a neutral shell. Add fact collections, planning
+/// entity collections, and variable fields through the CLI as your domain
+/// takes shape.
 #[planning_solution(
     constraints = "crate::constraints::create_constraints",
     solver_toml = "../../solver.toml"
@@ -17,26 +17,19 @@ use super::Item;
 #[derive(Serialize, Deserialize)]
 pub struct Plan {
     // @solverforge:begin solution-collections
-    #[problem_fact_collection]
-    pub item_facts: Vec<Item>,
-    #[planning_entity_collection]
-    pub containers: Vec<Container>,
     // @solverforge:end solution-collections
     #[planning_score]
     pub score: Option<HardSoftScore>,
 }
 
 impl Plan {
+    #[rustfmt::skip]
     pub fn new(
         // @solverforge:begin solution-constructor-params
-        item_facts: Vec<Item>,
-        containers: Vec<Container>,
         // @solverforge:end solution-constructor-params
     ) -> Self {
         Self {
             // @solverforge:begin solution-constructor-init
-            item_facts,
-            containers,
             // @solverforge:end solution-constructor-init
             score: None,
         }

@@ -6,6 +6,8 @@ use crate::error::{CliError, CliResult};
 
 // Looks for a custom template override in `.solverforge/templates/<template_name>.rs.tmpl`.
 // Template variables use `{{NAME}}`, `{{SNAKE_NAME}}`, `{{FIELDS}}` style placeholders.
+// Entity and solution overrides are supported only when they emit the canonical
+// managed blocks required by later generate/destroy rewrites.
 // Returns the rendered content if a custom template exists, or `None` to use the built-in default.
 pub fn load_custom(template_name: &str, vars: &[(&str, &str)]) -> Option<String> {
     let path = Path::new(".solverforge")

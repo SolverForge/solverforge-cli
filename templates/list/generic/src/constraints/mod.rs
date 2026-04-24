@@ -6,10 +6,12 @@ Assemble them into a tuple — the solver scores the solution against all of the
 Add as many constraints as your problem needs. The tuple supports up to 12 elements;
 use nested tuples for more. */
 
+pub use self::assemble::create_constraints;
+
+// @solverforge:begin constraint-modules
 mod balanced_load;
 mod sequence_cohesion;
-
-pub use self::assemble::create_constraints;
+// @solverforge:end constraint-modules
 
 mod assemble {
     use super::*;
@@ -17,6 +19,8 @@ mod assemble {
     use solverforge::prelude::*;
 
     pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
+        // @solverforge:begin constraint-calls
         (balanced_load::constraint(), sequence_cohesion::constraint())
+        // @solverforge:end constraint-calls
     }
 }

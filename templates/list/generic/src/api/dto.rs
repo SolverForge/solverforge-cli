@@ -3,6 +3,7 @@ use solverforge::{
     HardSoftScore, SolverLifecycleState, SolverSnapshot, SolverSnapshotAnalysis, SolverStatus,
     SolverTelemetry, SolverTerminalReason,
 };
+use std::time::Duration;
 
 use crate::domain::{Container, Item, Plan};
 
@@ -66,9 +67,12 @@ pub struct AnalyzeResponse {
 pub struct TelemetryDto {
     pub elapsed_ms: u64,
     pub step_count: u64,
+    pub moves_generated: u64,
     pub moves_evaluated: u64,
     pub moves_accepted: u64,
     pub score_calculations: u64,
+    pub generation_ms: u64,
+    pub evaluation_ms: u64,
     pub moves_per_second: u64,
     pub acceptance_rate: f64,
 }
@@ -137,7 +141,7 @@ impl PlanDto {
         }
     }
 
-    pub fn to_domain(&self) -> Plan {
+    pub fn to_domain(&self) -> Result<Plan, String> {
         let item_facts: Vec<Item> = self.items.iter().map(ItemDto::to_item).collect();
         let id_to_idx: std::collections::HashMap<&str, usize> = item_facts
             .iter()
@@ -148,32 +152,43 @@ impl PlanDto {
             .containers
             .iter()
             .map(|container| {
-                let items: Vec<usize> = container
+                let items: Result<Vec<usize>, String> = container
                     .items
                     .iter()
-                    .filter_map(|id| id_to_idx.get(id.as_str()).copied())
+                    .map(|id| {
+                        id_to_idx
+                            .get(id.as_str())
+                            .copied()
+                            .ok_or_else(|| format!("unknown item id '{id}'"))
+                    })
                     .collect();
-                Container {
+                Ok(Container {
                     id: container.id.clone(),
                     name: container.name.clone(),
-                    items,
-                }
+                    items: items?,
+                })
             })
-            .collect();
-        Plan::new(item_facts, containers)
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok(Plan::new(item_facts, containers))
     }
 }
 
 impl TelemetryDto {
     pub fn from_runtime(telemetry: SolverTelemetry) -> Self {
         Self {
-            elapsed_ms: telemetry.elapsed_ms,
+            elapsed_ms: duration_to_millis(telemetry.elapsed),
             step_count: telemetry.step_count,
+            moves_generated: telemetry.moves_generated,
             moves_evaluated: telemetry.moves_evaluated,
             moves_accepted: telemetry.moves_accepted,
             score_calculations: telemetry.score_calculations,
-            moves_per_second: telemetry.moves_per_second,
-            acceptance_rate: telemetry.acceptance_rate,
+            generation_ms: duration_to_millis(telemetry.generation_time),
+            evaluation_ms: duration_to_millis(telemetry.evaluation_time),
+            moves_per_second: whole_units_per_second(telemetry.moves_evaluated, telemetry.elapsed),
+            acceptance_rate: derive_acceptance_rate(
+                telemetry.moves_accepted,
+                telemetry.moves_evaluated,
+            ),
         }
     }
 }
@@ -260,5 +275,30 @@ pub fn terminal_reason_label(reason: SolverTerminalReason) -> &'static str {
         SolverTerminalReason::TerminatedByConfig => "terminated_by_config",
         SolverTerminalReason::Cancelled => "cancelled",
         SolverTerminalReason::Failed => "failed",
+    }
+}
+
+fn duration_to_millis(duration: Duration) -> u64 {
+    duration.as_millis().min(u128::from(u64::MAX)) as u64
+}
+
+fn whole_units_per_second(count: u64, elapsed: Duration) -> u64 {
+    let nanos = elapsed.as_nanos();
+    if nanos == 0 {
+        0
+    } else {
+        let per_second = u128::from(count)
+            .saturating_mul(1_000_000_000)
+            .checked_div(nanos)
+            .unwrap_or(0);
+        per_second.min(u128::from(u64::MAX)) as u64
+    }
+}
+
+fn derive_acceptance_rate(moves_accepted: u64, moves_evaluated: u64) -> f64 {
+    if moves_evaluated == 0 {
+        0.0
+    } else {
+        moves_accepted as f64 / moves_evaluated as f64
     }
 }

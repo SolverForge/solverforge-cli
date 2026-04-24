@@ -2,6 +2,7 @@ use parking_lot::RwLock;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 
 use solverforge::{
@@ -21,9 +22,12 @@ static MANAGER: SolverManager<Plan> = SolverManager::new();
 struct TelemetryPayload {
     elapsed_ms: u64,
     step_count: u64,
+    moves_generated: u64,
     moves_evaluated: u64,
     moves_accepted: u64,
     score_calculations: u64,
+    generation_ms: u64,
+    evaluation_ms: u64,
     moves_per_second: u64,
     acceptance_rate: f64,
 }
@@ -47,7 +51,6 @@ struct JobEventPayload {
 
 struct JobState {
     sse_tx: broadcast::Sender<String>,
-    last_event: String,
 }
 
 /// Manages retained solving jobs and broadcasts lifecycle-complete SSE payloads.
@@ -64,15 +67,12 @@ impl SolverService {
 
     pub fn start_job(&self, plan: Plan) -> Result<String, SolverManagerError> {
         let (job_id, receiver) = MANAGER.solve(plan)?;
-        let status = MANAGER.get_status(job_id)?;
-        let initial_event = status_event_payload(job_id, "progress", &status);
         let (sse_tx, _) = broadcast::channel(64);
 
         self.jobs.write().insert(
             job_id,
             JobState {
                 sse_tx: sse_tx.clone(),
-                last_event: initial_event,
             },
         );
 
@@ -92,12 +92,24 @@ impl SolverService {
             .map(|state| state.sse_tx.subscribe())
     }
 
-    pub fn sse_snapshot(&self, id: &str) -> Option<String> {
-        let job_id = parse_job_id(id).ok()?;
-        self.jobs
-            .read()
-            .get(&job_id)
-            .map(|state| state.last_event.clone())
+    pub fn bootstrap_event(&self, id: &str) -> Result<String, SolverManagerError> {
+        let job_id = parse_job_id(id)?;
+        let status = MANAGER.get_status(job_id)?;
+        if let Some(revision) = status.latest_snapshot_revision {
+            let snapshot = MANAGER.get_snapshot(job_id, Some(revision))?;
+            return Ok(snapshot_status_event_payload(
+                job_id,
+                bootstrap_snapshot_event_type(status.lifecycle_state),
+                &status,
+                &snapshot,
+            ));
+        }
+
+        Ok(status_event_payload(
+            job_id,
+            bootstrap_event_type(status.lifecycle_state),
+            &status,
+        ))
     }
 
     pub fn get_status(&self, id: &str) -> Result<SolverStatus<HardSoftScore>, SolverManagerError> {
@@ -175,13 +187,9 @@ async fn drain_receiver(
             }
         };
 
-        let mut jobs = jobs.write();
-        if let Some(state) = jobs.get_mut(&job_id) {
-            state.last_event = payload.clone();
-        } else {
+        if !jobs.read().contains_key(&job_id) {
             return;
         }
-        drop(jobs);
 
         let _ = sse_tx.send(payload);
     }
@@ -213,6 +221,52 @@ fn status_event_payload(
     })
 }
 
+fn snapshot_status_event_payload(
+    job_id: usize,
+    event_type: &'static str,
+    status: &SolverStatus<HardSoftScore>,
+    snapshot: &SolverSnapshot<Plan>,
+) -> String {
+    serialize_payload(JobEventPayload {
+        id: job_id.to_string(),
+        job_id: job_id.to_string(),
+        event_type,
+        event_sequence: status.event_sequence,
+        lifecycle_state: lifecycle_state_label(status.lifecycle_state),
+        terminal_reason: status.terminal_reason.map(terminal_reason_label),
+        telemetry: telemetry_payload(status.telemetry),
+        current_score: status
+            .current_score
+            .or(snapshot.current_score)
+            .map(|score| score.to_string()),
+        best_score: status
+            .best_score
+            .or(snapshot.best_score)
+            .map(|score| score.to_string()),
+        snapshot_revision: Some(snapshot.snapshot_revision),
+        solution: Some(PlanDto::from_plan(&snapshot.solution)),
+        error: None,
+    })
+}
+
+fn bootstrap_event_type(state: SolverLifecycleState) -> &'static str {
+    match state {
+        SolverLifecycleState::Solving => "progress",
+        SolverLifecycleState::PauseRequested => "pause_requested",
+        SolverLifecycleState::Paused => "paused",
+        SolverLifecycleState::Completed => "completed",
+        SolverLifecycleState::Cancelled => "cancelled",
+        SolverLifecycleState::Failed => "failed",
+    }
+}
+
+fn bootstrap_snapshot_event_type(state: SolverLifecycleState) -> &'static str {
+    match state {
+        SolverLifecycleState::Solving => "best_solution",
+        other => bootstrap_event_type(other),
+    }
+}
+
 fn event_payload(
     job_id: usize,
     event_type: &'static str,
@@ -242,13 +296,19 @@ fn serialize_payload(payload: JobEventPayload) -> String {
 
 fn telemetry_payload(telemetry: SolverTelemetry) -> TelemetryPayload {
     TelemetryPayload {
-        elapsed_ms: telemetry.elapsed_ms,
+        elapsed_ms: duration_to_millis(telemetry.elapsed),
         step_count: telemetry.step_count,
+        moves_generated: telemetry.moves_generated,
         moves_evaluated: telemetry.moves_evaluated,
         moves_accepted: telemetry.moves_accepted,
         score_calculations: telemetry.score_calculations,
-        moves_per_second: telemetry.moves_per_second,
-        acceptance_rate: telemetry.acceptance_rate,
+        generation_ms: duration_to_millis(telemetry.generation_time),
+        evaluation_ms: duration_to_millis(telemetry.evaluation_time),
+        moves_per_second: whole_units_per_second(telemetry.moves_evaluated, telemetry.elapsed),
+        acceptance_rate: derive_acceptance_rate(
+            telemetry.moves_accepted,
+            telemetry.moves_evaluated,
+        ),
     }
 }
 
@@ -275,5 +335,30 @@ fn terminal_reason_label(reason: SolverTerminalReason) -> &'static str {
 impl Default for SolverService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+fn duration_to_millis(duration: Duration) -> u64 {
+    duration.as_millis().min(u128::from(u64::MAX)) as u64
+}
+
+fn whole_units_per_second(count: u64, elapsed: Duration) -> u64 {
+    let nanos = elapsed.as_nanos();
+    if nanos == 0 {
+        0
+    } else {
+        let per_second = u128::from(count)
+            .saturating_mul(1_000_000_000)
+            .checked_div(nanos)
+            .unwrap_or(0);
+        per_second.min(u128::from(u64::MAX)) as u64
+    }
+}
+
+fn derive_acceptance_rate(moves_accepted: u64, moves_evaluated: u64) -> f64 {
+    if moves_evaluated == 0 {
+        0.0
+    } else {
+        moves_accepted as f64 / moves_evaluated as f64
     }
 }
