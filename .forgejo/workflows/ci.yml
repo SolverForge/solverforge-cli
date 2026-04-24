@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev, release/*, feature/*]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  SF_USE_PUBLISHED_DEPS: "1"
+
+jobs:
+  check:
+    name: Check
+    runs-on: rust
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build CLI
+        run: cargo build --locked
+
+      - name: Run CLI unit tests
+        run: cargo test --locked --bin solverforge
+
+      - name: Run scaffold contract tests
+        run: cargo test --locked --test scaffold_test -- --nocapture --test-threads=1
