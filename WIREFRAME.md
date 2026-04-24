@@ -1,52 +1,182 @@
 # solverforge-cli Wireframe
 
-## Scaffolding Surface
+## Product Surface
 
-The standalone CLI currently ships one built-in scaffold path only:
+`solverforge-cli` owns one public scaffold entry point:
 
 - `solverforge new <name>`
 
-Domain-specific examples such as employee scheduling and vehicle routing are intentionally out of scope for the built-in scaffold catalog. They belong in quickstarts.
+The generated project is a neutral shell. Users add facts, entities, variables,
+constraints, solver config, and generated data after scaffolding. The CLI does
+not expose scaffold-family flags.
 
-That built-in scaffold is a neutral shell. Users shape it afterward through facts, entities, variables, constraints, generated data, and `solverforge.app.toml` instead of selecting a starter family up front.
+Current generated projects target:
 
-## Frontend Rule
+- `solverforge 0.9.0`
+- `solverforge-ui 0.6.0`
+- `solverforge-maps 2.1.3`
 
-For any generated frontend feature, ask first: does `solverforge-ui` already provide it?
+The CLI version is separate from those targets and must remain visible in
+version output and generated README content.
 
-If yes, the scaffold should use the shipped `solverforge-ui` surface instead of re-implementing it. In practice that means the generated apps should rely on:
+## Canonical Modeling Terms
 
-- `solverforge_ui::routes()` for `/sf/*` assets
-- `SF.createBackend()` and `SF.createSolver()` for solver lifecycle
-- `SF.createHeader()`, `SF.createStatusBar()`, `SF.createModal()`, `SF.createApiGuide()`, `SF.createFooter()`
-- `SF.createTable()` plus view-specific render glue
-- `SF.rail.*`, `SF.gantt.*`, or optional modules only when the scaffold actually needs them
+Planning variable kinds are:
 
-The scaffold may still own thin composition code for domain-specific projections that are not yet shipped as turnkey `solverforge-ui` views.
+- `scalar`: one assigned value from a fact collection, configured with
+  `--range <FACT_COLLECTION>`
+- `list`: an ordered sequence of values from a fact collection, configured with
+  `--elements <FACT_COLLECTION>`
+
+`standard` is not a planning variable kind. It is only the default demo data
+size name alongside `small` and `large`.
 
 ## Generated Project Shape
 
-The built-in neutral scaffold should generate:
+The neutral scaffold generates:
 
-- `Cargo.toml` with published `solverforge`, `solverforge-ui`, and `solverforge-maps` dependencies
+- `Cargo.toml` with `solverforge`, `solverforge-ui`, and `solverforge-maps`
+  dependencies
+- `solver.toml` as the search strategy and termination configuration layer
 - `solverforge.app.toml` as the scaffolded app/domain contract
-- `src/api/` exposing the retained `/jobs` REST/SSE contract expected by `solverforge-ui`
+- `src/domain/` with a neutral `Plan` solution and managed domain exports
+- `src/constraints/` with an empty managed constraint set
+- `src/api/` exposing the retained `/jobs` REST/SSE contract expected by
+  `solverforge-ui`
+- `src/solver/` tracking best solution, status telemetry, lifecycle events, and
+  snapshot-bound analysis
+- `src/data/mod.rs` as the stable data import wrapper
+- `src/data/data_seed.rs` as compiler-owned generated sample data
 - `static/index.html` loading `/sf/sf.css` and `/sf/sf.js`
-- `static/app.js` containing only app composition and view-specific rendering
-- `static/generated/ui-model.json` as the compiler-owned view/model projection
+- `static/app.js` containing app composition and projection-specific rendering
+- `static/generated/ui-model.json` as the compiler-owned UI model projection
 - `static/sf-config.json` as the preserved customization seam
 
-## `sf-config.json`
+`templates/scalar/generic` is the embedded template used by `solverforge new`.
+`templates/list/generic` is not a public scaffold selector.
 
-`sf-config.json` remains the generated UI wiring file. CLI updates must preserve:
+## Managed Blocks
 
-- unknown top-level keys
-- unknown `view` shapes
+Generated mutation is canonical-only. The CLI rewrites explicit managed block
+regions and does not infer old unmanaged shapes.
 
-The CLI may extend the config only for scaffold-owned rendering concerns. It should not duplicate configuration for behaviors already covered by `solverforge-ui` primitives.
+Required managed surfaces:
 
-## RC Defaults
+- `src/domain/mod.rs`: `solverforge::planning_model!` manifest with
+  `root = "src/domain"` and the `domain-exports` block
+- solution files: `solution-imports`, `solution-collections`,
+  `solution-constructor-params`, and `solution-constructor-init`
+- entity files: `entity-variables` and `entity-variable-init`
+- `src/constraints/mod.rs`: `constraint-modules` and `constraint-calls`
 
-`.solverforgerc` still carries a legacy `default_template` field in the parser for compatibility with older configs and tests, but it is not part of the current public scaffold surface and does not define multiple starter families today.
+Commands that add or remove generated resources should fail clearly when those
+current markers are missing or duplicated.
+Project-local entity and solution override templates are only valid when they
+emit the same managed block set; free-form overrides are intentionally rejected.
 
-Do not extend docs or new features around `default_template` unless the public scaffold model changes again.
+## App Spec Projection
+
+`solverforge.app.toml` is the project model used to regenerate frontend and data
+projections. It tracks:
+
+- app metadata, including fixed neutral-shell metadata and CLI version
+- runtime target metadata and dependency source strings
+- demo data sizes
+- solution name and score type
+- fact collections
+- planning entity collections
+- `scalar` and `list` variable declarations
+- constraint modules
+
+`static/generated/ui-model.json` is derived from the app spec and current domain
+parsing. Unknown variable kinds are errors, not aliases.
+
+## Frontend Rule
+
+For any generated frontend feature, ask first: does `solverforge-ui` already
+provide it?
+
+If yes, the scaffold should use the shipped `solverforge-ui` surface instead of
+re-implementing it. Generated apps should rely on:
+
+- `solverforge_ui::routes()` for `/sf/*` assets
+- `SF.createBackend()` and `SF.createSolver()` for retained solver lifecycle
+- `SF.createHeader()`, `SF.createStatusBar()`, `SF.createModal()`,
+  `SF.createApiGuide()`, and `SF.createFooter()`
+- `SF.createTable()` for tabular projections
+- `SF.rail.createTimeline(...)` for variable-driven timelines
+
+The scaffold may own thin composition code for domain projections that are not
+available as turnkey `solverforge-ui` views.
+
+## Runtime Contract
+
+Generated apps should behave like production references:
+
+- status endpoints expose `currentScore`, `bestScore`, solver status, and latest
+  snapshot revision
+- SSE messages carry typed lifecycle metadata including `eventType`,
+  `eventSequence`, `lifecycleState`, and `snapshotRevision`
+- retained lifecycle events include `progress`, `best_solution`,
+  `pause_requested`, `paused`, `resumed`, `completed`, `cancelled`, and `failed`
+- progress-only events update status, not the rendered board
+- best-solution snapshots remain separate from live progress telemetry
+- `/jobs/{id}/snapshot` stays aligned with snapshot-bound analysis
+- reconnect bootstrap comes from current `SolverManager` status plus the latest
+  retained snapshot, not cached last SSE event text
+- Pause resumes from a retained checkpoint, Stop calls runtime cancel, and
+  Delete is available only for terminal retained jobs before the next Solve
+
+## Data Generation
+
+`solverforge generate data` owns generated sample data:
+
+- preserves `src/data/mod.rs` as the stable wrapper
+- rewrites `src/data/data_seed.rs`
+- persists the selected demo size in `solverforge.app.toml`
+
+Generated data should be deterministic and structurally useful for optimization
+testing. It should not pretend to be domain-specific business data.
+
+## Configuration
+
+`solver.toml` owns solver behavior, including phases and termination settings.
+`solverforge config show|set` edits that file through dotted TOML paths such as
+`termination.seconds_spent_limit`.
+
+`.solverforgerc` is intentionally narrow and only carries local CLI preferences:
+
+- `port`
+- `no_color`
+- `quiet`
+
+## Validation Shape
+
+Validation should use ephemeral generated apps rather than checked-in sample
+projects:
+
+- scaffold contract tests verify dependency targets, generated README metadata,
+  managed block markers, generated app specs, and `cargo check`
+- runtime pipeline tests run phase-marked generated-app scenarios
+- Playwright tests boot generated apps on random ports and verify browser-visible
+  lifecycle behavior
+
+Current scenario policy:
+
+- neutral shell: bootable empty app
+- mixed app: generated scalar-plus-list shape and browser/runtime surface
+- scalar-only app: seeded solve flow through typed SSE, status, analysis, and
+  delete flow
+
+Do not claim mixed seeded solving until the runtime supports that combination.
+
+## Non-Goals
+
+Do not reintroduce:
+
+- public scaffold-family flags
+- hidden `standard` variable-kind aliases
+- hidden console/scaffold aliases
+- compatibility migrations for unmanaged legacy generated files
+- raw score-only SSE payloads
+- separate starter-specific solve/render lifecycles

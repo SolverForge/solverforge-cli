@@ -1,18 +1,21 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in files like `src/error.rs`, `src/output.rs`, `src/rc.rs`, and `src/template.rs`. Integration tests live in `tests/`, and scaffold/template assets live in `templates/`.
+`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in files like `src/app_spec.rs`, `src/error.rs`, `src/managed_block.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, and `src/template.rs`. Integration tests live in `tests/`, and scaffold/template assets live in `templates/`.
 
 ## Current Product Direction
 `solverforge-cli` is the default entry point for new SolverForge applications. Treat the CLI as its own versioned product, distinct from the runtime crates and UI assets that generated projects target.
 
 Current scaffold policy:
-- generated projects currently target `solverforge 0.8.8`, `solverforge-ui 0.4.3`, and `solverforge-maps 2.1.3` as their crate dependency versions
+- generated projects currently target `solverforge 0.9.0`, `solverforge-ui 0.6.0`, and `solverforge-maps 2.1.3` as their crate dependency versions
 - `solverforge new <name>` is the only public scaffold path and produces a neutral shell
 - users shape the app afterward through facts, entities, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
+- `scalar` and `list` are the only planning variable kinds accepted by the public CLI and app-spec projection
+- `standard` is a demo size label only; do not reintroduce it as a variable kind or scaffold family
+- `templates/scalar/generic` is the embedded neutral scaffold used by `solverforge new`; `templates/list/generic` is not a public `new` selector
 
-When changing templates or scaffold behavior, follow the current repo reality over older starter-template assumptions.
+When changing templates or scaffold behavior, follow the current repo reality over older starter-template assumptions. Do not add legacy aliases, compatibility shims, migration fallbacks, or automatic rewrites for unmanaged pre-refactor file shapes unless that is explicitly requested.
 
 ## Build, Test, and Development Commands
 - `cargo build`: compile the `solverforge` binary.
@@ -51,7 +54,7 @@ Current end-to-end scenario policy:
 
 - neutral shell is covered as a bootable empty app
 - mixed is covered as generated shape plus runtime/browser surface
-- seeded solver execution is covered in the standard-only scenario
+- seeded solver execution is covered in the scalar-only scenario
 
 Do not claim mixed seeded solving is supported until the underlying runtime actually supports that combination.
 
@@ -61,7 +64,11 @@ For scaffold changes, prefer assertions that check the generated contract direct
 - generated README version/runtime source disclosure
 - typed solver SSE payload shape and typed frontend hooks
 - `solverforge generate data` ownership boundaries:
-  `src/data/mod.rs` is a stable wrapper and `src/generated/data_seed.rs` is compiler-owned
+  `src/data/mod.rs` is the stable wrapper and `src/data/data_seed.rs` is compiler-owned generated sample data
+- managed block ownership boundaries:
+  domain exports, solution collections, entity variables, constraint modules, and constraint calls require their `@solverforge:begin ...` / `@solverforge:end ...` markers
+- `solverforge.app.toml` projection:
+  facts, entities, variables, constraints, demo sizes, runtime target metadata, and `static/generated/ui-model.json`
 - scaffolded `cargo check` against the current local runtime/UI/maps worktrees when those sibling repos are present, otherwise against the published crate targets
 
 ## Commit & Pull Request Guidelines
@@ -81,12 +88,20 @@ domain shapes that users create afterward:
 - retained lifecycle events include `progress`, `best_solution`, `pause_requested`, `paused`, `resumed`, `completed`, `cancelled`, and `failed`
 - frontends use lifecycle-aware hooks including `onProgress(meta)`, `onSolution(snapshot, meta)`, `onPaused(snapshot, meta)`, `onResumed(meta)`, `onCancelled(snapshot, meta)`, `onComplete(snapshot, meta)`, and `onFailure(message, meta, snapshot, analysis)`
 - snapshot-bound analysis and retained `/jobs/{id}/snapshot` flows stay aligned with the shared UI backend contract
+- reconnect bootstrap is derived from `SolverManager` status plus the latest retained snapshot revision; do not cache or replay last SSE text locally
+- Pause resumes from the runtime-retained checkpoint, Stop maps to `/jobs/{id}/cancel`, and Delete is terminal cleanup only
 - progress-only events update status, not the rendered board
+- generated UI composition should use shipped `solverforge-ui` primitives before adding template-owned JavaScript
+- `src/data/data_seed.rs` and `static/generated/ui-model.json` are compiler-owned; user-facing seams are the `solverforge generate data` command, stable `src/data/mod.rs` wrapper, and `static/sf-config.json`
+- generated domain and constraint mutation is canonical-only: current managed block shapes are required, not inferred from old layouts
 
 Do not reintroduce:
 - raw top-level score-only progress payloads
 - starter-specific solve/render lifecycles
 - docs that blur CLI version with runtime/UI target
+- `standard` as a planning variable kind
+- hidden scaffold/template aliases
+- fallback migration code for legacy generated files
 
 Test harness notes:
 
