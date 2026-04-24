@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.0.0](///compare/v1.1.3...v2.0.0) (2026-04-24)
+
+
+### Features
+
+* retarget generated apps to the scalar neutral scaffold feb37c3
+
+
+### Bug Fixes
+
+* retarget scaffold runtime to solverforge 0.8.8 2e1140d
+
 ## [1.1.3](///compare/v1.1.2...v1.1.3) (2026-04-13)
 
 
