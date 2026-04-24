@@ -9,6 +9,8 @@ const cliManifest = path.join(repoRoot, 'Cargo.toml');
 const artifactRoot = process.env.SF_E2E_ARTIFACT_ROOT || path.join(repoRoot, 'target', 'test-artifacts', 'playwright');
 const manifestPath = path.join(artifactRoot, 'manifest.json');
 const statePath = path.join(artifactRoot, 'state.json');
+const useLocalPatchesEnv = 'SF_USE_LOCAL_PATCHES';
+const ecosystemRootEnv = 'SF_ECOSYSTEM_ROOT';
 
 const seededMixedDataModule = `/* Seeded demo data for Playwright end-to-end tests. */
 
@@ -182,8 +184,8 @@ function tomlPath(value) {
   return value.replace(/\\/g, '/');
 }
 
-function usePublishedDeps() {
-  const value = process.env.SF_USE_PUBLISHED_DEPS;
+function useLocalPatches() {
+  const value = process.env[useLocalPatchesEnv];
   return value && ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
@@ -213,50 +215,51 @@ function resolveBuiltExecutable(buildStdout) {
 }
 
 function resolveLocalSolverforgePaths() {
-  if (usePublishedDeps()) {
-    return null;
-  }
-
-  const runtimePath = path.join(workspaceRoot(), 'solverforge-rs', 'crates', 'solverforge');
-  const uiPath = path.join(workspaceRoot(), 'solverforge-ui');
-  const mapsPath = path.join(workspaceRoot(), 'solverforge-maps');
-  if (!fs.existsSync(runtimePath) || !fs.existsSync(uiPath)) {
-    return null;
-  }
+  const ecosystemRoot = process.env[ecosystemRootEnv] || workspaceRoot();
+  const runtimePath = requiredLocalPath('solverforge', path.join(ecosystemRoot, 'solverforge-rs', 'crates', 'solverforge'));
+  const uiPath = requiredLocalPath('solverforge-ui', path.join(ecosystemRoot, 'solverforge-ui'));
+  const mapsPath = requiredLocalPath('solverforge-maps', path.join(ecosystemRoot, 'solverforge-maps'));
 
   return {
-    runtimePath,
-    uiPath,
-    mapsPath: fs.existsSync(mapsPath) ? mapsPath : null,
+    runtimePath: fs.realpathSync(runtimePath),
+    uiPath: fs.realpathSync(uiPath),
+    mapsPath: fs.realpathSync(mapsPath),
   };
 }
 
-function pinGeneratedProjectToLocalSolverforge(projectDir) {
-  const localPaths = resolveLocalSolverforgePaths();
-  if (!localPaths) {
-    return false;
+function requiredLocalPath(label, value) {
+  if (!fs.existsSync(value)) {
+    throw new Error(
+      `${useLocalPatchesEnv}=1 requested local Cargo patches, but ${label} was not found at ${value}. ` +
+        `Set ${ecosystemRootEnv} or check out the sibling repo.`
+    );
+  }
+  return value;
+}
+
+function applyGeneratedProjectDependencyOverrides(projectDir) {
+  if (!useLocalPatches()) {
+    return 'crates-io';
   }
 
-  const cargoTomlPath = path.join(projectDir, 'Cargo.toml');
-  const cargoToml = fs.readFileSync(cargoTomlPath, 'utf8');
-  const rewritten = cargoToml
-    .split('\n')
-    .map((line) => {
-      const trimmed = line.trimStart();
-      if (trimmed.startsWith('solverforge = ')) {
-        return `solverforge = { path = "${tomlPath(localPaths.runtimePath)}", features = ["serde", "console", "verbose-logging"] }`;
-      }
-      if (trimmed.startsWith('solverforge-ui = ')) {
-        return `solverforge-ui = { path = "${tomlPath(localPaths.uiPath)}" }`;
-      }
-      if (trimmed.startsWith('solverforge-maps = ') && localPaths.mapsPath) {
-        return `solverforge-maps = { path = "${tomlPath(localPaths.mapsPath)}" }`;
-      }
-      return line;
-    })
-    .join('\n');
-  fs.writeFileSync(cargoTomlPath, `${rewritten}\n`);
-  return true;
+  const localPaths = resolveLocalSolverforgePaths();
+  const cargoConfig =
+    '[patch.crates-io]\n' +
+    `solverforge = { path = "${tomlPath(localPaths.runtimePath)}" }\n` +
+    `solverforge-ui = { path = "${tomlPath(localPaths.uiPath)}" }\n` +
+    `solverforge-maps = { path = "${tomlPath(localPaths.mapsPath)}" }\n`;
+  const cargoDir = path.join(projectDir, '.cargo');
+  ensureDir(cargoDir);
+  const cargoConfigPath = path.join(cargoDir, 'config.toml');
+  if (fs.existsSync(cargoConfigPath)) {
+    const existing = fs.readFileSync(cargoConfigPath, 'utf8');
+    if (existing !== cargoConfig) {
+      throw new Error(`Refusing to overwrite existing generated Cargo config at ${cargoConfigPath}`);
+    }
+  } else {
+    fs.writeFileSync(cargoConfigPath, cargoConfig);
+  }
+  return 'local-patches';
 }
 
 function runCommand({ suite, title, cwd, args, logPath, env = {} }) {
@@ -332,9 +335,11 @@ async function scaffoldScenario(name, generatorCommands) {
     args: ['new', projectName, '--skip-git', '--skip-readme', '--quiet'],
     logPath: path.join(scenarioArtifactDir, '01-scaffold.log'),
   });
-  const pinnedToLocal = pinGeneratedProjectToLocalSolverforge(projectDir);
-  if (!pinnedToLocal) {
+  const dependencyMode = applyGeneratedProjectDependencyOverrides(projectDir);
+  if (dependencyMode === 'crates-io') {
     phase(suite, 'Using published SolverForge crate targets');
+  } else {
+    phase(suite, 'Using explicit local Cargo patches from generated .cargo/config.toml');
   }
 
   generatorCommands.forEach((args, index) => {

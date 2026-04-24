@@ -6,17 +6,23 @@
 use std::path::Path;
 use std::process::Command;
 
-#[path = "support/local_dependencies.rs"]
-mod local_dependencies;
+#[path = "support/dependency_overrides.rs"]
+mod dependency_overrides;
 #[path = "support/scaffold_generated_app.rs"]
 mod scaffold_generated_app;
 
-use local_dependencies::{pin_generated_project_to_local_solverforge, USE_PUBLISHED_DEPS_ENV};
+use dependency_overrides::{
+    apply_generated_project_dependency_overrides, DependencyOverrideMode, USE_LOCAL_PATCHES_ENV,
+};
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
 const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.9.0";
 const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.6.0";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.3";
+const SOLVERFORGE_DEP_SPEC: &str =
+    r#"{ version = "0.9.0", features = ["serde", "console", "verbose-logging"] }"#;
+const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.6.0" }"#;
+const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.3" }"#;
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn cli_command() -> Command {
@@ -110,7 +116,10 @@ fn copy_template_tree(src: &Path, dst: &Path, project_name: &str) {
             let contents = std::fs::read_to_string(&path)
                 .expect("failed to read text template")
                 .replace("{{project_name}}", project_name)
-                .replace("{{crate_name}}", &crate_name);
+                .replace("{{crate_name}}", &crate_name)
+                .replace("{{solverforge_dep}}", SOLVERFORGE_DEP_SPEC)
+                .replace("{{solverforge_ui_dep}}", SOLVERFORGE_UI_DEP_SPEC)
+                .replace("{{solverforge_maps_dep}}", SOLVERFORGE_MAPS_DEP_SPEC);
             std::fs::write(dst.join(target_name), contents).expect("failed to write template file");
         }
     }
@@ -552,12 +561,16 @@ fn test_new_neutral_cargo_check_passes() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    let pinned_to_local = pin_generated_project_to_local_solverforge(&project_dir);
-    if !pinned_to_local {
-        eprintln!(
-            "using published SolverForge crate targets for scaffold validation; set {}=0 and keep sibling repos present to validate against local checkouts",
-            USE_PUBLISHED_DEPS_ENV
-        );
+    match apply_generated_project_dependency_overrides(&project_dir) {
+        DependencyOverrideMode::CratesIo => {
+            eprintln!(
+                "using published SolverForge crate targets for scaffold validation; set {}=1 to apply explicit local Cargo patches",
+                USE_LOCAL_PATCHES_ENV
+            );
+        }
+        DependencyOverrideMode::LocalPatches => {
+            eprintln!("using explicit local Cargo patches for scaffold validation");
+        }
     }
     let check_status = Command::new("cargo")
         .arg("check")
@@ -578,9 +591,10 @@ fn test_list_template_direct_check_and_boot_passes() {
 
     app.scaffold_neutral();
     overlay_list_template(app.project_dir(), project_name);
-    pin_generated_project_to_local_solverforge(app.project_dir());
+    apply_generated_project_dependency_overrides(app.project_dir());
 
     let solver_toml = std::fs::read_to_string(app.project_dir().join("solver.toml")).unwrap();
+    let cargo_toml = std::fs::read_to_string(app.project_dir().join("Cargo.toml")).unwrap();
     let domain_mod =
         std::fs::read_to_string(app.project_dir().join("src").join("domain").join("mod.rs"))
             .unwrap();
@@ -596,6 +610,13 @@ fn test_list_template_direct_check_and_boot_passes() {
             .unwrap();
     let app_js = std::fs::read_to_string(app.project_dir().join("static").join("app.js")).unwrap();
 
+    assert!(
+        !cargo_toml.contains("{{")
+            && cargo_toml.contains(&format!("solverforge = {SOLVERFORGE_DEP_SPEC}"))
+            && cargo_toml.contains(&format!("solverforge-ui = {SOLVERFORGE_UI_DEP_SPEC}"))
+            && cargo_toml.contains(&format!("solverforge-maps = {SOLVERFORGE_MAPS_DEP_SPEC}")),
+        "list template Cargo.toml should render registry dependency specs: {cargo_toml}"
+    );
     assert!(
         solver_toml.contains("seconds_spent_limit")
             && domain_mod.contains("solverforge::planning_model!")
@@ -674,7 +695,7 @@ fn test_generate_solution_replaces_neutral_scaffold_and_cargo_check_passes() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    pin_generated_project_to_local_solverforge(&project_dir);
+    apply_generated_project_dependency_overrides(&project_dir);
 
     let solution_status = cli_command()
         .args([
@@ -1618,7 +1639,7 @@ fn test_destroy_entity_container_on_list_template_keeps_project_buildable() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    pin_generated_project_to_local_solverforge(&project_dir);
+    apply_generated_project_dependency_overrides(&project_dir);
     seed_list_template_domain(&project_dir);
 
     let output = cli_command()
@@ -1878,7 +1899,7 @@ fn test_generate_constraint_workflow_cargo_check_passes() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    pin_generated_project_to_local_solverforge(&project_dir);
+    apply_generated_project_dependency_overrides(&project_dir);
 
     let fact_status = cli_command()
         .args(["generate", "fact", "resource"])
@@ -1952,7 +1973,7 @@ fn test_generate_data_creates_direct_compiler_owned_data_module() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    pin_generated_project_to_local_solverforge(&project_dir);
+    apply_generated_project_dependency_overrides(&project_dir);
 
     let fact_status = cli_command()
         .args([
@@ -2090,7 +2111,7 @@ fn test_generate_flows_preserve_custom_data_wrapper() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
-    pin_generated_project_to_local_solverforge(&project_dir);
+    apply_generated_project_dependency_overrides(&project_dir);
 
     let custom_data_wrapper = r#"mod data_seed;
 

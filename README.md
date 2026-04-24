@@ -105,10 +105,12 @@ pipeline stays readable:
 The runtime and browser suites both scaffold fresh temp apps, mutate them
 through the real CLI, boot the generated servers on random ports, and clean up
 automatically. Failure artifacts are written under `target/test-artifacts/`.
-During end-to-end validation, the generated temp apps are pinned to the local
-`solverforge-rs`, `solverforge-ui`, and `solverforge-maps` sibling checkouts
-when those repos are present. Otherwise the same suites validate against the
-published crate targets.
+By default, end-to-end validation keeps generated temp-app `Cargo.toml` files on
+the published crate targets. To test a prerelease local ecosystem, set
+`SF_USE_LOCAL_PATCHES=1`; the harness writes a temporary `.cargo/config.toml`
+with explicit `[patch.crates-io]` entries for the sibling `solverforge-rs`,
+`solverforge-ui`, and `solverforge-maps` checkouts. Generated manifests are not
+rewritten.
 
 Current scenario coverage:
 

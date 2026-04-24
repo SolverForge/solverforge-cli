@@ -69,7 +69,7 @@ For scaffold changes, prefer assertions that check the generated contract direct
   domain exports, solution collections, entity variables, constraint modules, and constraint calls require their `@solverforge:begin ...` / `@solverforge:end ...` markers
 - `solverforge.app.toml` projection:
   facts, entities, variables, constraints, demo sizes, runtime target metadata, and `static/generated/ui-model.json`
-- scaffolded `cargo check` against the current local runtime/UI/maps worktrees when those sibling repos are present, otherwise against the published crate targets
+- scaffolded `cargo check` against the published crate targets by default; prerelease sibling-checkout validation must be explicit via `SF_USE_LOCAL_PATCHES=1`, which writes a temporary `.cargo/config.toml` patch file without rewriting generated `Cargo.toml`
 
 ## Commit & Pull Request Guidelines
 Follow the commit style already used in history: `fix: ...`, `refactor: ...`, `style: ...`, `chore: ...`. Keep commits scoped to one behavior change. PRs should explain user-visible CLI impact, list verification commands run, and link the relevant issue. Include concrete examples when flags, generated files, or template output change.

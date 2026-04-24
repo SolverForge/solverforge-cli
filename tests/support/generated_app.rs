@@ -1,5 +1,5 @@
-use super::local_dependencies::{
-    pin_generated_project_to_local_solverforge, USE_PUBLISHED_DEPS_ENV,
+use super::dependency_overrides::{
+    apply_generated_project_dependency_overrides, DependencyOverrideMode, USE_LOCAL_PATCHES_ENV,
 };
 use reqwest::blocking::Client;
 use serde_json::Value;
@@ -72,12 +72,19 @@ impl GeneratedApp {
             "scaffold failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        let pinned_to_local = pin_generated_project_to_local_solverforge(&self.project_dir);
-        if !pinned_to_local {
-            println!(
-                "=== INFO: {} :: Using published SolverForge crate targets for generated-app validation (override with {}=0 and sibling repos present to pin local paths) ===",
-                self.test_name, USE_PUBLISHED_DEPS_ENV
-            );
+        match apply_generated_project_dependency_overrides(&self.project_dir) {
+            DependencyOverrideMode::CratesIo => {
+                println!(
+                    "=== INFO: {} :: Using published SolverForge crate targets for generated-app validation (set {}=1 to apply explicit local Cargo patches) ===",
+                    self.test_name, USE_LOCAL_PATCHES_ENV
+                );
+            }
+            DependencyOverrideMode::LocalPatches => {
+                println!(
+                    "=== INFO: {} :: Using explicit local Cargo patches from generated .cargo/config.toml ===",
+                    self.test_name
+                );
+            }
         }
     }
 
