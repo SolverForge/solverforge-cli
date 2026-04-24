@@ -83,7 +83,7 @@ pub fn run() -> CliResult {
         if !path.exists() {
             continue;
         }
-        output::print_status("check", &path.display().to_string());
+        output::print_status("check", &output::display_path(path));
         let src = read_path(path, &mut errors);
         if let Some(src) = src.as_deref() {
             validate_managed_source(path, src, &mut errors, |src| {
@@ -142,7 +142,7 @@ pub fn run() -> CliResult {
                 } else {
                     match find_file_for_type(domain_dir, &domain.solution_type) {
                         Ok(path) => {
-                            output::print_status("check", &path.display().to_string());
+                            output::print_status("check", &output::display_path(&path));
                             if let Some(src) = read_path(&path, &mut errors) {
                                 validate_managed_source(&path, &src, &mut errors, |src| {
                                     managed_block::require_blocks(
@@ -163,7 +163,7 @@ pub fn run() -> CliResult {
                 for entity in &domain.entities {
                     match find_file_for_type(domain_dir, &entity.item_type) {
                         Ok(path) => {
-                            output::print_status("check", &path.display().to_string());
+                            output::print_status("check", &output::display_path(&path));
                             if let Some(src) = read_path(&path, &mut errors) {
                                 validate_managed_source(&path, &src, &mut errors, |src| {
                                     managed_block::require_blocks(
@@ -219,13 +219,17 @@ pub fn run() -> CliResult {
 
 fn read_path(path: &Path, errors: &mut Vec<String>) -> Option<String> {
     if !path.exists() {
-        errors.push(format!("{} not found", path.display()));
+        errors.push(format!("{} not found", output::display_path(path)));
         return None;
     }
 
     fs::read_to_string(path).map_or_else(
         |err| {
-            errors.push(format!("failed to read {}: {}", path.display(), err));
+            errors.push(format!(
+                "failed to read {}: {}",
+                output::display_path(path),
+                err
+            ));
             None
         },
         Some,
@@ -244,7 +248,7 @@ where
     match validator(src) {
         Ok(_) => true,
         Err(err) => {
-            errors.push(format!("{}: {}", path.display(), err));
+            errors.push(format!("{}: {}", output::display_path(path), err));
             false
         }
     }

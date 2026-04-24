@@ -1,4 +1,5 @@
 use owo_colors::OwoColorize;
+use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
@@ -29,6 +30,10 @@ pub fn is_quiet() -> bool {
 
 pub fn is_verbose() -> bool {
     verbosity() >= 2
+}
+
+pub fn display_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 // Applies color only when NO_COLOR is not set

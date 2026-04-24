@@ -247,7 +247,7 @@ pub fn run_solution(name: &str, score: &str) -> CliResult {
     if file_path.exists() {
         return Err(CliError::ResourceExists {
             kind: "solution file",
-            name: file_path.display().to_string(),
+            name: crate::output::display_path(&file_path),
         });
     }
     if !mod_path.exists() {
@@ -296,7 +296,10 @@ pub fn run_solution(name: &str, score: &str) -> CliResult {
     }
 
     fs::write(&file_path, &src).map_err(|e| CliError::IoError {
-        context: format!("failed to write {}", file_path.display()),
+        context: format!(
+            "failed to write {}",
+            crate::output::display_path(&file_path)
+        ),
         source: e,
     })?;
     fs::write(&mod_path, rewritten_domain_mod).map_err(|e| CliError::IoError {
@@ -304,7 +307,7 @@ pub fn run_solution(name: &str, score: &str) -> CliResult {
         source: e,
     })?;
 
-    output::print_create(file_path.to_str().unwrap());
+    output::print_create(&crate::output::display_path(&file_path));
     output::print_update("src/domain/mod.rs");
     sync_project_metadata()?;
     Ok(())
