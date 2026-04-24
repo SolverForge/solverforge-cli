@@ -6,6 +6,8 @@ Use this CLI to scaffold, grow, and validate SolverForge applications. The CLI
 is its own versioned product: `solverforge --version` reports the CLI package
 version and the scaffold dependency targets separately.
 
+Current CLI package version: `2.0.0`.
+
 New projects currently target these crate versions:
 
 - `solverforge 0.9.0`

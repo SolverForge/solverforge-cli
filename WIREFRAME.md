@@ -10,6 +10,8 @@ The generated project is a neutral shell. Users add facts, entities, variables,
 constraints, solver config, and generated data after scaffolding. The CLI does
 not expose scaffold-family flags.
 
+Current CLI package version: `2.0.0`.
+
 Current generated projects target:
 
 - `solverforge 0.9.0`
