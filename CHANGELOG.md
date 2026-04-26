@@ -8,6 +8,13 @@ All notable changes to this project will be documented in this file. See [commit
 ### Bug Fixes
 
 * normalize generated path diagnostics 01d2c3c
+
+## [2.0.1](///compare/v2.0.0...v2.0.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* normalize generated path diagnostics 01d2c3c
 * align CLI and generated app dependency baselines with current releases
 * align Rust version requirements to 1.95
 * retarget generated apps to solverforge 0.9.1
