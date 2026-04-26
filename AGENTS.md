@@ -11,11 +11,12 @@ Current scaffold policy:
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
 - generated projects currently target `solverforge 0.9.1`, `solverforge-ui 0.6.3`, and `solverforge-maps 2.1.3` as their crate dependency versions
 - `solverforge new <name>` is the only public scaffold path and produces a neutral shell
-- users shape the app afterward through facts, entities, variables, constraints, and generated data
+- users shape the app afterward through facts, entities, solution/score metadata, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
 - `scalar` and `list` are the only planning variable kinds accepted by the public CLI and app-spec projection
 - `standard` is a demo size label only; do not reintroduce it as a variable kind or scaffold family
 - `templates/scalar/generic` is the embedded neutral scaffold used by `solverforge new`; `templates/list/generic` is not a public `new` selector
+- generated `Cargo.toml` files must carry `rust-version = "1.95"` plus the current explicit web, serialization, and utility dependency baselines from the template files
 
 When changing templates or scaffold behavior, follow the current repo reality over older starter-template assumptions. Do not add legacy aliases, compatibility shims, migration fallbacks, or automatic rewrites for unmanaged pre-refactor file shapes unless that is explicitly requested.
 
@@ -70,7 +71,7 @@ For scaffold changes, prefer assertions that check the generated contract direct
 - managed block ownership boundaries:
   domain exports, solution collections, entity variables, constraint modules, and constraint calls require their `@solverforge:begin ...` / `@solverforge:end ...` markers
 - `solverforge.app.toml` projection:
-  facts, entities, variables, constraints, demo sizes, runtime target metadata, and `static/generated/ui-model.json`
+  facts, entities, variables, constraints, demo sizes, solution/score metadata, runtime target metadata, and `static/generated/ui-model.json`
 - scaffolded `cargo check` against the published crate targets by default; prerelease sibling-checkout validation must be explicit via `SF_USE_LOCAL_PATCHES=1`, which writes a temporary `.cargo/config.toml` patch file without rewriting generated `Cargo.toml`
 
 ## Commit & Pull Request Guidelines
@@ -93,6 +94,7 @@ domain shapes that users create afterward:
 - reconnect bootstrap is derived from `SolverManager` status plus the latest retained snapshot revision; do not cache or replay last SSE text locally
 - Pause resumes from the runtime-retained checkpoint, Stop maps to `/jobs/{id}/cancel`, and Delete is terminal cleanup only
 - progress-only events update status, not the rendered board
+- generated demo data flows expose `/demo-data` as the catalog and `/demo-data/{id}` for selected data; frontends derive the default ID from the catalog and must not hard-code `/demo-data/STANDARD`
 - generated UI composition should use shipped `solverforge-ui` primitives before adding template-owned JavaScript
 - `src/data/data_seed.rs` and `static/generated/ui-model.json` are compiler-owned; user-facing seams are the `solverforge generate data` command, stable `src/data/mod.rs` wrapper, and `static/sf-config.json`
 - generated domain and constraint mutation is canonical-only: current managed block shapes are required, not inferred from old layouts
