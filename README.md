@@ -28,8 +28,8 @@ Public scaffold path:
 - `solverforge new <name>`
 
 That command creates a neutral app shell. Users shape the app afterward through
-facts, entities, variables, constraints, generated data, and
-`solverforge.app.toml`. There are no public scaffold-family flags.
+facts, entities, solution/score metadata, variables, constraints, generated
+data, and `solverforge.app.toml`. There are no public scaffold-family flags.
 
 Planning variable kinds are canonical:
 
@@ -62,8 +62,10 @@ they emit those same canonical managed blocks.
 `solverforge generate data` owns the generated data pipeline. It keeps
 `src/data/mod.rs` as the stable import wrapper, rewrites
 `src/data/data_seed.rs` with deterministic sample builders, and persists
-dataset size defaults in `solverforge.app.toml`. Generated values are
-structurally useful rather than domain-specific fake business data.
+dataset size defaults in `solverforge.app.toml`. `sample` is the default mode;
+`stub` is available for shape-only data. The supported demo size labels are
+`small`, `standard`, and `large`. Generated values are structurally useful
+rather than domain-specific fake business data.
 
 The generated frontend is intentionally thin. It composes shipped
 `solverforge-ui 0.6.3` primitives such as `SF.createBackend(...)`,
@@ -75,7 +77,9 @@ in the built-in scaffold catalog.
 
 Core commands:
 
-- `solverforge new <name>` creates the neutral scaffold.
+- `solverforge new <name>` creates the neutral scaffold. `--skip-git` skips the
+  initial Git repository/commit, and `--skip-readme` skips the generated project
+  README.
 - `solverforge generate fact|entity|variable|constraint|solution|score|data`
   mutates the current project through the canonical generated surfaces.
 - `solverforge destroy fact|entity|variable|constraint|solution` removes
@@ -87,8 +91,22 @@ Core commands:
 - `solverforge test` delegates to `cargo test`.
 - `solverforge completions <shell>` emits shell completions.
 
-Persistent `.solverforgerc` preferences are intentionally narrow: `port`,
-`no_color`, and `quiet`.
+Generated project manifests include `rust-version = "1.95"` and current direct
+web/runtime support dependencies:
+
+- `axum 0.8.9`
+- `tokio 1.52.1`
+- `tokio-stream 0.1.18`
+- `tower-http 0.6.8`
+- `tower 0.5.3`
+- `serde 1.0.228`
+- `serde_json 1.0.149`
+- `uuid 1.23.1`
+- `parking_lot 0.12.5`
+
+Persistent `.solverforgerc` files are loaded from the project root first and
+then from `~/.solverforgerc`. Recognized preferences are intentionally narrow:
+`port`, `no_color`, and `quiet`.
 
 ## Validation Flow
 
