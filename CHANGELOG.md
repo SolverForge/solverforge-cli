@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.0.1](///compare/v2.0.0...v2.0.1) (2026-04-26)
+
+
+### Bug Fixes
+
+* normalize generated path diagnostics 01d2c3c
+* align CLI and generated app dependency baselines with current releases
+* align Rust version requirements to 1.95
+* retarget generated apps to solverforge 0.9.1
+* retarget generated apps to solverforge-ui 0.6.3
+
 ## [2.0.0](///compare/v1.1.3...v2.0.0) (2026-04-24)
 
 

@@ -20,7 +20,7 @@ PROGRESS := ->
 # ============== Project Metadata ==============
 VERSION := $(shell grep -m1 '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 BIN := solverforge
-RUST_VERSION := 1.80+
+RUST_VERSION := 1.95+
 
 # ============== Phony Targets ==============
 .PHONY: banner help build build-release run install test test-quick test-scaffold test-runtime \

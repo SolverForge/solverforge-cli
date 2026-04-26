@@ -10,12 +10,14 @@ The generated project is a neutral shell. Users add facts, entities, variables,
 constraints, solver config, and generated data after scaffolding. The CLI does
 not expose scaffold-family flags.
 
-Current CLI package version: `2.0.0`.
+Current CLI package version: `2.0.1`.
+
+Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.9.0`
-- `solverforge-ui 0.6.1`
+- `solverforge 0.9.1`
+- `solverforge-ui 0.6.3`
 - `solverforge-maps 2.1.3`
 
 The CLI version is separate from those targets and must remain visible in
@@ -37,8 +39,8 @@ size name alongside `small` and `large`.
 
 The neutral scaffold generates:
 
-- `Cargo.toml` with `solverforge`, `solverforge-ui`, and `solverforge-maps`
-  dependencies
+- `Cargo.toml` with Rust `1.95`, `solverforge`, `solverforge-ui`, and
+  `solverforge-maps` dependencies
 - `solver.toml` as the search strategy and termination configuration layer
 - `solverforge.app.toml` as the scaffolded app/domain contract
 - `src/domain/` with a neutral `Plan` solution and managed domain exports

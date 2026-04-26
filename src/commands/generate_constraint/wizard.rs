@@ -120,7 +120,7 @@ fn run_wizard(soft_flag: bool, domain: &DomainModel) -> Result<(Pattern, bool), 
     } else {
         let hardness_idx = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Hard or soft")
-            .items(&[
+            .items([
                 "Hard  (must be satisfied — correctness)",
                 "Soft  (should be optimized — quality)",
             ])

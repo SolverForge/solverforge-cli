@@ -6,12 +6,14 @@ Use this CLI to scaffold, grow, and validate SolverForge applications. The CLI
 is its own versioned product: `solverforge --version` reports the CLI package
 version and the scaffold dependency targets separately.
 
-Current CLI package version: `2.0.0`.
+Current CLI package version: `2.0.1`.
+
+Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.9.0`
-- `solverforge-ui 0.6.1`
+- `solverforge 0.9.1`
+- `solverforge-ui 0.6.3`
 - `solverforge-maps 2.1.3`
 
 ```bash
@@ -64,7 +66,7 @@ dataset size defaults in `solverforge.app.toml`. Generated values are
 structurally useful rather than domain-specific fake business data.
 
 The generated frontend is intentionally thin. It composes shipped
-`solverforge-ui 0.6.1` primitives such as `SF.createBackend(...)`,
+`solverforge-ui 0.6.3` primitives such as `SF.createBackend(...)`,
 `SF.createSolver(...)`, and `SF.rail.createTimeline(...)` instead of vendoring
 app-specific UI frameworks. Domain-specific examples belong in quickstarts, not
 in the built-in scaffold catalog.
