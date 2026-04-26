@@ -7,8 +7,8 @@
 - `solverforge new <name>`
 
 The generated project is a neutral shell. Users add facts, entities, variables,
-constraints, solver config, and generated data after scaffolding. The CLI does
-not expose scaffold-family flags.
+solution/score metadata, constraints, solver config, and generated data after
+scaffolding. The CLI does not expose scaffold-family flags.
 
 Current CLI package version: `2.0.1`.
 
@@ -40,7 +40,8 @@ size name alongside `small` and `large`.
 The neutral scaffold generates:
 
 - `Cargo.toml` with Rust `1.95`, `solverforge`, `solverforge-ui`, and
-  `solverforge-maps` dependencies
+  `solverforge-maps` dependencies, plus explicit current web, serialization,
+  and utility dependency baselines
 - `solver.toml` as the search strategy and termination configuration layer
 - `solverforge.app.toml` as the scaffolded app/domain contract
 - `src/domain/` with a neutral `Plan` solution and managed domain exports
@@ -83,8 +84,9 @@ emit the same managed block set; free-form overrides are intentionally rejected.
 `solverforge.app.toml` is the project model used to regenerate frontend and data
 projections. It tracks:
 
-- app metadata, including fixed neutral-shell metadata and CLI version
-- runtime target metadata and dependency source strings
+- app metadata, including fixed `starter = "neutral-shell"` metadata and CLI
+  version
+- runtime target metadata, `runtime_source`, and `ui_source`
 - demo data sizes
 - solution name and score type
 - fact collections
@@ -138,6 +140,9 @@ Generated apps should behave like production references:
 - preserves `src/data/mod.rs` as the stable wrapper
 - rewrites `src/data/data_seed.rs`
 - persists the selected demo size in `solverforge.app.toml`
+- supports `sample` mode by default and `stub` mode for shape-only data
+- serves the generated data catalog from `/demo-data` and selected demo data
+  from `/demo-data/{id}`
 
 Generated data should be deterministic and structurally useful for optimization
 testing. It should not pretend to be domain-specific business data.
@@ -148,7 +153,9 @@ testing. It should not pretend to be domain-specific business data.
 `solverforge config show|set` edits that file through dotted TOML paths such as
 `termination.seconds_spent_limit`.
 
-`.solverforgerc` is intentionally narrow and only carries local CLI preferences:
+`.solverforgerc` is loaded from the project root first, then from
+`~/.solverforgerc`. It is intentionally narrow and only carries local CLI
+preferences:
 
 - `port`
 - `no_color`
