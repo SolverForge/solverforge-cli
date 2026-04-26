@@ -7,6 +7,25 @@ use super::{
 use crate::managed_block;
 use crate::test_support;
 
+fn generate_builtin_entity(
+    pascal: &str,
+    planning_variable: Option<&str>,
+    extra_fields: &[(String, String)],
+) -> Result<String, String> {
+    let _cwd_guard = test_support::lock_cwd();
+    generate_entity(pascal, planning_variable, extra_fields)
+}
+
+fn generate_builtin_fact(pascal: &str, extra_fields: &[(String, String)]) -> String {
+    let _cwd_guard = test_support::lock_cwd();
+    generate_fact(pascal, extra_fields)
+}
+
+fn generate_builtin_solution(pascal: &str, score: &str) -> Result<String, String> {
+    let _cwd_guard = test_support::lock_cwd();
+    generate_solution(pascal, score)
+}
+
 #[test]
 fn test_snake_to_pascal() {
     assert_eq!(snake_to_pascal("shift"), "Shift");
@@ -43,7 +62,8 @@ fn test_validate_score_type() {
 
 #[test]
 fn test_generate_entity_no_var() {
-    let src = generate_entity("Shift", None, &[]).expect("built-in entity template should render");
+    let src = generate_builtin_entity("Shift", None, &[])
+        .expect("built-in entity template should render");
     assert!(src.contains("#[planning_entity]"));
     assert!(src.contains("pub struct Shift"));
     assert!(src.contains("#[planning_id]"));
@@ -55,7 +75,7 @@ fn test_generate_entity_no_var() {
 
 #[test]
 fn test_generate_entity_with_var() {
-    let src = generate_entity("Shift", Some("employee_idx"), &[])
+    let src = generate_builtin_entity("Shift", Some("employee_idx"), &[])
         .expect("built-in entity template should render");
     assert!(src.contains("#[planning_variable(allows_unassigned = true)]"));
     assert!(src.contains("pub employee_idx: Option<usize>"));
@@ -64,7 +84,7 @@ fn test_generate_entity_with_var() {
 
 #[test]
 fn test_generate_fact() {
-    let src = generate_fact("Employee", &[]);
+    let src = generate_builtin_fact("Employee", &[]);
     assert!(src.contains("#[problem_fact]"));
     assert!(src.contains("pub struct Employee"));
     assert!(src.contains("#[planning_id]"));
@@ -74,7 +94,7 @@ fn test_generate_fact() {
 
 #[test]
 fn test_generate_solution() {
-    let src = generate_solution("Schedule", "HardSoftDecimalScore")
+    let src = generate_builtin_solution("Schedule", "HardSoftDecimalScore")
         .expect("built-in solution template should render");
     assert!(src.contains("#[planning_solution("));
     assert!(src.contains("constraints = \"crate::constraints::create_constraints\""));
@@ -88,7 +108,7 @@ fn test_generate_solution() {
 
 #[test]
 fn test_generate_entity_output_satisfies_managed_block_contract() {
-    let src = generate_entity("Shift", Some("employee_idx"), &[])
+    let src = generate_builtin_entity("Shift", Some("employee_idx"), &[])
         .expect("built-in entity template should render");
     managed_block::require_blocks(&src, managed_block::ENTITY_REQUIRED_BLOCKS)
         .expect("entity output should keep canonical managed blocks");
@@ -96,7 +116,7 @@ fn test_generate_entity_output_satisfies_managed_block_contract() {
 
 #[test]
 fn test_generate_solution_output_satisfies_managed_block_contract() {
-    let src = generate_solution("Schedule", "HardSoftDecimalScore")
+    let src = generate_builtin_solution("Schedule", "HardSoftDecimalScore")
         .expect("built-in solution template should render");
     managed_block::require_blocks(&src, managed_block::SOLUTION_REQUIRED_BLOCKS)
         .expect("solution output should keep canonical managed blocks");
@@ -166,7 +186,7 @@ fn test_replace_score_type_missing() {
 fn test_inject_second_planning_variable() {
     use super::wiring::inject_planning_variable;
 
-    let src = generate_entity("Surgery", Some("room_idx"), &[])
+    let src = generate_builtin_entity("Surgery", Some("room_idx"), &[])
         .expect("built-in entity template should render");
     let result =
         inject_planning_variable(&src, "Surgery", "slot_idx").expect("inject should succeed");
@@ -194,7 +214,8 @@ fn test_inject_second_planning_variable() {
 fn test_inject_list_variable() {
     use super::wiring::inject_list_variable;
 
-    let src = generate_entity("Route", None, &[]).expect("built-in entity template should render");
+    let src = generate_builtin_entity("Route", None, &[])
+        .expect("built-in entity template should render");
     let result =
         inject_list_variable(&src, "Route", "stops", "visits").expect("inject should succeed");
 
@@ -207,7 +228,7 @@ fn test_inject_list_variable() {
 fn test_remove_variable_field() {
     use super::wiring::{inject_list_variable, inject_planning_variable, remove_variable_field};
 
-    let src = generate_entity("Route", Some("driver_idx"), &[])
+    let src = generate_builtin_entity("Route", Some("driver_idx"), &[])
         .expect("built-in entity template should render");
     let src = inject_list_variable(&src, "Route", "stops", "visits").expect("list inject");
     let src = inject_planning_variable(&src, "Route", "backup_idx").expect("var inject");
