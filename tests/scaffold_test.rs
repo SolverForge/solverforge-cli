@@ -17,11 +17,11 @@ use dependency_overrides::{
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
 const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.9.1";
-const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.6.3";
+const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.6.4";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.3";
 const SOLVERFORGE_DEP_SPEC: &str =
     r#"{ version = "0.9.1", features = ["serde", "console", "verbose-logging"] }"#;
-const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.6.3" }"#;
+const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.6.4" }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.3" }"#;
 const GENERATED_RUST_VERSION_SPEC: &str = r#"rust-version = "1.95""#;
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -172,6 +172,33 @@ fn assert_template_retained_lifecycle_contract(template_kind: &str) {
     );
 }
 
+fn assert_template_timeline_contract(template_kind: &str) {
+    let template_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("templates")
+        .join(template_kind)
+        .join("generic");
+    let app_js = std::fs::read_to_string(template_root.join("static").join("app.js"))
+        .unwrap_or_else(|err| panic!("failed to read {template_kind} app.js: {err}"));
+
+    assert!(
+        app_js.contains("SF.rail.createTimeline(timelineConfig)")
+            && app_js.contains("SLOT_MINUTES = 60")
+            && app_js.contains("startMinute: slotIndex * SLOT_MINUTES")
+            && app_js.contains("endMinute: (slotIndex + 1) * SLOT_MINUTES")
+            && app_js.contains("startMinute: 0")
+            && app_js.contains("endMinute: normalizedSlots * SLOT_MINUTES")
+            && app_js.contains("initialViewport"),
+        "{template_kind} app should feed solverforge-ui timelines normalized integer minute models: {app_js}"
+    );
+    assert!(
+        !app_js.contains("new Date(")
+            && !app_js.contains("Date.parse")
+            && !app_js.contains("toISOString")
+            && !app_js.contains("parseFloat"),
+        "{template_kind} app should not parse or coerce timestamps locally before calling SF.rail.createTimeline: {app_js}"
+    );
+}
+
 #[test]
 fn test_version_output_distinguishes_cli_from_runtime_target() {
     let output = cli_command()
@@ -186,7 +213,7 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
             && stdout.contains("Scaffold runtime target: SolverForge crate target 0.9.1")
-            && stdout.contains("Scaffold UI target: solverforge-ui 0.6.3")
+            && stdout.contains("Scaffold UI target: solverforge-ui 0.6.4")
             && stdout.contains("Scaffold maps target: solverforge-maps 2.1.3")
             && stdout.contains(RUNTIME_DEP_LABEL)
             && stdout.contains(UI_DEP_LABEL)
@@ -231,6 +258,12 @@ fn test_generate_scaffold_is_not_a_public_command() {
 fn test_scalar_and_list_templates_use_status_snapshot_reconnect_bootstrap() {
     assert_template_retained_lifecycle_contract("scalar");
     assert_template_retained_lifecycle_contract("list");
+}
+
+#[test]
+fn test_scalar_and_list_templates_emit_numeric_timeline_models() {
+    assert_template_timeline_contract("scalar");
+    assert_template_timeline_contract("list");
 }
 
 #[test]
@@ -352,7 +385,7 @@ fn test_new_creates_neutral_project_files() {
     assert!(
         cargo_toml.contains(
             "solverforge = { version = \"0.9.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
-        ) && cargo_toml.contains("solverforge-ui = { version = \"0.6.3\" }")
+        ) && cargo_toml.contains("solverforge-ui = { version = \"0.6.4\" }")
             && cargo_toml.contains("solverforge-maps = { version = \"2.1.3\" }")
             && cargo_toml.contains(GENERATED_RUST_VERSION_SPEC)
             && cargo_toml.contains("axum = \"0.8.9\"")
@@ -514,7 +547,7 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
         )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.9.1`")
-            && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.6.3`")
+            && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.6.4`")
             && readme
                 .contains("SolverForge maps target for this scaffold: `solverforge-maps 2.1.3`")
             && readme.contains(RUNTIME_DEP_LABEL)

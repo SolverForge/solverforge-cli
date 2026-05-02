@@ -13,7 +13,7 @@ Required Rust version: `1.95` or later.
 New projects currently target these crate versions:
 
 - `solverforge 0.9.1`
-- `solverforge-ui 0.6.3`
+- `solverforge-ui 0.6.4`
 - `solverforge-maps 2.1.3`
 
 ```bash
@@ -68,7 +68,7 @@ dataset size defaults in `solverforge.app.toml`. `sample` is the default mode;
 rather than domain-specific fake business data.
 
 The generated frontend is intentionally thin. It composes shipped
-`solverforge-ui 0.6.3` primitives such as `SF.createBackend(...)`,
+`solverforge-ui 0.6.4` primitives such as `SF.createBackend(...)`,
 `SF.createSolver(...)`, and `SF.rail.createTimeline(...)` instead of vendoring
 app-specific UI frameworks. Domain-specific examples belong in quickstarts, not
 in the built-in scaffold catalog.
