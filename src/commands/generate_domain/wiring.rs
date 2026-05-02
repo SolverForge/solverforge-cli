@@ -464,7 +464,7 @@ pub(crate) fn inject_scalar_variable(
         format!("    #[planning_variable(allows_unassigned = {allows_unassigned})]")
     } else {
         format!(
-            "    #[planning_variable(value_range = \"{range}\", allows_unassigned = {allows_unassigned})]"
+            "    #[planning_variable(value_range_provider = \"{range}\", allows_unassigned = {allows_unassigned})]"
         )
     };
     let init_line = format!("            {field}: None,");

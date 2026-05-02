@@ -16,11 +16,11 @@ use dependency_overrides::{
 };
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
-const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.9.1";
+const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.10.0";
 const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.6.4";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.3";
 const SOLVERFORGE_DEP_SPEC: &str =
-    r#"{ version = "0.9.1", features = ["serde", "console", "verbose-logging"] }"#;
+    r#"{ version = "0.10.0", features = ["serde", "console", "verbose-logging"] }"#;
 const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.6.4" }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.3" }"#;
 const GENERATED_RUST_VERSION_SPEC: &str = r#"rust-version = "1.95""#;
@@ -212,7 +212,7 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
     assert!(
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
-            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.9.1")
+            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.10.0")
             && stdout.contains("Scaffold UI target: solverforge-ui 0.6.4")
             && stdout.contains("Scaffold maps target: solverforge-maps 2.1.3")
             && stdout.contains(RUNTIME_DEP_LABEL)
@@ -384,7 +384,7 @@ fn test_new_creates_neutral_project_files() {
     );
     assert!(
         cargo_toml.contains(
-            "solverforge = { version = \"0.9.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+            "solverforge = { version = \"0.10.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
         ) && cargo_toml.contains("solverforge-ui = { version = \"0.6.4\" }")
             && cargo_toml.contains("solverforge-maps = { version = \"2.1.3\" }")
             && cargo_toml.contains(GENERATED_RUST_VERSION_SPEC)
@@ -546,7 +546,7 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
         readme.contains(&format!(
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
-        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.9.1`")
+        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.10.0`")
             && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.6.4`")
             && readme
                 .contains("SolverForge maps target for this scaffold: `solverforge-maps 2.1.3`")
@@ -1353,7 +1353,7 @@ impl {{NAME}} {
     );
     assert!(
         task_rs.contains(
-            "#[planning_variable(value_range = \"resources\", allows_unassigned = true)]"
+            "#[planning_variable(value_range_provider = \"resources\", allows_unassigned = true)]"
         ) && task_rs.contains("pub resource_idx: Option<usize>,")
             && task_rs.contains("resource_idx: None,"),
         "managed block rewrites should still work on canonical custom entity overrides: {task_rs}"

@@ -117,7 +117,7 @@ impl PlanDto {
 }
 
 impl TelemetryDto {
-    pub fn from_runtime(telemetry: SolverTelemetry) -> Self {
+    pub fn from_runtime(telemetry: &SolverTelemetry) -> Self {
         Self {
             elapsed_ms: duration_to_millis(telemetry.elapsed),
             step_count: telemetry.step_count,
@@ -148,7 +148,7 @@ impl JobSummaryDto {
             snapshot_revision: status.latest_snapshot_revision,
             current_score: status.current_score.map(|score| score.to_string()),
             best_score: status.best_score.map(|score| score.to_string()),
-            telemetry: TelemetryDto::from_runtime(status.telemetry),
+            telemetry: TelemetryDto::from_runtime(&status.telemetry),
         }
     }
 }
@@ -163,7 +163,7 @@ impl JobSnapshotDto {
             terminal_reason: snapshot.terminal_reason.map(terminal_reason_label),
             current_score: snapshot.current_score.map(|score| score.to_string()),
             best_score: snapshot.best_score.map(|score| score.to_string()),
-            telemetry: TelemetryDto::from_runtime(snapshot.telemetry),
+            telemetry: TelemetryDto::from_runtime(&snapshot.telemetry),
             solution: PlanDto::from_plan(&snapshot.solution),
         }
     }

@@ -112,12 +112,12 @@ pub fn run() -> CliResult {
                     }
 
                     for variable in &entity.scalar_vars {
-                        if !variable.value_range.is_empty()
-                            && !fact_fields.contains(variable.value_range.as_str())
+                        if !variable.value_range_provider.is_empty()
+                            && !fact_fields.contains(variable.value_range_provider.as_str())
                         {
                             errors.push(format!(
-                            "Entity '{}.{}' references missing fact collection '{}' via value_range",
-                            entity.item_type, variable.field, variable.value_range
+                            "Entity '{}.{}' references missing fact collection '{}' via value_range_provider",
+                            entity.item_type, variable.field, variable.value_range_provider
                         ));
                         }
                     }

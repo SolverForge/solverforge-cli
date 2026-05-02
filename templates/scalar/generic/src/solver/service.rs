@@ -212,7 +212,7 @@ fn status_event_payload(
         event_sequence: status.event_sequence,
         lifecycle_state: lifecycle_state_label(status.lifecycle_state),
         terminal_reason: status.terminal_reason.map(terminal_reason_label),
-        telemetry: telemetry_payload(status.telemetry),
+        telemetry: telemetry_payload(&status.telemetry),
         current_score: status.current_score.map(|score| score.to_string()),
         best_score: status.best_score.map(|score| score.to_string()),
         snapshot_revision: status.latest_snapshot_revision,
@@ -234,7 +234,7 @@ fn snapshot_status_event_payload(
         event_sequence: status.event_sequence,
         lifecycle_state: lifecycle_state_label(status.lifecycle_state),
         terminal_reason: status.terminal_reason.map(terminal_reason_label),
-        telemetry: telemetry_payload(status.telemetry),
+        telemetry: telemetry_payload(&status.telemetry),
         current_score: status
             .current_score
             .or(snapshot.current_score)
@@ -281,7 +281,7 @@ fn event_payload(
         event_sequence: metadata.event_sequence,
         lifecycle_state: lifecycle_state_label(metadata.lifecycle_state),
         terminal_reason: metadata.terminal_reason.map(terminal_reason_label),
-        telemetry: telemetry_payload(metadata.telemetry),
+        telemetry: telemetry_payload(&metadata.telemetry),
         current_score: metadata.current_score.map(|score| score.to_string()),
         best_score: metadata.best_score.map(|score| score.to_string()),
         snapshot_revision: metadata.snapshot_revision,
@@ -294,7 +294,7 @@ fn serialize_payload(payload: JobEventPayload) -> String {
     serde_json::to_string(&payload).expect("failed to serialize solver lifecycle payload")
 }
 
-fn telemetry_payload(telemetry: SolverTelemetry) -> TelemetryPayload {
+fn telemetry_payload(telemetry: &SolverTelemetry) -> TelemetryPayload {
     TelemetryPayload {
         elapsed_ms: duration_to_millis(telemetry.elapsed),
         step_count: telemetry.step_count,

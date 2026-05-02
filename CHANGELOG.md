@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. See [commit
 
 ### Bug Fixes
 
+* retarget generated apps to solverforge 0.10.0
+* align generated scalar variables with value_range_provider macro metadata
+* borrow retained solver telemetry in generated lifecycle DTOs
 * retarget generated apps to solverforge-ui 0.6.4
 
 ## [2.0.1](///compare/v2.0.0...v2.0.1) (2026-04-26)

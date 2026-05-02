@@ -197,10 +197,10 @@ pub fn sync_from_project() -> CliResult {
                         entity_plural: entity_plural.clone(),
                         field: var.field.clone(),
                         kind: "scalar".to_string(),
-                        range: if var.value_range.is_empty() {
+                        range: if var.value_range_provider.is_empty() {
                             default_fact_plural.clone()
                         } else {
-                            var.value_range.clone()
+                            var.value_range_provider.clone()
                         },
                         elements: String::new(),
                         allows_unassigned: var.allows_unassigned,

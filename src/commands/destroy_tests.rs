@@ -200,7 +200,7 @@ pub struct Task {
     #[planning_id]
     pub id: String,
     // @solverforge:begin entity-variables
-    #[planning_variable(value_range = "resources", allows_unassigned = true)]
+    #[planning_variable(value_range_provider = "resources", allows_unassigned = true)]
     pub resource_idx: Option<usize>,
     // @solverforge:end entity-variables
 }
@@ -228,7 +228,7 @@ impl Task {
 
     assert!(
         err.to_string().contains(
-            "cannot destroy fact 'Resource' because managed planning variables still reference collection 'resources': Task.resource_idx (value_range = \"resources\")"
+            "cannot destroy fact 'Resource' because managed planning variables still reference collection 'resources': Task.resource_idx (value_range_provider = \"resources\")"
         ),
         "unexpected error: {err}"
     );

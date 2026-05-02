@@ -426,7 +426,7 @@ fn test_generate_skeleton_unary_hard() {
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
-                value_range: "employees".to_string(),
+                value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
             }],
             list_vars: vec![],
@@ -460,7 +460,7 @@ fn test_generate_skeleton_pair_hard() {
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
-                value_range: "employees".to_string(),
+                value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
             }],
             list_vars: vec![],
@@ -494,7 +494,7 @@ fn test_generate_skeleton_join_hard() {
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
-                value_range: "employees".to_string(),
+                value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
             }],
             list_vars: vec![],
@@ -534,7 +534,7 @@ fn test_generate_skeleton_balance_soft() {
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
-                value_range: "employees".to_string(),
+                value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
             }],
             list_vars: vec![],
@@ -564,7 +564,7 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
-                value_range: "employees".to_string(),
+                value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
             }],
             list_vars: vec![],

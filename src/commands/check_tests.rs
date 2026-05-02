@@ -225,7 +225,7 @@ pub struct Task {
     #[planning_id]
     pub id: String,
     // @solverforge:begin entity-variables
-    #[planning_variable(value_range = "resources", allows_unassigned = true)]
+    #[planning_variable(value_range_provider = "resources", allows_unassigned = true)]
     pub resource_idx: Option<usize>,
     #[planning_list_variable(element_collection = "item_facts")]
     pub visits: Vec<usize>,

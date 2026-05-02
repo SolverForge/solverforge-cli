@@ -260,9 +260,11 @@ fn ensure_fact_collection_is_unreferenced(
 
     for entity in &domain.entities {
         for variable in &entity.scalar_vars {
-            if !variable.value_range.is_empty() && variable.value_range == field_name {
+            if !variable.value_range_provider.is_empty()
+                && variable.value_range_provider == field_name
+            {
                 references.push(format!(
-                    "{}.{} (value_range = \"{}\")",
+                    "{}.{} (value_range_provider = \"{}\")",
                     entity.item_type, variable.field, field_name
                 ));
             }

@@ -12,7 +12,7 @@ use syn::{
 #[derive(Debug, Clone)]
 pub(crate) struct ScalarVarInfo {
     pub field: String,
-    pub value_range: String,
+    pub value_range_provider: String,
     pub allows_unassigned: bool,
 }
 
@@ -440,7 +440,8 @@ fn parse_entity(item_struct: &ItemStruct) -> Result<EntityStructInfo, String> {
             }
             scalar_vars.push(ScalarVarInfo {
                 field: field_ident.to_string(),
-                value_range: parse_attribute_string(attr, "value_range").unwrap_or_default(),
+                value_range_provider: parse_attribute_string(attr, "value_range_provider")
+                    .unwrap_or_default(),
                 allows_unassigned: parse_attribute_bool(attr, "allows_unassigned").unwrap_or(false),
             });
         }
@@ -735,7 +736,7 @@ pub struct Task {
     pub id: usize,
 
     #[planning_variable(
-        value_range = "workers",
+        value_range_provider = "workers",
         allows_unassigned = true,
     )]
     pub worker: Option<usize>,
@@ -781,7 +782,10 @@ pub struct Plan {
         assert_eq!(domain.score_type, "BendableScore<2, 3>");
         assert_eq!(domain.entities[0].item_type, "Task");
         assert_eq!(domain.entities[0].scalar_vars[0].field, "worker");
-        assert_eq!(domain.entities[0].scalar_vars[0].value_range, "workers");
+        assert_eq!(
+            domain.entities[0].scalar_vars[0].value_range_provider,
+            "workers"
+        );
         assert!(domain.entities[0].scalar_vars[0].allows_unassigned);
         assert_eq!(domain.facts[0].item_type, "Worker");
 
