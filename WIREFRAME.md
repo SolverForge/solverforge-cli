@@ -10,7 +10,7 @@ The generated project is a neutral shell. Users add facts, entities, variables,
 solution/score metadata, constraints, solver config, and generated data after
 scaffolding. The CLI does not expose scaffold-family flags.
 
-Current CLI package version: `2.0.1`.
+Current CLI package version: `2.0.2`.
 
 Required Rust version: `1.95` or later.
 

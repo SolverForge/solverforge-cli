@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. See [commit
 
 ## [Unreleased]
 
+## [2.0.2](///compare/v2.0.1...v2.0.2) (2026-05-02)
+
 ### Bug Fixes
 
 * retarget generated apps to solverforge 0.10.0
