@@ -122,7 +122,8 @@ pipeline stays readable:
 - `make install-e2e`
   install Playwright Chromium locally before the first browser run
 - `make test-full`
-  full pipeline: Rust tests, runtime pipeline, then Playwright
+  full pipeline: binary/unit tests, scaffold contract tests, runtime pipeline,
+  then Playwright
 
 The runtime and browser suites both scaffold fresh temp apps, mutate them
 through the real CLI, boot the generated servers on random ports, and clean up

@@ -28,7 +28,7 @@ When changing templates or scaffold behavior, follow the current repo reality ov
 - `make test-runtime`: run only the generated-app runtime pipeline tests.
 - `make install-e2e`: install Playwright Chromium locally.
 - `make test-e2e`: run Playwright browser tests against ephemeral generated apps.
-- `make test-full`: run the Rust suite, runtime pipeline suite, and Playwright suite in order.
+- `make test-full`: run binary/unit tests, scaffold contract tests, runtime pipeline tests, and Playwright tests in order.
 - `cargo fmt --all`: apply Rust formatting.
 - `cargo clippy --all-targets -- -D warnings`: enforce lint-clean code.
 - `pre-commit run --all-files`: run the repository hooks, including YAML checks, `gitleaks`, `fmt`, and `clippy`.
