@@ -10,15 +10,15 @@ The generated project is a neutral shell. Users add facts, entities, variables,
 solution/score metadata, constraints, solver config, and generated data after
 scaffolding. The CLI does not expose scaffold-family flags.
 
-Current CLI package version: `2.0.2`.
+Current CLI package version: `2.0.3`.
 
 Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
 - `solverforge 0.10.0`
-- `solverforge-ui 0.6.4`
-- `solverforge-maps 2.1.3`
+- `solverforge-ui 0.6.5`
+- `solverforge-maps 2.1.4`
 
 The CLI version is separate from those targets and must remain visible in
 version output and generated README content.
