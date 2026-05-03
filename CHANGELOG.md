@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
-## [Unreleased]
+## [2.0.2](///compare/v2.0.1...v2.0.2) (2026-05-03)
+
+
+### Bug Fixes
+
+* **scaffold:** align generated apps with solverforge 0.10.0 ff6cb45
+* **scaffold:** retarget generated apps to solverforge-ui 0.6.4 86576f1
 
 ## [2.0.2](///compare/v2.0.1...v2.0.2) (2026-05-02)
 
