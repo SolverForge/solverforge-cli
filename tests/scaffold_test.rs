@@ -199,6 +199,30 @@ fn assert_template_timeline_contract(template_kind: &str) {
     );
 }
 
+fn assert_template_modal_body_contract(template_kind: &str) {
+    let template_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("templates")
+        .join(template_kind)
+        .join("generic");
+    let app_js = std::fs::read_to_string(template_root.join("static").join("app.js"))
+        .unwrap_or_else(|err| panic!("failed to read {template_kind} app.js: {err}"));
+
+    assert!(
+        app_js.contains("analysisModal.setBody(buildAnalysisBody(analysis))")
+            && app_js.contains("function buildAnalysisBody(analysis)")
+            && app_js.contains("var container = SF.el('div'")
+            && app_js.contains("SF.createTable({"),
+        "{template_kind} app should build modal analysis content as DOM nodes before passing it to solverforge-ui: {app_js}"
+    );
+    assert!(
+        !app_js.contains("buildAnalysisHtml")
+            && !app_js.contains("analysisModal.setBody('<")
+            && !app_js.contains("analysisModal.setBody(buildAnalysisHtml")
+            && !app_js.contains("unsafeBody"),
+        "{template_kind} app should not pass generated HTML strings or unsafe modal bodies for analysis content: {app_js}"
+    );
+}
+
 #[test]
 fn test_version_output_distinguishes_cli_from_runtime_target() {
     let output = cli_command()
@@ -264,6 +288,12 @@ fn test_scalar_and_list_templates_use_status_snapshot_reconnect_bootstrap() {
 fn test_scalar_and_list_templates_emit_numeric_timeline_models() {
     assert_template_timeline_contract("scalar");
     assert_template_timeline_contract("list");
+}
+
+#[test]
+fn test_scalar_and_list_templates_emit_safe_modal_bodies() {
+    assert_template_modal_body_contract("scalar");
+    assert_template_modal_body_contract("list");
 }
 
 #[test]

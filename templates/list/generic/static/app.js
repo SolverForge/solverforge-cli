@@ -194,7 +194,7 @@
     solver.analyzeSnapshot()
       .then(function (analysis) {
         lastAnalysis = analysis;
-        analysisModal.setBody(buildAnalysisHtml(analysis));
+        analysisModal.setBody(buildAnalysisBody(analysis));
         analysisModal.open();
       })
       .catch(function () {});
@@ -383,16 +383,27 @@
     updateSolveActionAvailability();
   }
 
-  function buildAnalysisHtml(analysis) {
-    if (!analysis || !analysis.constraints) return '<p>No analysis available.</p>';
-    var html = '<p><strong>Score:</strong> ' + SF.escHtml(analysis.score) + '</p>';
-    html += '<table class="sf-table"><thead><tr><th>Constraint</th><th>Type</th><th>Score</th><th>Matches</th></tr></thead><tbody>';
-    analysis.constraints.forEach(function (constraint) {
-      var matchCount = constraint.matchCount != null ? constraint.matchCount : (constraint.matches ? constraint.matches.length : 0);
-      html += '<tr><td>' + SF.escHtml(constraint.name) + '</td><td>' + SF.escHtml(constraint.constraintType || constraint.type || '') + '</td><td>' + SF.escHtml(constraint.score) + '</td><td>' + matchCount + '</td></tr>';
-    });
-    html += '</tbody></table>';
-    return html;
+  function buildAnalysisBody(analysis) {
+    var container = SF.el('div');
+    if (!analysis || !analysis.constraints) {
+      container.appendChild(SF.el('p', null, 'No analysis available.'));
+      return container;
+    }
+
+    container.appendChild(SF.el('p', null, SF.el('strong', null, 'Score: '), String(analysis.score)));
+    container.appendChild(SF.createTable({
+      columns: ['Constraint', 'Type', 'Score', 'Matches'],
+      rows: analysis.constraints.map(function (constraint) {
+        var matchCount = constraint.matchCount != null ? constraint.matchCount : (constraint.matches ? constraint.matches.length : 0);
+        return [
+          constraint.name,
+          constraint.constraintType || constraint.type || '',
+          constraint.score,
+          String(matchCount),
+        ];
+      }),
+    }));
+    return container;
   }
 
   function clonePlan(data) {
