@@ -585,8 +585,12 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
             && readme.contains(UI_DEP_LABEL)
             && readme.contains(MAPS_DEP_LABEL)
             && readme.contains("configured crate dependency targets")
-            && readme.contains("solverforge.app.toml"),
-        "scaffold README should distinguish CLI version from runtime target: {}",
+            && readme.contains("solverforge.app.toml")
+            && readme.contains("solverforge generate fact resource")
+            && readme.contains("solverforge generate entity task")
+            && readme.contains("solverforge generate variable resource_idx --entity Task --kind scalar --range resources --allows-unassigned")
+            && !readme.contains("solverforge generate entity worker --planning-variable shift_idx"),
+        "scaffold README should distinguish CLI version from runtime target and show the current modeling flow: {}",
         readme
     );
 }

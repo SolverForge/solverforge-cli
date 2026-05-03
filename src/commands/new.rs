@@ -326,10 +326,15 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
     readme.push_str("```bash\n");
     readme.push_str("# Add a new constraint\n");
     readme.push_str("solverforge generate constraint my_rule --unary --hard\n\n");
-    readme.push_str("# Add a domain entity\n");
-    readme.push_str("solverforge generate entity worker --planning-variable shift_idx\n\n");
     readme.push_str("# Add a problem fact\n");
-    readme.push_str("solverforge generate fact location\n\n");
+    readme.push_str(
+        "solverforge generate fact resource --field category:String --field load:i32\n\n",
+    );
+    readme.push_str("# Add a domain entity\n");
+    readme
+        .push_str("solverforge generate entity task --field label:String --field priority:i32\n\n");
+    readme.push_str("# Add a scalar planning variable\n");
+    readme.push_str("solverforge generate variable resource_idx --entity Task --kind scalar --range resources --allows-unassigned\n\n");
     readme.push_str("# Remove a resource\n");
     readme.push_str("solverforge destroy constraint my_rule\n");
     readme.push_str("```\n\n");
