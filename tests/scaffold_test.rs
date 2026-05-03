@@ -218,6 +218,7 @@ fn assert_template_modal_body_contract(template_kind: &str) {
         !app_js.contains("buildAnalysisHtml")
             && !app_js.contains("analysisModal.setBody('<")
             && !app_js.contains("analysisModal.setBody(buildAnalysisHtml")
+            && !app_js.contains("!solver.getJobId()")
             && !app_js.contains("unsafeBody"),
         "{template_kind} app should not pass generated HTML strings or unsafe modal bodies for analysis content: {app_js}"
     );

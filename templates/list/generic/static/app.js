@@ -173,7 +173,8 @@
 
   function cleanupTerminalJob() {
     var state = solver.getLifecycleState();
-    if (!solver.getJobId() || state === 'IDLE' || state === 'PAUSED' || solver.isRunning()) {
+    var jobId = solver.getJobId();
+    if (jobId == null || jobId === '' || state === 'IDLE' || state === 'PAUSED' || solver.isRunning()) {
       return Promise.resolve(null);
     }
     return solver.delete()
@@ -190,7 +191,7 @@
 
   function openAnalysis() {
     var id = solver.getJobId();
-    if (!id) return;
+    if (id == null || id === '') return;
     solver.analyzeSnapshot()
       .then(function (analysis) {
         lastAnalysis = analysis;
