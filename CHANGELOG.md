@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.0.3](///compare/v2.0.2...v2.0.3) (2026-05-03)
+
+
+### Bug Fixes
+
+* **scaffold:** build analysis modal bodies safely e03c8e3
+* **scaffold:** preserve zero-valued job ids 707cc72
+
 ## [2.0.2](///compare/v2.0.1...v2.0.2) (2026-05-03)
 
 
