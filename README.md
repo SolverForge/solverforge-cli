@@ -6,13 +6,13 @@ Use this CLI to scaffold, grow, and validate SolverForge applications. The CLI
 is its own versioned product: `solverforge --version` reports the CLI package
 version and the scaffold dependency targets separately.
 
-Current CLI package version: `2.0.3`.
+Current CLI package version: `2.0.4`.
 
 Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.10.0`
+- `solverforge 0.11.1`
 - `solverforge-ui 0.6.5`
 - `solverforge-maps 2.1.4`
 
@@ -95,7 +95,7 @@ Generated project manifests include `rust-version = "1.95"` and current direct
 web/runtime support dependencies:
 
 - `axum 0.8.9`
-- `tokio 1.52.1`
+- `tokio 1.52.2`
 - `tokio-stream 0.1.18`
 - `tower-http 0.6.8`
 - `tower 0.5.3`

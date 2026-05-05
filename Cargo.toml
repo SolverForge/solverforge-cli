@@ -1,6 +1,6 @@
 [package]
 name = "solverforge-cli"
-version = "2.0.3"
+version = "2.0.4"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/solverforge/solverforge-cli"
@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.6.1", features = ["derive"] }
-clap_complete = "4.6.2"
+clap_complete = "4.6.3"
 dialoguer = "0.12"
 include_dir = "0.7.4"
 owo-colors = "4.3.0"
@@ -25,5 +25,5 @@ syn = { version = "2.0.117", features = ["full", "parsing"] }
 toml = "1.1.2"
 
 [dev-dependencies]
-reqwest = { version = "0.13.2", features = ["blocking", "json", "rustls"] }
+reqwest = { version = "0.13.3", features = ["blocking", "json", "rustls"] }
 tempfile = "3.27.0"
