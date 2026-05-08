@@ -12,7 +12,7 @@ Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.11.1`
+- `solverforge 0.12.0`
 - `solverforge-ui 0.6.5`
 - `solverforge-maps 2.1.4`
 

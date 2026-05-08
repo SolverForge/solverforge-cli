@@ -1,12 +1,12 @@
-pub const RUNTIME_CRATE_VERSION: &str = "0.11.1";
+pub const RUNTIME_CRATE_VERSION: &str = "0.12.0";
 pub const UI_CRATE_VERSION: &str = "0.6.5";
 pub const MAPS_CRATE_VERSION: &str = "2.1.4";
 
-pub const RUNTIME_TARGET_LABEL: &str = "solverforge 0.11.1";
+pub const RUNTIME_TARGET_LABEL: &str = "solverforge 0.12.0";
 pub const UI_TARGET_LABEL: &str = "solverforge-ui 0.6.5";
 pub const MAPS_TARGET_LABEL: &str = "solverforge-maps 2.1.4";
-pub const RUNTIME_TARGET_DISPLAY: &str = "SolverForge crate target 0.11.1";
-pub const RUNTIME_SOURCE_PATH: &str = "crates.io: solverforge 0.11.1";
+pub const RUNTIME_TARGET_DISPLAY: &str = "SolverForge crate target 0.12.0";
+pub const RUNTIME_SOURCE_PATH: &str = "crates.io: solverforge 0.12.0";
 pub const UI_SOURCE_PATH: &str = "crates.io: solverforge-ui 0.6.5";
 pub const MAPS_SOURCE_PATH: &str = "crates.io: solverforge-maps 2.1.4";
 
@@ -15,11 +15,11 @@ pub const LONG_VERSION_TEXT: &str = concat!(
     env!("CARGO_PKG_VERSION"),
     "\nCLI version: ",
     env!("CARGO_PKG_VERSION"),
-    "\nScaffold runtime target: SolverForge crate target 0.11.1",
+    "\nScaffold runtime target: SolverForge crate target 0.12.0",
     "\nScaffold UI target: solverforge-ui 0.6.5",
     "\nScaffold maps target: solverforge-maps 2.1.4",
     "\nRuntime source: ",
-    "crates.io: solverforge 0.11.1",
+    "crates.io: solverforge 0.12.0",
     "\nUI source: ",
     "crates.io: solverforge-ui 0.6.5",
     "\nMaps source: ",
