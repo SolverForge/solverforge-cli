@@ -10,7 +10,9 @@ The generated project is a neutral shell. The default shell is `web`; users can
 choose `--shell api` for an HTTP API without frontend assets or `--shell cli`
 for a Clap command-line app without Axum. Users add facts, entities, variables,
 solution/score metadata, constraints, solver config, and generated data after
-scaffolding. Shell choice is a delivery surface, not a model family.
+scaffolding. Shell choice is a delivery surface, not a model family. The
+current shell set is exactly `web`, `api`, and `cli`; Tauri is deferred and has
+no public scaffold selector in this release line.
 
 Current CLI package version: `2.1.0`.
 
@@ -46,8 +48,9 @@ SolverForge scalar metadata:
 - `--construction-value-order-key`
 
 These flags are metadata-only. The CLI emits the planning-variable attribute,
-syncs the values through `solverforge.app.toml` and `static/generated/ui-model.json`,
-and leaves the Rust hook function bodies under domain ownership.
+syncs the values through `solverforge.app.toml`, writes them to
+`static/generated/ui-model.json` for web-shell projects, and leaves the Rust hook
+function bodies under domain ownership.
 
 Scalar groups and conflict repairs are exact-ID resources. Scalar groups are
 named by the user-provided group ID; conflict repairs are named by the
@@ -123,7 +126,8 @@ projections. It tracks:
 
 - app metadata, including fixed `starter = "neutral-shell"` metadata, selected
   `shell`, and CLI version
-- runtime target metadata, `runtime_source`, and `ui_source`
+- runtime target metadata and `runtime_source`
+- web-shell `ui_source`
 - demo data sizes
 - solution name and score type
 - fact collections
@@ -234,6 +238,7 @@ Do not claim mixed seeded solving until the runtime supports that combination.
 Do not reintroduce:
 
 - public scaffold-family flags
+- public Tauri shell selection before a real Tauri scaffold exists
 - hidden `standard` variable-kind aliases
 - hidden console/scaffold aliases
 - compatibility migrations for unmanaged legacy generated files
