@@ -216,7 +216,7 @@ function resolveBuiltExecutable(buildStdout) {
 
 function resolveLocalSolverforgePaths() {
   const ecosystemRoot = process.env[ecosystemRootEnv] || workspaceRoot();
-  const runtimePath = requiredLocalPath('solverforge', path.join(ecosystemRoot, 'solverforge-rs', 'crates', 'solverforge'));
+  const runtimePath = requiredLocalPath('solverforge', path.join(ecosystemRoot, 'solverforge', 'crates', 'solverforge'));
   const uiPath = requiredLocalPath('solverforge-ui', path.join(ecosystemRoot, 'solverforge-ui'));
   const mapsPath = requiredLocalPath('solverforge-maps', path.join(ecosystemRoot, 'solverforge-maps'));
 

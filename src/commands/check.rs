@@ -5,7 +5,9 @@ use crate::commands::generate_constraint::{parse_domain, validate_constraint_mod
 use crate::commands::generate_domain::{find_file_for_type, validate_domain_mod_source};
 use crate::error::{CliError, CliResult};
 use crate::managed_block;
+use crate::model_contract::{ContractSeverity, ModelContract};
 use crate::output;
+use crate::solver_config;
 
 const ENTITY_TEMPLATE_PATH: &str = ".solverforge/templates/entity.rs.tmpl";
 const SOLUTION_TEMPLATE_PATH: &str = ".solverforge/templates/solution.rs.tmpl";
@@ -180,6 +182,18 @@ pub fn run() -> CliResult {
                         )),
                     }
                 }
+
+                output::print_status("check", "model resources");
+                match ModelContract::load() {
+                    Ok(contract) => {
+                        for diagnostic in contract.validate_model_resources() {
+                            match diagnostic.severity {
+                                ContractSeverity::Error => errors.push(diagnostic.message),
+                            }
+                        }
+                    }
+                    Err(err) => errors.push(format!("Cannot validate model resources: {err}")),
+                }
             }
             Err(err) => errors.push(format!("Cannot parse domain model: {err}")),
         }
@@ -188,6 +202,10 @@ pub fn run() -> CliResult {
     output::print_status("check", "solver.toml");
     if !Path::new("solver.toml").exists() {
         warnings.push("solver.toml not found — solver will use defaults".to_string());
+    } else if let Some(src) = read_path(Path::new("solver.toml"), &mut errors) {
+        if let Err(err) = solver_config::validate_managed_blocks(&src) {
+            errors.push(err.to_string());
+        }
     }
 
     println!();

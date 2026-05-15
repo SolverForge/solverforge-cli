@@ -4,8 +4,8 @@ use std::path::Path;
 use super::domain::parse_domain;
 use super::mod_rewriter::rewrite_mod;
 use super::skeleton::generate_skeleton;
-use super::utils::{snake_to_title, validate_name};
-use super::wizard::resolve_pattern_and_hardness;
+use super::utils::validate_name;
+use super::wizard::{resolve_pattern_and_hardness, PatternFlags};
 use crate::app_spec;
 use crate::commands::generate_domain::is_soft_score;
 use crate::error::{CliError, CliResult};
@@ -34,6 +34,11 @@ pub fn run(
     join: bool,
     balance: bool,
     reward: bool,
+    runs: bool,
+    presence: bool,
+    collect_vec: bool,
+    group_complement: bool,
+    projected_group: bool,
     force: bool,
     pretend: bool,
 ) -> CliResult {
@@ -69,11 +74,23 @@ pub fn run(
     let solution_type = domain.solution_type.clone();
     let score_type = domain.score_type.clone();
 
-    let constraint_name = snake_to_title(name);
-
     // Determine pattern + hardness
-    let (pattern, is_soft) =
-        resolve_pattern_and_hardness(soft, unary, pair, join, balance, reward, &domain)?;
+    let (pattern, is_soft) = resolve_pattern_and_hardness(
+        PatternFlags {
+            soft,
+            unary,
+            pair,
+            join,
+            balance,
+            reward,
+            runs,
+            presence,
+            collect_vec,
+            group_complement,
+            projected_group,
+        },
+        &domain,
+    )?;
     if !is_soft && is_soft_score(&score_type) {
         return Err(CliError::general(
             "SoftScore supports only soft generated constraints; pass --soft or choose a score type with hard levels",
@@ -87,6 +104,11 @@ pub fn run(
             | super::skeleton::Pattern::Balance
             | super::skeleton::Pattern::Reward
             | super::skeleton::Pattern::Join
+            | super::skeleton::Pattern::Runs
+            | super::skeleton::Pattern::IndexedPresence
+            | super::skeleton::Pattern::CollectVec
+            | super::skeleton::Pattern::GroupComplement
+            | super::skeleton::Pattern::ProjectedGroup
     ) && domain.entities.is_empty()
     {
         return Err(CliError::with_hint(
@@ -95,9 +117,36 @@ pub fn run(
         ));
     }
 
-    if matches!(pattern, super::skeleton::Pattern::Join) && domain.facts.is_empty() {
+    if matches!(
+        pattern,
+        super::skeleton::Pattern::Pair
+            | super::skeleton::Pattern::Join
+            | super::skeleton::Pattern::Balance
+            | super::skeleton::Pattern::Runs
+            | super::skeleton::Pattern::IndexedPresence
+            | super::skeleton::Pattern::CollectVec
+            | super::skeleton::Pattern::GroupComplement
+            | super::skeleton::Pattern::ProjectedGroup
+    ) && domain
+        .entities
+        .first()
+        .is_some_and(|entity| entity.scalar_vars.is_empty())
+    {
         return Err(CliError::with_hint(
-            "join constraints need at least one problem fact collection",
+            "this constraint pattern needs a scalar planning variable on the first planning entity collection",
+            "run `solverforge generate variable <field> --entity <Entity> --kind scalar --range <facts>` first",
+        ));
+    }
+
+    if matches!(
+        pattern,
+        super::skeleton::Pattern::Join
+            | super::skeleton::Pattern::GroupComplement
+            | super::skeleton::Pattern::ProjectedGroup
+    ) && domain.facts.is_empty()
+    {
+        return Err(CliError::with_hint(
+            "this constraint pattern needs at least one problem fact collection",
             "run `solverforge generate fact ...` first",
         ));
     }
@@ -109,7 +158,7 @@ pub fn run(
         is_soft,
         &solution_type,
         &score_type,
-        &constraint_name,
+        name,
         Some(&domain),
     );
 

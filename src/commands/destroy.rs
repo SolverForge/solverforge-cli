@@ -8,6 +8,8 @@ use crate::commands::generate_domain::{
     remove_domain_mod_entry_source, unwire_collection_from_solution_source,
 };
 use crate::error::{CliError, CliResult};
+use crate::model_contract;
+use crate::model_id::ConstraintId;
 use crate::output;
 use crate::{app_spec, commands::generate_domain};
 
@@ -86,6 +88,8 @@ pub fn run_entity(name: &str, skip_confirm: bool) -> CliResult {
             kind: "entity",
             name: name.to_string(),
         })?;
+
+    model_contract::ensure_entity_has_no_scalar_group_targets(&pascal)?;
 
     if !confirm_destroy("entity", &pascal, skip_confirm)? {
         output::print_skip(&format!("entity {}", pascal));
@@ -292,6 +296,8 @@ fn ensure_fact_collection_is_unreferenced(
 }
 
 pub fn run_variable(field: &str, entity: &str, skip_confirm: bool) -> CliResult {
+    model_contract::ensure_variable_has_no_scalar_group_targets(entity, field)?;
+
     if !confirm_destroy("variable", field, skip_confirm)? {
         output::print_skip(&format!("variable {}", field));
         return Ok(());
@@ -301,8 +307,8 @@ pub fn run_variable(field: &str, entity: &str, skip_confirm: bool) -> CliResult 
 }
 
 pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
-    let snake = name.to_lowercase().replace('-', "_");
-    let file_path = Path::new("src/constraints").join(format!("{}.rs", snake));
+    let constraint_id = ConstraintId::parse(name)?;
+    let file_path = Path::new("src/constraints").join(format!("{}.rs", constraint_id.as_str()));
     let mod_path = Path::new("src/constraints/mod.rs");
 
     if !file_path.exists() {
@@ -327,7 +333,9 @@ pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
         context: "failed to read src/constraints/mod.rs".to_string(),
         source: e,
     })?;
-    let new_mod_src = remove_constraint_from_source(&mod_src, &snake).map_err(CliError::general)?;
+    let new_mod_src = remove_constraint_from_source(&mod_src, constraint_id.as_str())
+        .map_err(CliError::general)?;
+    model_contract::ensure_constraint_has_no_conflict_repair_refs(constraint_id.as_str())?;
 
     fs::write(mod_path, new_mod_src).map_err(|e| CliError::IoError {
         context: "failed to update src/constraints/mod.rs".to_string(),
@@ -337,12 +345,30 @@ pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
         context: format!("failed to delete {}", file_path.display()),
         source: e,
     })?;
-    crate::commands::sf_config::remove_constraint(&snake)?;
+    crate::commands::sf_config::remove_constraint(constraint_id.as_str())?;
     app_spec::sync_from_project()?;
 
     output::print_remove(&file_path.display().to_string());
     output::print_update("src/constraints/mod.rs");
     Ok(())
+}
+
+pub fn run_scalar_group(name: &str, skip_confirm: bool) -> CliResult {
+    if !confirm_destroy("scalar group", name, skip_confirm)? {
+        output::print_skip(&format!("scalar group {}", name));
+        return Ok(());
+    }
+
+    crate::commands::model_resource::destroy_scalar_group(name)
+}
+
+pub fn run_conflict_repair(name: &str, skip_confirm: bool) -> CliResult {
+    if !confirm_destroy("conflict repair", name, skip_confirm)? {
+        output::print_skip(&format!("conflict repair {}", name));
+        return Ok(());
+    }
+
+    crate::commands::model_resource::destroy_conflict_repair(name)
 }
 
 #[cfg(test)]

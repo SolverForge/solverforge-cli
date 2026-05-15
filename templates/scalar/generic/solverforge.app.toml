@@ -1,6 +1,7 @@
 [app]
 name = "{{project_name}}"
 starter = "neutral-shell"
+shell = "{{scaffold_shell}}"
 cli_version = "{{solverforge_cli_version}}"
 
 [runtime]

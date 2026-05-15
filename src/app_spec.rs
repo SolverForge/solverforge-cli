@@ -5,6 +5,7 @@ use std::path::Path;
 
 use crate::commands::generate_constraint::domain::{list_constraints, parse_domain};
 use crate::error::{CliError, CliResult};
+use crate::scalar_variable_hooks::ScalarVariableHooks;
 
 const APP_SPEC_PATH: &str = "solverforge.app.toml";
 const UI_MODEL_PATH: &str = "static/generated/ui-model.json";
@@ -27,6 +28,10 @@ pub struct AppSpec {
     pub variables: Vec<VariableSpec>,
     #[serde(default)]
     pub constraints: Vec<ConstraintSpec>,
+    #[serde(default)]
+    pub scalar_groups: Vec<ScalarGroupSpec>,
+    #[serde(default)]
+    pub conflict_repairs: Vec<ConflictRepairSpec>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -35,6 +40,8 @@ pub struct AppMeta {
     pub name: String,
     #[serde(default)]
     pub starter: String,
+    #[serde(default)]
+    pub shell: String,
     #[serde(default)]
     pub cli_version: String,
 }
@@ -55,6 +62,10 @@ pub struct SolutionMeta {
     pub name: String,
     #[serde(default)]
     pub score: String,
+    #[serde(default)]
+    pub scalar_groups_path: String,
+    #[serde(default)]
+    pub conflict_repairs_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +95,8 @@ pub struct VariableSpec {
     pub elements: String,
     #[serde(default)]
     pub allows_unassigned: bool,
+    #[serde(default, flatten)]
+    pub scalar_hooks: ScalarVariableHooks,
     #[serde(default = "default_true")]
     pub enabled: bool,
 }
@@ -92,6 +105,83 @@ pub struct VariableSpec {
 pub struct ConstraintSpec {
     pub name: String,
     pub module: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ScalarGroupSpec {
+    pub name: String,
+    pub kind: String,
+    #[serde(default)]
+    pub targets: Vec<ScalarGroupTargetSpec>,
+    #[serde(default)]
+    pub candidate_provider: String,
+    #[serde(default)]
+    pub assignment_hooks: ScalarGroupAssignmentHooks,
+    #[serde(default)]
+    pub limits: ScalarGroupLimitsSpec,
+    #[serde(default = "default_true")]
+    pub solver_config: bool,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ScalarGroupTargetSpec {
+    pub entity: String,
+    pub entity_plural: String,
+    pub field: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ScalarGroupAssignmentHooks {
+    #[serde(default)]
+    pub required_entity: String,
+    #[serde(default)]
+    pub capacity_key: String,
+    #[serde(default)]
+    pub assignment_rule: String,
+    #[serde(default)]
+    pub position_key: String,
+    #[serde(default)]
+    pub sequence_key: String,
+    #[serde(default)]
+    pub entity_order: String,
+    #[serde(default)]
+    pub value_order: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ScalarGroupLimitsSpec {
+    #[serde(default)]
+    pub value_candidate_limit: Option<usize>,
+    #[serde(default)]
+    pub group_candidate_limit: Option<usize>,
+    #[serde(default)]
+    pub max_moves_per_step: Option<usize>,
+    #[serde(default)]
+    pub max_augmenting_depth: Option<usize>,
+    #[serde(default)]
+    pub max_rematch_size: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ConflictRepairSpec {
+    pub constraint: String,
+    pub provider: String,
+    #[serde(default)]
+    pub selector: String,
+    #[serde(default)]
+    pub max_matches_per_step: Option<usize>,
+    #[serde(default)]
+    pub max_repairs_per_match: Option<usize>,
+    #[serde(default)]
+    pub max_moves_per_step: Option<usize>,
+    #[serde(default)]
+    pub include_soft_matches: bool,
+    #[serde(default = "default_true")]
+    pub solver_config: bool,
     #[serde(default = "default_true")]
     pub enabled: bool,
 }
@@ -172,6 +262,8 @@ pub fn sync_from_project() -> CliResult {
                 .collect();
             spec.solution.name = domain.solution_type;
             spec.solution.score = domain.score_type;
+            spec.solution.scalar_groups_path = domain.scalar_groups_path.unwrap_or_default();
+            spec.solution.conflict_repairs_path = domain.conflict_repairs_path.unwrap_or_default();
             spec.entities = domain
                 .entities
                 .iter()
@@ -204,6 +296,7 @@ pub fn sync_from_project() -> CliResult {
                         },
                         elements: String::new(),
                         allows_unassigned: var.allows_unassigned,
+                        scalar_hooks: var.hooks.clone(),
                         enabled: true,
                     });
                 }
@@ -220,6 +313,7 @@ pub fn sync_from_project() -> CliResult {
                             var.element_collection.clone()
                         },
                         allows_unassigned: false,
+                        scalar_hooks: ScalarVariableHooks::default(),
                         enabled: true,
                     });
                 }
@@ -288,6 +382,10 @@ fn normalize_demo_meta(demo: &mut DemoMeta) {
 }
 
 fn write_ui_model(spec: &AppSpec) -> CliResult {
+    if !uses_web_shell(spec) {
+        return Ok(());
+    }
+
     let path = Path::new(UI_MODEL_PATH);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| CliError::IoError {
@@ -327,7 +425,8 @@ fn write_ui_model(spec: &AppSpec) -> CliResult {
                 "entityPlural": variable.entity_plural,
                 "sourcePlural": source_plural,
                 "variableField": variable.field,
-                "allowsUnassigned": variable.allows_unassigned
+                "allowsUnassigned": variable.allows_unassigned,
+                "scalarHooks": scalar_hook_metadata_json(&variable.scalar_hooks)
             }))
         })
         .collect::<CliResult<Vec<_>>>()?;
@@ -336,7 +435,29 @@ fn write_ui_model(spec: &AppSpec) -> CliResult {
         "entities": entities,
         "facts": facts,
         "constraints": constraints,
-        "views": views
+        "views": views,
+        "scalarGroups": spec
+            .scalar_groups
+            .iter()
+            .filter(|group| group.enabled)
+            .map(|group| json!({
+                "name": group.name,
+                "kind": group.kind,
+                "targets": group.targets,
+                "solverConfig": group.solver_config
+            }))
+            .collect::<Vec<_>>(),
+        "conflictRepairs": spec
+            .conflict_repairs
+            .iter()
+            .filter(|repair| repair.enabled)
+            .map(|repair| json!({
+                "constraint": repair.constraint,
+                "provider": repair.provider,
+                "selector": repair.selector,
+                "solverConfig": repair.solver_config
+            }))
+            .collect::<Vec<_>>()
     }))
     .map_err(|e| CliError::general(format!("failed to serialize {}: {}", UI_MODEL_PATH, e)))?;
 
@@ -345,6 +466,36 @@ fn write_ui_model(spec: &AppSpec) -> CliResult {
         source: e,
     })?;
     Ok(())
+}
+
+pub(crate) fn uses_web_shell(spec: &AppSpec) -> bool {
+    spec.app.shell.is_empty() || spec.app.shell == "web"
+}
+
+fn scalar_hook_metadata_json(hooks: &ScalarVariableHooks) -> serde_json::Value {
+    let mut value = serde_json::Map::new();
+    for (name, hook) in hooks.entries() {
+        if let Some(hook) = hook {
+            value.insert(snake_to_camel(name), json!(hook));
+        }
+    }
+    serde_json::Value::Object(value)
+}
+
+fn snake_to_camel(name: &str) -> String {
+    let mut out = String::new();
+    let mut uppercase_next = false;
+    for ch in name.chars() {
+        if ch == '_' {
+            uppercase_next = true;
+        } else if uppercase_next {
+            out.push(ch.to_ascii_uppercase());
+            uppercase_next = false;
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 fn resolve_collection_plural(collections: &[CollectionSpec], raw: &str) -> String {

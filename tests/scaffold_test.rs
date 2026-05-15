@@ -16,11 +16,11 @@ use dependency_overrides::{
 };
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
-const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.12.0";
+const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.13.1";
 const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.6.5";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.4";
 const SOLVERFORGE_DEP_SPEC: &str =
-    r#"{ version = "0.12.0", features = ["serde", "console", "verbose-logging"] }"#;
+    r#"{ version = "0.13.1", features = ["serde", "console", "verbose-logging"] }"#;
 const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.6.5" }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.4" }"#;
 const GENERATED_RUST_VERSION_SPEC: &str = r#"rust-version = "1.95""#;
@@ -38,6 +38,42 @@ fn cli_command() -> Command {
         "--",
     ]);
     command
+}
+
+fn assert_cli_success(project_dir: &Path, args: &[&str], context: &str) {
+    let output = cli_command()
+        .args(args)
+        .current_dir(project_dir)
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run {context}: {err}"));
+
+    assert!(
+        output.status.success(),
+        "{context} failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn assert_cli_failure(project_dir: &Path, args: &[&str], context: &str) -> String {
+    let output = cli_command()
+        .args(args)
+        .current_dir(project_dir)
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run {context}: {err}"));
+
+    assert!(
+        !output.status.success(),
+        "{context} should have failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
 }
 
 fn write_override_template(project_dir: &Path, name: &str, contents: &str) {
@@ -237,7 +273,7 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
     assert!(
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
-            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.12.0")
+            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.13.1")
             && stdout.contains("Scaffold UI target: solverforge-ui 0.6.5")
             && stdout.contains("Scaffold maps target: solverforge-maps 2.1.4")
             && stdout.contains(RUNTIME_DEP_LABEL)
@@ -368,6 +404,7 @@ fn test_new_creates_neutral_project_files() {
 
     assert!(
         app_spec.contains("starter = \"neutral-shell\"")
+            && app_spec.contains("shell = \"web\"")
             && app_spec.contains("[demo]")
             && app_spec.contains("default_size = \"standard\"")
             && app_spec.contains("available_sizes = [\"small\", \"standard\", \"large\"]")
@@ -415,7 +452,7 @@ fn test_new_creates_neutral_project_files() {
     );
     assert!(
         cargo_toml.contains(
-            "solverforge = { version = \"0.12.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+            "solverforge = { version = \"0.13.1\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
         ) && cargo_toml.contains("solverforge-ui = { version = \"0.6.5\" }")
             && cargo_toml.contains("solverforge-maps = { version = \"2.1.4\" }")
             && cargo_toml.contains(GENERATED_RUST_VERSION_SPEC)
@@ -577,7 +614,7 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
         readme.contains(&format!(
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
-        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.12.0`")
+        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.13.1`")
             && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.6.5`")
             && readme
                 .contains("SolverForge maps target for this scaffold: `solverforge-maps 2.1.4`")
@@ -614,6 +651,177 @@ fn test_new_removed_template_flags_fail() {
     assert!(
         stderr.contains("unexpected argument '--scalar' found"),
         "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
+fn test_new_api_shell_excludes_frontend_assets() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_api_shell_project";
+
+    let status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--shell",
+            "api",
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(status.success(), "api shell scaffold failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    let app_spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
+    let main_rs = std::fs::read_to_string(project_dir.join("src/main.rs")).unwrap();
+
+    assert!(
+        app_spec.contains("shell = \"api\"") && !app_spec.contains("ui_source"),
+        "api shell should be recorded in solverforge.app.toml: {app_spec}"
+    );
+    assert!(
+        !project_dir.join("static").exists()
+            && project_dir.join("src/api/routes.rs").exists()
+            && project_dir.join("src/api/sse.rs").exists(),
+        "api shell should keep HTTP API files and exclude frontend assets"
+    );
+    assert!(
+        cargo_toml.contains("axum = \"0.8.9\"")
+            && cargo_toml.contains("tokio-stream = { version = \"0.1.18\", features = [\"sync\"] }")
+            && cargo_toml.contains("tower-http = { version = \"0.6.8\", features = [\"cors\"] }")
+            && !cargo_toml.contains("solverforge-ui")
+            && !cargo_toml.contains("solverforge-maps")
+            && !cargo_toml.contains("features = [\"fs\", \"cors\"]"),
+        "api shell Cargo.toml should include API dependencies without frontend dependencies: {cargo_toml}"
+    );
+    assert!(
+        main_rs.contains("api::router(state).layer(cors)")
+            && !main_rs.contains("solverforge_ui::routes")
+            && !main_rs.contains("ServeDir"),
+        "api shell main.rs should start the API without frontend serving: {main_rs}"
+    );
+
+    let output = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run generated api shell cargo check");
+    assert!(
+        output.status.success(),
+        "generated api shell cargo check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_cli_shell_project";
+
+    let status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--shell",
+            "cli",
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(status.success(), "cli shell scaffold failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    let app_spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
+    let main_rs = std::fs::read_to_string(project_dir.join("src/main.rs")).unwrap();
+    let api_mod = std::fs::read_to_string(project_dir.join("src/api/mod.rs")).unwrap();
+
+    assert!(
+        app_spec.contains("shell = \"cli\"") && !app_spec.contains("ui_source"),
+        "cli shell should be recorded in solverforge.app.toml: {app_spec}"
+    );
+    assert!(
+        !project_dir.join("static").exists()
+            && project_dir.join("src/api/dto.rs").exists()
+            && !project_dir.join("src/api/routes.rs").exists()
+            && !project_dir.join("src/api/sse.rs").exists(),
+        "cli shell should keep shared DTOs and exclude Axum route files"
+    );
+    assert!(
+        cargo_toml.contains("clap = { version = \"4.6.1\", features = [\"derive\"] }")
+            && !cargo_toml.contains("axum")
+            && !cargo_toml.contains("tower-http")
+            && !cargo_toml.contains("tower =")
+            && !cargo_toml.contains("tokio-stream")
+            && !cargo_toml.contains("solverforge-ui")
+            && !cargo_toml.contains("solverforge-maps"),
+        "cli shell Cargo.toml should exclude Axum and frontend dependencies: {cargo_toml}"
+    );
+    assert!(
+        api_mod.contains("pub use dto::PlanDto;")
+            && main_rs.contains("derive(Parser)")
+            && main_rs.contains("Command::DemoData"),
+        "cli shell should expose a Clap command backed by shared DTOs"
+    );
+    let routes_error = assert_cli_failure(&project_dir, &["routes"], "routes in cli shell");
+    assert!(
+        routes_error.contains("not available for CLI-shell projects"),
+        "routes should explain why CLI-shell projects have no Axum routes: {routes_error}"
+    );
+    let server_error = assert_cli_failure(&project_dir, &["server"], "server in cli shell");
+    assert!(
+        server_error.contains("not available for CLI-shell projects"),
+        "server should explain why CLI-shell projects do not run an Axum server: {server_error}"
+    );
+
+    assert_cli_success(
+        &project_dir,
+        &["generate", "entity", "task", "--field", "label:String"],
+        "generate entity in cli shell",
+    );
+    assert!(
+        !project_dir.join("static").exists()
+            && !project_dir.join("src/api/routes.rs").exists()
+            && !project_dir.join("src/api/sse.rs").exists(),
+        "CLI-shell domain generation should not recreate frontend or Axum route assets"
+    );
+
+    let output = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run generated cli shell cargo check");
+    assert!(
+        output.status.success(),
+        "generated cli shell cargo check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let output = Command::new("cargo")
+        .args(["run", "--quiet", "--", "demo-data", "--size", "small"])
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run generated cli shell");
+    assert!(
+        output.status.success() && String::from_utf8_lossy(&output.stdout).contains("\"score\""),
+        "generated cli shell should print demo data JSON\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 }
 
@@ -1892,6 +2100,950 @@ fn test_generate_variable_updates_app_spec_and_ui_model() {
         ui_model.contains("\"kind\": \"scalar\"")
             && ui_model.contains("\"entityPlural\": \"tasks\"")
             && ui_model.contains("\"sourcePlural\": \"resources\"")
+    );
+}
+
+#[test]
+fn test_generate_scalar_variable_hook_metadata_projects_and_compiles() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_generated_scalar_hook_metadata";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    assert!(
+        cli_command()
+            .args(["generate", "fact", "resource"])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate fact")
+            .success(),
+        "fact generation failed"
+    );
+    assert!(
+        cli_command()
+            .args(["generate", "entity", "task"])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate entity")
+            .success(),
+        "entity generation failed"
+    );
+    assert!(
+        cli_command()
+            .args([
+                "generate",
+                "variable",
+                "resource_idx",
+                "--entity",
+                "Task",
+                "--kind",
+                "scalar",
+                "--range",
+                "resources",
+                "--allows-unassigned",
+                "--candidate-values",
+                "resource_candidates",
+                "--nearby-value-candidates",
+                "nearby_resources",
+                "--nearby-entity-candidates",
+                "nearby_tasks",
+                "--nearby-value-distance-meter",
+                "resource_distance",
+                "--nearby-entity-distance-meter",
+                "task_distance",
+                "--construction-entity-order-key",
+                "task_priority",
+                "--construction-value-order-key",
+                "resource_priority",
+            ])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate variable")
+            .success(),
+        "variable generation failed"
+    );
+
+    let task_path = project_dir.join("src").join("domain").join("task.rs");
+    let mut task_rs = std::fs::read_to_string(&task_path).unwrap();
+    assert!(
+        task_rs.contains("candidate_values = \"resource_candidates\"")
+            && task_rs.contains("nearby_value_candidates = \"nearby_resources\"")
+            && task_rs.contains("nearby_entity_candidates = \"nearby_tasks\"")
+            && task_rs.contains("nearby_value_distance_meter = \"resource_distance\"")
+            && task_rs.contains("nearby_entity_distance_meter = \"task_distance\"")
+            && task_rs.contains("construction_entity_order_key = \"task_priority\"")
+            && task_rs.contains("construction_value_order_key = \"resource_priority\""),
+        "generated scalar hook metadata missing from Task: {task_rs}"
+    );
+
+    let spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    assert!(
+        spec.contains("candidate_values = \"resource_candidates\"")
+            && spec.contains("nearby_value_candidates = \"nearby_resources\"")
+            && spec.contains("nearby_entity_candidates = \"nearby_tasks\"")
+            && spec.contains("nearby_value_distance_meter = \"resource_distance\"")
+            && spec.contains("nearby_entity_distance_meter = \"task_distance\"")
+            && spec.contains("construction_entity_order_key = \"task_priority\"")
+            && spec.contains("construction_value_order_key = \"resource_priority\""),
+        "app spec should persist scalar hook metadata: {spec}"
+    );
+
+    let ui_model = std::fs::read_to_string(
+        project_dir
+            .join("static")
+            .join("generated")
+            .join("ui-model.json"),
+    )
+    .unwrap();
+    let ui_model: serde_json::Value =
+        serde_json::from_str(&ui_model).expect("ui model should be valid JSON");
+    let hooks = &ui_model["views"][0]["scalarHooks"];
+    assert_eq!(hooks["candidateValues"], "resource_candidates");
+    assert_eq!(hooks["nearbyValueCandidates"], "nearby_resources");
+    assert_eq!(hooks["nearbyEntityCandidates"], "nearby_tasks");
+    assert_eq!(hooks["nearbyValueDistanceMeter"], "resource_distance");
+    assert_eq!(hooks["nearbyEntityDistanceMeter"], "task_distance");
+    assert_eq!(hooks["constructionEntityOrderKey"], "task_priority");
+    assert_eq!(hooks["constructionValueOrderKey"], "resource_priority");
+
+    task_rs.push_str(
+        r#"
+use super::Plan;
+
+static RESOURCE_CANDIDATES: &[usize] = &[0];
+
+pub(super) fn resource_candidates(
+    _plan: &Plan,
+    _entity_index: usize,
+    _variable_index: usize,
+) -> &[usize] {
+    RESOURCE_CANDIDATES
+}
+
+pub(super) fn nearby_resources(
+    _plan: &Plan,
+    _entity_index: usize,
+    _variable_index: usize,
+) -> &[usize] {
+    RESOURCE_CANDIDATES
+}
+
+pub(super) fn nearby_tasks(
+    _plan: &Plan,
+    _entity_index: usize,
+    _variable_index: usize,
+) -> &[usize] {
+    RESOURCE_CANDIDATES
+}
+
+pub(super) fn resource_distance(_plan: &Plan, _task: &Task, _resource: usize) -> f64 {
+    0.0
+}
+
+pub(super) fn task_distance(_plan: &Plan, _left: &Task, _right: &Task) -> f64 {
+    0.0
+}
+
+pub(super) fn task_priority(_plan: &Plan, _task: &Task) -> i64 {
+    0
+}
+
+pub(super) fn resource_priority(_plan: &Plan, _task: &Task, _resource: usize) -> i64 {
+    0
+}
+"#,
+    );
+    std::fs::write(&task_path, task_rs).expect("failed to add scalar hook functions");
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+
+    assert!(
+        check_status.success(),
+        "cargo check failed after adding scalar hook functions"
+    );
+}
+
+#[test]
+fn test_destroy_hooked_scalar_variable_removes_multiline_attribute() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_destroy_hooked_scalar_variable";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    assert!(
+        cli_command()
+            .args(["generate", "fact", "resource"])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate fact")
+            .success(),
+        "fact generation failed"
+    );
+    assert!(
+        cli_command()
+            .args(["generate", "entity", "task"])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate entity")
+            .success(),
+        "entity generation failed"
+    );
+    assert!(
+        cli_command()
+            .args([
+                "generate",
+                "variable",
+                "resource_idx",
+                "--entity",
+                "Task",
+                "--kind",
+                "scalar",
+                "--range",
+                "resources",
+                "--allows-unassigned",
+                "--candidate-values",
+                "resource_candidates",
+                "--nearby-value-candidates",
+                "nearby_resources",
+                "--nearby-value-distance-meter",
+                "resource_distance",
+                "--construction-entity-order-key",
+                "task_priority",
+            ])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate hooked scalar variable")
+            .success(),
+        "hooked scalar variable generation failed"
+    );
+
+    let destroy_status = cli_command()
+        .args([
+            "destroy",
+            "--yes",
+            "variable",
+            "resource_idx",
+            "--entity",
+            "Task",
+        ])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to destroy hooked scalar variable");
+    assert!(destroy_status.success(), "destroy variable failed");
+
+    let task_rs =
+        std::fs::read_to_string(project_dir.join("src").join("domain").join("task.rs")).unwrap();
+    assert!(!task_rs.contains("pub resource_idx: Option<usize>"));
+    assert!(!task_rs.contains("resource_idx: None,"));
+    assert!(!task_rs.contains("resource_candidates"));
+    assert!(!task_rs.contains("nearby_resources"));
+    assert!(!task_rs.contains("resource_distance"));
+    assert!(!task_rs.contains("task_priority"));
+    syn::parse_file(&task_rs).expect("entity source should parse after destroy");
+
+    let spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    assert!(
+        !spec.contains("resource_idx")
+            && !spec.contains("resource_candidates")
+            && !spec.contains("nearby_resources"),
+        "destroy should sync app spec without removed scalar hook metadata: {spec}"
+    );
+
+    let ui_model = std::fs::read_to_string(
+        project_dir
+            .join("static")
+            .join("generated")
+            .join("ui-model.json"),
+    )
+    .unwrap();
+    assert!(
+        !ui_model.contains("resource_idx")
+            && !ui_model.contains("resource_candidates")
+            && !ui_model.contains("nearby_resources"),
+        "destroy should sync UI model without removed scalar hook metadata: {ui_model}"
+    );
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+    assert!(check_status.success(), "cargo check failed after destroy");
+}
+
+#[test]
+fn test_scalar_group_destroy_preserves_shared_stubs_and_rejects_candidate_hooks() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_scalar_group_shared_stubs";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    assert_cli_success(
+        &project_dir,
+        &["generate", "fact", "resource"],
+        "fact generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &["generate", "entity", "task"],
+        "entity generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "variable",
+            "resource_idx",
+            "--entity",
+            "Task",
+            "--kind",
+            "scalar",
+            "--range",
+            "resources",
+            "--allows-unassigned",
+        ],
+        "scalar variable generation",
+    );
+
+    let rejected = cli_command()
+        .args([
+            "generate",
+            "scalar-group",
+            "bad_candidate_group",
+            "--candidates",
+            "candidate_provider",
+            "--target",
+            "Task.resource_idx",
+            "--required-entity",
+            "required_task",
+        ])
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run rejected scalar-group command");
+    assert!(
+        !rejected.status.success(),
+        "candidate-backed scalar group with assignment hook should fail"
+    );
+    assert!(
+        String::from_utf8_lossy(&rejected.stderr)
+            .contains("candidate scalar groups do not accept assignment hook flags"),
+        "stderr should explain the invalid hook combination: {}",
+        String::from_utf8_lossy(&rejected.stderr)
+    );
+    let rejected_assignment_rule = assert_cli_failure(
+        &project_dir,
+        &[
+            "generate",
+            "scalar-group",
+            "bad_assignment_rule",
+            "--assignment",
+            "Task.resource_idx",
+            "--assignment-rule",
+            "compatible_pair",
+            "--skip-solver-config",
+        ],
+        "assignment scalar group without sequence key",
+    );
+    assert!(
+        rejected_assignment_rule.contains("require --sequence-key when --assignment-rule is set"),
+        "stderr should explain the invalid assignment hook combination: {rejected_assignment_rule}"
+    );
+
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "scalar-group",
+            "required_assignment_one",
+            "--assignment",
+            "Task.resource_idx",
+            "--required-entity",
+            "required_task",
+            "--skip-solver-config",
+        ],
+        "first assignment scalar group generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "scalar-group",
+            "required_assignment_two",
+            "--assignment",
+            "Task.resource_idx",
+            "--required-entity",
+            "required_task",
+            "--skip-solver-config",
+        ],
+        "second assignment scalar group generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "scalar-group",
+            "candidate_group_one",
+            "--candidates",
+            "candidate_provider",
+            "--target",
+            "Task.resource_idx",
+            "--skip-solver-config",
+        ],
+        "first candidate scalar group generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "scalar-group",
+            "candidate_group_two",
+            "--candidates",
+            "candidate_provider",
+            "--target",
+            "Task.resource_idx",
+            "--skip-solver-config",
+        ],
+        "second candidate scalar group generation",
+    );
+    let blocked_variable_destroy = assert_cli_failure(
+        &project_dir,
+        &[
+            "destroy",
+            "--yes",
+            "variable",
+            "resource_idx",
+            "--entity",
+            "Task",
+        ],
+        "destroy scalar-group target variable",
+    );
+    assert!(
+        blocked_variable_destroy.contains("cannot destroy variable 'Task.resource_idx'")
+            && blocked_variable_destroy.contains("required_assignment_one")
+            && blocked_variable_destroy.contains("required_assignment_two")
+            && blocked_variable_destroy.contains("candidate_group_one")
+            && blocked_variable_destroy.contains("candidate_group_two"),
+        "destroy variable should list dependent scalar groups: {blocked_variable_destroy}"
+    );
+    let blocked_entity_destroy = assert_cli_failure(
+        &project_dir,
+        &["destroy", "--yes", "entity", "task"],
+        "destroy scalar-group target entity",
+    );
+    assert!(
+        blocked_entity_destroy.contains("cannot destroy entity 'Task'")
+            && blocked_entity_destroy.contains("required_assignment_one")
+            && blocked_entity_destroy.contains("candidate_group_two"),
+        "destroy entity should list dependent scalar groups: {blocked_entity_destroy}"
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "destroy",
+            "--yes",
+            "scalar-group",
+            "required_assignment_one",
+        ],
+        "destroy first assignment scalar group",
+    );
+    assert_cli_success(
+        &project_dir,
+        &["destroy", "--yes", "scalar-group", "candidate_group_one"],
+        "destroy first candidate scalar group",
+    );
+
+    let plan_rs =
+        std::fs::read_to_string(project_dir.join("src").join("domain").join("plan.rs")).unwrap();
+    assert!(
+        plan_rs.contains("fn required_task(")
+            && plan_rs.contains(".with_required_entity(required_task)"),
+        "remaining assignment scalar group should keep its hook stub and reference: {plan_rs}"
+    );
+    assert!(
+        plan_rs.contains("fn candidate_provider(")
+            && plan_rs.contains("candidate_group_two")
+            && plan_rs.contains("candidate_provider,"),
+        "remaining candidate scalar group should keep its provider stub and reference: {plan_rs}"
+    );
+    assert!(
+        !plan_rs.contains("bad_candidate_group"),
+        "rejected candidate group should not be written: {plan_rs}"
+    );
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+    assert!(
+        check_status.success(),
+        "cargo check failed after destroying shared-hook scalar groups"
+    );
+}
+
+#[test]
+fn test_scalar_group_solver_config_graph_contract_in_generated_app() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_scalar_group_solver_config_graph";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    assert_cli_success(
+        &project_dir,
+        &["generate", "fact", "resource"],
+        "fact generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &["generate", "entity", "task"],
+        "entity generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "variable",
+            "resource_idx",
+            "--entity",
+            "Task",
+            "--kind",
+            "scalar",
+            "--range",
+            "resources",
+            "--allows-unassigned",
+        ],
+        "scalar variable generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "scalar-group",
+            "required_assignment",
+            "--assignment",
+            "Task.resource_idx",
+            "--required-entity",
+            "required_task",
+        ],
+        "assignment scalar group generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "scalar-group",
+            "candidate_group",
+            "--candidates",
+            "candidate_provider",
+            "--target",
+            "Task.resource_idx",
+        ],
+        "candidate scalar group generation",
+    );
+
+    let solver_toml =
+        std::fs::read_to_string(project_dir.join("solver.toml")).expect("read solver config");
+    assert_eq!(
+        solver_toml
+            .matches("group_name = \"required_assignment\"")
+            .count(),
+        2,
+        "assignment scalar group should have construction and search refs: {solver_toml}"
+    );
+    assert_eq!(
+        solver_toml
+            .matches("group_name = \"candidate_group\"")
+            .count(),
+        2,
+        "candidate scalar group should have construction and search refs: {solver_toml}"
+    );
+    assert!(
+        solver_toml.contains("construction_obligation = \"assign_when_candidate_exists\"")
+            && solver_toml.contains("type = \"grouped_scalar_move_selector\""),
+        "solver config should include grouped construction and local search: {solver_toml}"
+    );
+    assert!(
+        solver_toml.contains("# @solverforge:begin solver-config")
+            && solver_toml
+                .contains("# @solverforge:owner scalar-group required_assignment construction")
+            && solver_toml.contains("# @solverforge:owner scalar-group required_assignment search")
+            && solver_toml
+                .contains("# @solverforge:owner scalar-group candidate_group construction")
+            && solver_toml.contains("# @solverforge:owner scalar-group candidate_group search"),
+        "scalar group solver config should be owned by exact-ID managed blocks: {solver_toml}"
+    );
+
+    assert_cli_success(&project_dir, &["check"], "solverforge check");
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+    assert!(
+        check_status.success(),
+        "cargo check failed after scalar group solver config generation"
+    );
+
+    assert_cli_success(
+        &project_dir,
+        &["destroy", "--yes", "scalar-group", "candidate_group"],
+        "destroy candidate scalar group",
+    );
+    assert_cli_success(
+        &project_dir,
+        &["destroy", "--yes", "scalar-group", "required_assignment"],
+        "destroy assignment scalar group",
+    );
+    let solver_toml =
+        std::fs::read_to_string(project_dir.join("solver.toml")).expect("read solver config");
+    assert!(
+        !solver_toml.contains("required_assignment") && !solver_toml.contains("candidate_group"),
+        "destroyed scalar groups should leave no stale solver config refs: {solver_toml}"
+    );
+    assert_cli_success(&project_dir, &["check"], "solverforge check after destroy");
+}
+
+#[test]
+fn test_basic_constraint_skeletons_compile_in_generated_app() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_basic_constraint_skeletons";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    assert_cli_success(
+        &project_dir,
+        &["generate", "fact", "employee"],
+        "fact generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &["generate", "entity", "shift"],
+        "entity generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "variable",
+            "employee_idx",
+            "--entity",
+            "Shift",
+            "--kind",
+            "scalar",
+            "--range",
+            "employees",
+            "--allows-unassigned",
+        ],
+        "scalar variable generation",
+    );
+
+    for (name, flag) in [
+        ("unary_placeholder", "--unary"),
+        ("pair_placeholder", "--pair"),
+        ("join_placeholder", "--join"),
+        ("balance_placeholder", "--balance"),
+        ("reward_placeholder", "--reward"),
+    ] {
+        assert_cli_success(
+            &project_dir,
+            &["generate", "constraint", name, flag],
+            &format!("basic constraint generation {name}"),
+        );
+    }
+
+    let missing_repair = assert_cli_failure(
+        &project_dir,
+        &[
+            "generate",
+            "conflict-repair",
+            "missing_constraint",
+            "--provider",
+            "repair_missing",
+        ],
+        "missing conflict repair constraint",
+    );
+    assert!(
+        missing_repair.contains("constraint 'missing_constraint' not found"),
+        "conflict repair should reject missing constraints: {missing_repair}"
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "conflict-repair",
+            "unary_placeholder",
+            "--provider",
+            "repair_unary_placeholder",
+        ],
+        "conflict repair generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &["check"],
+        "solverforge check after conflict repair generation",
+    );
+    let app_spec =
+        std::fs::read_to_string(project_dir.join("solverforge.app.toml")).expect("read app spec");
+    assert!(
+        app_spec.contains("constraint = \"unary_placeholder\""),
+        "conflict repair should persist the canonical constraint ID: {app_spec}"
+    );
+    let solver_toml =
+        std::fs::read_to_string(project_dir.join("solver.toml")).expect("read solver config");
+    assert!(
+        solver_toml.contains("# @solverforge:owner conflict-repair unary_placeholder search"),
+        "conflict repair solver config should be owned by an exact-ID managed block: {solver_toml}"
+    );
+    let blocked_destroy = assert_cli_failure(
+        &project_dir,
+        &["destroy", "--yes", "constraint", "unary_placeholder"],
+        "destroy constraint with conflict repair",
+    );
+    assert!(
+        blocked_destroy.contains("conflict repairs still reference it"),
+        "constraint destroy should reject conflict-repair dependents: {blocked_destroy}"
+    );
+    let provider_destroy = assert_cli_failure(
+        &project_dir,
+        &[
+            "destroy",
+            "--yes",
+            "conflict-repair",
+            "repair_unary_placeholder",
+        ],
+        "destroy conflict repair by provider",
+    );
+    assert!(
+        provider_destroy.contains("conflict repair 'repair_unary_placeholder' not found"),
+        "provider paths should not identify conflict repairs: {provider_destroy}"
+    );
+    assert_cli_success(
+        &project_dir,
+        &["destroy", "--yes", "conflict-repair", "unary_placeholder"],
+        "destroy conflict repair by exact ID",
+    );
+    let app_spec =
+        std::fs::read_to_string(project_dir.join("solverforge.app.toml")).expect("read app spec");
+    assert!(
+        !app_spec.contains("constraint = \"unary_placeholder\""),
+        "destroyed conflict repair should be removed from app spec: {app_spec}"
+    );
+    let solver_toml =
+        std::fs::read_to_string(project_dir.join("solver.toml")).expect("read solver config");
+    assert!(
+        !solver_toml.contains("\"unary_placeholder\""),
+        "destroyed conflict repair should be removed from solver config: {solver_toml}"
+    );
+    assert_cli_success(
+        &project_dir,
+        &["check"],
+        "solverforge check after conflict repair destroy",
+    );
+
+    for name in [
+        "unary_placeholder",
+        "pair_placeholder",
+        "join_placeholder",
+        "balance_placeholder",
+        "reward_placeholder",
+    ] {
+        let src = std::fs::read_to_string(
+            project_dir
+                .join("src")
+                .join("constraints")
+                .join(format!("{name}.rs")),
+        )
+        .unwrap();
+        assert!(
+            !src.contains(".filter(")
+                && src.contains("Score>::zero()")
+                && src.contains(&format!(".named(\"{name}\")")),
+            "{name} skeleton should use typed scoring closures and canonical IDs: {src}"
+        );
+    }
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+    assert!(
+        check_status.success(),
+        "cargo check failed for generated basic skeleton constraints"
+    );
+}
+
+#[test]
+fn test_grouped_constraint_skeletons_compile_in_generated_app() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_grouped_constraint_skeletons";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    assert_cli_success(
+        &project_dir,
+        &["generate", "fact", "employee"],
+        "fact generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &["generate", "entity", "shift"],
+        "entity generation",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "variable",
+            "employee_idx",
+            "--entity",
+            "Shift",
+            "--kind",
+            "scalar",
+            "--range",
+            "employees",
+            "--allows-unassigned",
+        ],
+        "scalar variable generation",
+    );
+
+    for (name, flag) in [
+        ("run_segments", "--runs"),
+        ("presence_by_employee", "--presence"),
+        ("collected_assignments", "--collect-vec"),
+        ("employee_complement", "--group-complement"),
+        ("projected_employee_load", "--projected-group"),
+    ] {
+        assert_cli_success(
+            &project_dir,
+            &["generate", "constraint", name, flag],
+            &format!("grouped constraint generation {name}"),
+        );
+    }
+
+    let run_segments = std::fs::read_to_string(
+        project_dir
+            .join("src")
+            .join("constraints")
+            .join("run_segments.rs"),
+    )
+    .unwrap();
+    assert!(
+        run_segments.contains(".penalize(hard_weight(runs_weight))")
+            && !run_segments.contains(".filter(|_value_idx"),
+        "runs skeleton should use grouped weight scoring: {run_segments}"
+    );
+    let projected = std::fs::read_to_string(
+        project_dir
+            .join("src")
+            .join("constraints")
+            .join("projected_employee_load.rs"),
+    )
+    .unwrap();
+    assert!(
+        projected.contains(".project(projected_group_entry)")
+            && projected.contains(".penalize(hard_weight(projected_group_weight))")
+            && !projected.contains(".filter(|_key"),
+        "projected grouped skeleton should use projection and grouped weight scoring: {projected}"
+    );
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+    assert!(
+        check_status.success(),
+        "cargo check failed for generated grouped skeleton constraints"
     );
 }
 

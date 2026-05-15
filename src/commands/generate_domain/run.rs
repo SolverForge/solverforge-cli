@@ -7,6 +7,7 @@ use crate::commands::generate_constraint::validate_name;
 use crate::commands::generate_constraint::{domain::DomainModel, parse_domain};
 use crate::error::{CliError, CliResult};
 use crate::output;
+use crate::scalar_variable_hooks::ScalarVariableHooks;
 
 use super::generators::{generate_entity, generate_fact, generate_solution};
 use super::utils::{ensure_domain_dir, find_file_for_type, snake_to_pascal, validate_score_type};
@@ -320,8 +321,10 @@ pub fn run_variable(
     range: Option<&str>,
     elements: Option<&str>,
     allows_unassigned: bool,
+    scalar_hooks: &ScalarVariableHooks,
 ) -> CliResult {
     validate_name(field)?;
+    scalar_hooks.validate_paths().map_err(CliError::general)?;
 
     let domain_dir = Path::new("src/domain");
     if !domain_dir.exists() {
@@ -342,9 +345,12 @@ pub fn run_variable(
             let range = range.ok_or_else(|| {
                 CliError::general("scalar variables require --range <fact_collection>")
             })?;
-            inject_scalar_variable(&src, entity, field, range, allows_unassigned)?
+            inject_scalar_variable(&src, entity, field, range, allows_unassigned, scalar_hooks)?
         }
         "list" => {
+            if !scalar_hooks.is_empty() {
+                return Err(CliError::general("scalar hook flags require --kind scalar"));
+            }
             let elements = elements.ok_or_else(|| {
                 CliError::general("list variables require --elements <fact_collection>")
             })?;
@@ -378,6 +384,12 @@ pub fn destroy_variable(field: &str, entity: &str) -> CliResult {
         source: e,
     })?;
     let new_src = remove_variable_field(&src, field).map_err(CliError::general)?;
+    syn::parse_file(&new_src).map_err(|err| {
+        CliError::general(format!(
+            "destroying variable '{field}' would leave invalid Rust in {}: {err}",
+            entity_file.display()
+        ))
+    })?;
     fs::write(&entity_file, new_src).map_err(|e| CliError::IoError {
         context: format!("failed to write {}", entity_file.display()),
         source: e,

@@ -93,7 +93,7 @@ fn colorize_yellow(s: &str) -> String {
     }
 }
 
-// Consistent output verbs (Rails-style)
+// Consistent output verbs.
 pub fn print_create(path: &str) {
     if !is_quiet() {
         println!("      {} {}", colorize_green("create"), colorize_cyan(path));

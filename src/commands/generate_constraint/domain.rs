@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::scalar_variable_hooks::ScalarVariableHooks;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Parser};
 use syn::{
@@ -14,6 +15,7 @@ pub(crate) struct ScalarVarInfo {
     pub field: String,
     pub value_range_provider: String,
     pub allows_unassigned: bool,
+    pub hooks: ScalarVariableHooks,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +42,8 @@ pub(crate) struct FactInfo {
 pub(crate) struct DomainModel {
     pub solution_type: String,
     pub score_type: String,
+    pub scalar_groups_path: Option<String>,
+    pub conflict_repairs_path: Option<String>,
     pub entities: Vec<EntityInfo>,
     pub facts: Vec<FactInfo>,
 }
@@ -67,6 +71,8 @@ struct ManifestSurface {
 struct SolutionInfo {
     type_name: String,
     score_type: String,
+    scalar_groups_path: Option<String>,
+    conflict_repairs_path: Option<String>,
     entity_collections: Vec<(String, String)>,
     fact_collections: Vec<(String, String)>,
 }
@@ -373,6 +379,8 @@ fn collect_domain_model(
     Ok(DomainModel {
         solution_type: solution.type_name,
         score_type: solution.score_type,
+        scalar_groups_path: solution.scalar_groups_path,
+        conflict_repairs_path: solution.conflict_repairs_path,
         entities: domain_entities,
         facts: domain_facts,
     })
@@ -383,6 +391,7 @@ fn parse_solution(item_struct: &ItemStruct) -> Result<SolutionInfo, String> {
     let mut entity_collections = Vec::new();
     let mut fact_collections = Vec::new();
     let mut score_type = None;
+    let planning_solution_attr = get_attribute(&item_struct.attrs, "planning_solution");
 
     for field in fields {
         let field_name = field
@@ -416,6 +425,10 @@ fn parse_solution(item_struct: &ItemStruct) -> Result<SolutionInfo, String> {
     Ok(SolutionInfo {
         type_name: item_struct.ident.to_string(),
         score_type,
+        scalar_groups_path: planning_solution_attr
+            .and_then(|attr| parse_attribute_string(attr, "scalar_groups")),
+        conflict_repairs_path: planning_solution_attr
+            .and_then(|attr| parse_attribute_string(attr, "conflict_repairs")),
         entity_collections,
         fact_collections,
     })
@@ -443,6 +456,7 @@ fn parse_entity(item_struct: &ItemStruct) -> Result<EntityStructInfo, String> {
                 value_range_provider: parse_attribute_string(attr, "value_range_provider")
                     .unwrap_or_default(),
                 allows_unassigned: parse_attribute_bool(attr, "allows_unassigned").unwrap_or(false),
+                hooks: parse_scalar_variable_hooks(attr),
             });
         }
 
@@ -469,6 +483,21 @@ fn parse_entity(item_struct: &ItemStruct) -> Result<EntityStructInfo, String> {
         scalar_vars,
         list_vars,
     })
+}
+
+fn parse_scalar_variable_hooks(attr: &Attribute) -> ScalarVariableHooks {
+    ScalarVariableHooks {
+        candidate_values: parse_attribute_string(attr, "candidate_values"),
+        nearby_value_candidates: parse_attribute_string(attr, "nearby_value_candidates"),
+        nearby_entity_candidates: parse_attribute_string(attr, "nearby_entity_candidates"),
+        nearby_value_distance_meter: parse_attribute_string(attr, "nearby_value_distance_meter"),
+        nearby_entity_distance_meter: parse_attribute_string(attr, "nearby_entity_distance_meter"),
+        construction_entity_order_key: parse_attribute_string(
+            attr,
+            "construction_entity_order_key",
+        ),
+        construction_value_order_key: parse_attribute_string(attr, "construction_value_order_key"),
+    }
 }
 
 fn named_fields<'a>(
@@ -738,6 +767,13 @@ pub struct Task {
     #[planning_variable(
         value_range_provider = "workers",
         allows_unassigned = true,
+        candidate_values = "worker_candidates",
+        nearby_value_candidates = "nearby_workers",
+        nearby_entity_candidates = "nearby_tasks",
+        nearby_value_distance_meter = "worker_distance",
+        nearby_entity_distance_meter = "task_distance",
+        construction_entity_order_key = "task_priority",
+        construction_value_order_key = "worker_priority",
     )]
     pub worker: Option<usize>,
 }
@@ -764,6 +800,8 @@ use super::{Task, Worker};
 #[planning_solution(
     constraints = "crate::constraints::create_constraints",
     solver_toml = "../../solver.toml",
+    scalar_groups = "scalar_groups",
+    conflict_repairs = "conflict_repairs",
 )]
 pub struct Plan {
     #[problem_fact_collection]
@@ -780,6 +818,11 @@ pub struct Plan {
         let domain = parse_domain().unwrap();
         assert_eq!(domain.solution_type, "Plan");
         assert_eq!(domain.score_type, "BendableScore<2, 3>");
+        assert_eq!(domain.scalar_groups_path.as_deref(), Some("scalar_groups"));
+        assert_eq!(
+            domain.conflict_repairs_path.as_deref(),
+            Some("conflict_repairs")
+        );
         assert_eq!(domain.entities[0].item_type, "Task");
         assert_eq!(domain.entities[0].scalar_vars[0].field, "worker");
         assert_eq!(
@@ -787,6 +830,55 @@ pub struct Plan {
             "workers"
         );
         assert!(domain.entities[0].scalar_vars[0].allows_unassigned);
+        assert_eq!(
+            domain.entities[0].scalar_vars[0]
+                .hooks
+                .candidate_values
+                .as_deref(),
+            Some("worker_candidates")
+        );
+        assert_eq!(
+            domain.entities[0].scalar_vars[0]
+                .hooks
+                .nearby_value_candidates
+                .as_deref(),
+            Some("nearby_workers")
+        );
+        assert_eq!(
+            domain.entities[0].scalar_vars[0]
+                .hooks
+                .nearby_entity_candidates
+                .as_deref(),
+            Some("nearby_tasks")
+        );
+        assert_eq!(
+            domain.entities[0].scalar_vars[0]
+                .hooks
+                .nearby_value_distance_meter
+                .as_deref(),
+            Some("worker_distance")
+        );
+        assert_eq!(
+            domain.entities[0].scalar_vars[0]
+                .hooks
+                .nearby_entity_distance_meter
+                .as_deref(),
+            Some("task_distance")
+        );
+        assert_eq!(
+            domain.entities[0].scalar_vars[0]
+                .hooks
+                .construction_entity_order_key
+                .as_deref(),
+            Some("task_priority")
+        );
+        assert_eq!(
+            domain.entities[0].scalar_vars[0]
+                .hooks
+                .construction_value_order_key
+                .as_deref(),
+            Some("worker_priority")
+        );
         assert_eq!(domain.facts[0].item_type, "Worker");
 
         std::env::set_current_dir(old).unwrap();

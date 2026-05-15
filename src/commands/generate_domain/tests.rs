@@ -5,6 +5,7 @@ use super::{
     wiring::{add_import, replace_score_type},
 };
 use crate::managed_block;
+use crate::scalar_variable_hooks::ScalarVariableHooks;
 use crate::test_support;
 
 fn generate_builtin_entity(
@@ -225,6 +226,41 @@ fn test_inject_list_variable() {
 }
 
 #[test]
+fn test_inject_scalar_variable_with_hook_metadata() {
+    use super::wiring::inject_scalar_variable;
+
+    let src =
+        generate_builtin_entity("Task", None, &[]).expect("built-in entity template should render");
+    let hooks = ScalarVariableHooks {
+        candidate_values: Some("resource_candidates".to_string()),
+        nearby_value_candidates: Some("nearby_resources".to_string()),
+        nearby_entity_candidates: Some("nearby_tasks".to_string()),
+        nearby_value_distance_meter: Some("resource_distance".to_string()),
+        nearby_entity_distance_meter: Some("task_distance".to_string()),
+        construction_entity_order_key: Some("task_priority".to_string()),
+        construction_value_order_key: Some("resource_priority".to_string()),
+    };
+    let result = inject_scalar_variable(&src, "Task", "resource_idx", "resources", true, &hooks)
+        .expect("inject should succeed");
+
+    assert!(result.contains(
+        r#"    #[planning_variable(
+        value_range_provider = "resources",
+        allows_unassigned = true,
+        candidate_values = "resource_candidates",
+        nearby_value_candidates = "nearby_resources",
+        nearby_entity_candidates = "nearby_tasks",
+        nearby_value_distance_meter = "resource_distance",
+        nearby_entity_distance_meter = "task_distance",
+        construction_entity_order_key = "task_priority",
+        construction_value_order_key = "resource_priority"
+    )]"#
+    ));
+    assert!(result.contains("pub resource_idx: Option<usize>,"));
+    assert!(result.contains("resource_idx: None,"));
+}
+
+#[test]
 fn test_remove_variable_field() {
     use super::wiring::{inject_list_variable, inject_planning_variable, remove_variable_field};
 
@@ -239,6 +275,40 @@ fn test_remove_variable_field() {
     assert!(!result.contains("stops: Vec::new()"));
     assert!(result.contains("pub driver_idx: Option<usize>"));
     assert!(result.contains("pub backup_idx: Option<usize>"));
+}
+
+#[test]
+fn test_remove_variable_field_removes_multiline_hook_attribute() {
+    use super::wiring::{inject_list_variable, inject_scalar_variable, remove_variable_field};
+
+    let src =
+        generate_builtin_entity("Task", None, &[]).expect("built-in entity template should render");
+    let hooks = ScalarVariableHooks {
+        candidate_values: Some("resource_candidates".to_string()),
+        nearby_value_candidates: Some("nearby_resources".to_string()),
+        nearby_entity_candidates: None,
+        nearby_value_distance_meter: Some("resource_distance".to_string()),
+        nearby_entity_distance_meter: None,
+        construction_entity_order_key: Some("task_priority".to_string()),
+        construction_value_order_key: None,
+    };
+    let src = inject_scalar_variable(&src, "Task", "resource_idx", "resources", true, &hooks)
+        .expect("scalar inject should succeed");
+    let src =
+        inject_list_variable(&src, "Task", "stops", "visits").expect("list inject should succeed");
+
+    let result = remove_variable_field(&src, "resource_idx").expect("remove should succeed");
+
+    assert!(!result.contains("pub resource_idx: Option<usize>"));
+    assert!(!result.contains("resource_idx: None,"));
+    assert!(!result.contains("resource_candidates"));
+    assert!(!result.contains("nearby_resources"));
+    assert!(!result.contains("resource_distance"));
+    assert!(!result.contains("task_priority"));
+    assert!(result.contains("#[planning_list_variable(element_collection = \"visits\")]"));
+    assert!(result.contains("pub stops: Vec<usize>,"));
+    assert!(result.contains("stops: Vec::new()"));
+    syn::parse_file(&result).expect("entity source should still parse");
 }
 
 #[test]
@@ -539,8 +609,15 @@ impl Task {
 }
 "#;
 
-    let err = inject_scalar_variable(src, "Task", "resource_idx", "resources", true)
-        .expect_err("unmanaged entity should fail");
+    let err = inject_scalar_variable(
+        src,
+        "Task",
+        "resource_idx",
+        "resources",
+        true,
+        &ScalarVariableHooks::default(),
+    )
+    .expect_err("unmanaged entity should fail");
 
     assert_eq!(
         err,

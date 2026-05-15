@@ -1,4 +1,6 @@
 use include_dir::{include_dir, Dir};
+use std::fmt;
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 
@@ -14,7 +16,44 @@ use crate::template;
 // Keep the neutral scaffold embedded so generated apps are self-contained at build time.
 static UNIFIED_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/scalar/generic");
 
-pub fn run(name: &str, skip_git: bool, skip_readme: bool, quiet: bool) -> CliResult {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+pub enum ScaffoldShell {
+    Web,
+    Api,
+    Cli,
+}
+
+impl ScaffoldShell {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Web => "web",
+            Self::Api => "api",
+            Self::Cli => "cli",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Web => "neutral web scaffold",
+            Self::Api => "neutral API scaffold",
+            Self::Cli => "neutral CLI scaffold",
+        }
+    }
+}
+
+impl fmt::Display for ScaffoldShell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+pub fn run(
+    name: &str,
+    shell: ScaffoldShell,
+    skip_git: bool,
+    skip_readme: bool,
+    quiet: bool,
+) -> CliResult {
     let crate_name = to_crate_name(name);
 
     // Validate project name
@@ -24,7 +63,7 @@ pub fn run(name: &str, skip_git: bool, skip_readme: bool, quiet: bool) -> CliRes
         name,
         &crate_name,
         &UNIFIED_TEMPLATE,
-        "neutral scaffold",
+        shell,
         skip_git,
         skip_readme,
         quiet,
@@ -72,7 +111,7 @@ fn scaffold(
     project_name: &str,
     crate_name: &str,
     template_dir: &Dir,
-    label: &str,
+    shell: ScaffoldShell,
     skip_git: bool,
     skip_readme: bool,
     quiet: bool,
@@ -85,12 +124,17 @@ fn scaffold(
         });
     }
 
-    output::print_heading(&format!("Creating {} project '{}'", label, project_name));
+    output::print_heading(&format!(
+        "Creating {} project '{}'",
+        shell.label(),
+        project_name
+    ));
 
     let vars: &[(&str, &str)] = &[
         ("solverforge_dep", &solverforge_dep_spec()),
         ("solverforge_ui_dep", &solverforge_ui_dep_spec()),
         ("solverforge_maps_dep", &solverforge_maps_dep_spec()),
+        ("scaffold_shell", shell.as_str()),
         ("project_name", project_name),
         ("crate_name", crate_name),
         ("solverforge_cli_version", env!("CARGO_PKG_VERSION")),
@@ -100,10 +144,11 @@ fn scaffold(
     ];
 
     template::render(template_dir, dest, vars)?;
+    materialize_shell(dest, project_name, crate_name, shell)?;
 
     // Write .gitignore
     let gitignore_content = "/target\n**/*.rs.bk\n";
-    std::fs::write(dest.join(".gitignore"), gitignore_content).map_err(|e| CliError::IoError {
+    fs::write(dest.join(".gitignore"), gitignore_content).map_err(|e| CliError::IoError {
         context: "failed to write .gitignore".to_string(),
         source: e,
     })?;
@@ -111,8 +156,8 @@ fn scaffold(
 
     if !skip_readme {
         // Write README.md
-        let readme = generate_readme(project_name, crate_name, label);
-        std::fs::write(dest.join("README.md"), readme).map_err(|e| CliError::IoError {
+        let readme = generate_readme(project_name, crate_name, shell);
+        fs::write(dest.join("README.md"), readme).map_err(|e| CliError::IoError {
             context: "failed to write README.md".to_string(),
             source: e,
         })?;
@@ -164,7 +209,7 @@ fn scaffold(
     ));
     println!();
 
-    print_template_guidance(project_name);
+    print_template_guidance(project_name, shell);
 
     // Optional cargo check prompt (skipped in quiet mode)
     if !quiet {
@@ -172,6 +217,81 @@ fn scaffold(
     }
 
     Ok(())
+}
+
+fn materialize_shell(
+    dest: &Path,
+    project_name: &str,
+    crate_name: &str,
+    shell: ScaffoldShell,
+) -> CliResult {
+    match shell {
+        ScaffoldShell::Web => Ok(()),
+        ScaffoldShell::Api => {
+            remove_dir_if_exists(&dest.join("static"))?;
+            write_generated(
+                dest.join("solverforge.app.toml"),
+                &app_spec_toml(project_name, shell),
+            )?;
+            write_generated(
+                dest.join("Cargo.toml"),
+                &api_cargo_toml(project_name, crate_name),
+            )?;
+            write_generated(
+                dest.join("src/main.rs"),
+                &api_main_rs(project_name, crate_name),
+            )?;
+            Ok(())
+        }
+        ScaffoldShell::Cli => {
+            remove_dir_if_exists(&dest.join("static"))?;
+            remove_file_if_exists(&dest.join("src/api/routes.rs"))?;
+            remove_file_if_exists(&dest.join("src/api/sse.rs"))?;
+            write_generated(
+                dest.join("solverforge.app.toml"),
+                &app_spec_toml(project_name, shell),
+            )?;
+            write_generated(
+                dest.join("Cargo.toml"),
+                &cli_cargo_toml(project_name, crate_name),
+            )?;
+            write_generated(dest.join("src/api/mod.rs"), cli_api_mod_rs())?;
+            write_generated(dest.join("src/lib.rs"), &cli_lib_rs(project_name))?;
+            write_generated(
+                dest.join("src/main.rs"),
+                &cli_main_rs(project_name, crate_name),
+            )?;
+            Ok(())
+        }
+    }
+}
+
+fn remove_dir_if_exists(path: &Path) -> CliResult {
+    if path.exists() {
+        fs::remove_dir_all(path).map_err(|e| CliError::IoError {
+            context: format!("failed to remove {}", path.display()),
+            source: e,
+        })?;
+    }
+    Ok(())
+}
+
+fn remove_file_if_exists(path: &Path) -> CliResult {
+    if path.exists() {
+        fs::remove_file(path).map_err(|e| CliError::IoError {
+            context: format!("failed to remove {}", path.display()),
+            source: e,
+        })?;
+    }
+    Ok(())
+}
+
+fn write_generated(path: impl AsRef<Path>, content: &str) -> CliResult {
+    let path = path.as_ref();
+    fs::write(path, content).map_err(|e| CliError::IoError {
+        context: format!("failed to write {}", path.display()),
+        source: e,
+    })
 }
 
 fn solverforge_dep_spec() -> String {
@@ -186,6 +306,211 @@ fn solverforge_ui_dep_spec() -> String {
 
 fn solverforge_maps_dep_spec() -> String {
     format!("{{ version = \"{MAPS_CRATE_VERSION}\" }}")
+}
+
+fn app_spec_toml(project_name: &str, shell: ScaffoldShell) -> String {
+    let ui_source = if shell == ScaffoldShell::Web {
+        format!("ui_source = \"{UI_SOURCE_PATH}\"\n")
+    } else {
+        String::new()
+    };
+    format!(
+        r#"[app]
+name = "{project_name}"
+starter = "neutral-shell"
+shell = "{shell}"
+cli_version = "{cli_version}"
+
+[runtime]
+target = "{runtime_target}"
+runtime_source = "{runtime_source}"
+{ui_source}
+[demo]
+default_size = "standard"
+available_sizes = ["small", "standard", "large"]
+
+[solution]
+name = "Plan"
+score = "HardSoftScore"
+"#,
+        cli_version = env!("CARGO_PKG_VERSION"),
+        runtime_target = RUNTIME_TARGET_LABEL,
+        runtime_source = RUNTIME_SOURCE_PATH,
+    )
+}
+
+fn base_package_toml(project_name: &str, crate_name: &str) -> String {
+    format!(
+        r#"[package]
+name = "{project_name}"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+description = "Constraint optimizer built with SolverForge"
+
+[[bin]]
+name = "{crate_name}"
+path = "src/main.rs"
+
+[dependencies]
+solverforge = {solverforge_dep}
+"#,
+        solverforge_dep = solverforge_dep_spec(),
+    )
+}
+
+fn api_cargo_toml(project_name: &str, crate_name: &str) -> String {
+    format!(
+        r#"{base}
+# HTTP API server
+axum = "0.8.9"
+tokio = {{ version = "1.52.2", features = ["full"] }}
+tokio-stream = {{ version = "0.1.18", features = ["sync"] }}
+tower-http = {{ version = "0.6.8", features = ["cors"] }}
+
+# Serialization
+serde = {{ version = "1.0.228", features = ["derive"] }}
+serde_json = "1.0.149"
+
+# Utilities
+parking_lot = "0.12.5"
+"#,
+        base = base_package_toml(project_name, crate_name),
+    )
+}
+
+fn cli_cargo_toml(project_name: &str, crate_name: &str) -> String {
+    format!(
+        r#"{base}
+# Command-line shell
+clap = {{ version = "4.6.1", features = ["derive"] }}
+tokio = {{ version = "1.52.2", features = ["full"] }}
+
+# Serialization
+serde = {{ version = "1.0.228", features = ["derive"] }}
+serde_json = "1.0.149"
+
+# Utilities
+parking_lot = "0.12.5"
+"#,
+        base = base_package_toml(project_name, crate_name),
+    )
+}
+
+fn api_main_rs(project_name: &str, crate_name: &str) -> String {
+    format!(
+        r#"/* {project_name} — SolverForge HTTP API
+   Run with: solverforge server */
+
+use {crate_name}::api;
+
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tower_http::cors::{{Any, CorsLayer}};
+
+#[tokio::main]
+async fn main() {{
+    solverforge::console::init();
+
+    let state = Arc::new(api::AppState::new());
+
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    let app = api::router(state).layer(cors);
+
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(7860);
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    println!("▸ {project_name} API listening on http://{{}}", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}}
+"#
+    )
+}
+
+fn cli_api_mod_rs() -> &'static str {
+    r#"mod dto;
+
+pub use dto::PlanDto;
+"#
+}
+
+fn cli_lib_rs(project_name: &str) -> String {
+    format!(
+        r#"/* {project_name} — neutral command-line optimizer built with SolverForge
+
+Structure:
+  domain/      — Plan (solution) plus CLI-generated entities and facts
+  constraints/ — Scoring rules
+  solver/      — Engine, service, termination config
+  data/        — Demo data / data loading */
+
+pub mod api;
+pub mod constraints;
+pub mod data;
+pub mod domain;
+pub mod solver;
+"#
+    )
+}
+
+fn cli_main_rs(project_name: &str, crate_name: &str) -> String {
+    format!(
+        r#"/* {project_name} — SolverForge command-line shell */
+
+use clap::{{Parser, Subcommand}};
+use {crate_name}::api::PlanDto;
+use {crate_name}::data::{{default_demo_data, generate, DemoData}};
+
+#[derive(Parser)]
+#[command(name = "{project_name}")]
+#[command(about = "SolverForge command-line optimizer")]
+struct Cli {{
+    #[command(subcommand)]
+    command: Option<Command>,
+}}
+
+#[derive(Subcommand)]
+enum Command {{
+    /// Print generated demo data as JSON
+    DemoData {{
+        /// Demo data size: small, standard, or large
+        #[arg(long)]
+        size: Option<String>,
+    }},
+}}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {{
+    solverforge::console::init();
+    let cli = Cli::parse();
+
+    match cli.command.unwrap_or(Command::DemoData {{ size: None }}) {{
+        Command::DemoData {{ size }} => {{
+            let demo = match size {{
+                Some(size) => size
+                    .parse::<DemoData>()
+                    .map_err(|_| std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("unknown demo data size '{{size}}'"),
+                    ))?,
+                None => default_demo_data(),
+            }};
+            let dto = PlanDto::from_plan(&generate(demo));
+            println!("{{}}", serde_json::to_string_pretty(&dto)?);
+        }}
+    }}
+
+    Ok(())
+}}
+"#
+    )
 }
 
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {
@@ -218,7 +543,7 @@ fn run_cargo_check_prompt(dest: &Path) -> CliResult {
     Ok(())
 }
 
-fn print_template_guidance(project_name: &str) {
+fn print_template_guidance(project_name: &str, shell: ScaffoldShell) {
     if output::is_quiet() {
         return;
     }
@@ -231,13 +556,33 @@ fn print_template_guidance(project_name: &str) {
         RUNTIME_TARGET_LABEL
     );
 
-    println!("    solverforge server");
+    match shell {
+        ScaffoldShell::Web | ScaffoldShell::Api => println!("    solverforge server"),
+        ScaffoldShell::Cli => println!("    cargo run -- demo-data"),
+    }
     println!();
     println!("  This scaffold includes:");
-    println!("    - One neutral app shell for scalar, list, or mixed modeling");
-    println!("    - Variable-driven timeline and data views generated from solverforge.app.toml");
-    println!("    - Retained job lifecycle with pause, resume, cancel, and delete");
-    println!("    - Typed SSE lifecycle events and snapshot-bound score analysis");
+    println!(
+        "    - One neutral {} shell for scalar, list, or mixed modeling",
+        shell
+    );
+    match shell {
+        ScaffoldShell::Web => {
+            println!(
+                "    - Variable-driven timeline and data views generated from solverforge.app.toml"
+            );
+            println!("    - Retained job lifecycle with pause, resume, cancel, and delete");
+            println!("    - Typed SSE lifecycle events and snapshot-bound score analysis");
+        }
+        ScaffoldShell::Api => {
+            println!("    - HTTP JSON and SSE endpoints without frontend assets");
+            println!("    - Retained job lifecycle with pause, resume, cancel, and delete");
+        }
+        ScaffoldShell::Cli => {
+            println!("    - A Clap command-line entry point without Axum or frontend assets");
+            println!("    - Demo-data JSON output backed by the same domain contract");
+        }
+    }
     println!("    - solverforge.app.toml for the scaffolded domain contract");
     println!("    - solver.toml as the search-strategy layer");
     println!("    solverforge generate entity task");
@@ -276,11 +621,11 @@ fn print_file_tree(root: &Path, dir: &Path) -> CliResult {
     Ok(())
 }
 
-fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String {
+fn generate_readme(project_name: &str, _crate_name: &str, shell: ScaffoldShell) -> String {
     let mut readme = format!("# {}\n\n", project_name);
     readme.push_str(&format!(
         "A SolverForge constraint optimization project (scaffold: `{}`).\n\n",
-        label
+        shell.label()
     ));
     readme.push_str("## Versioning\n\n");
     readme.push_str(&format!(
@@ -291,36 +636,49 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
         "- SolverForge runtime target for this scaffold: `{}`\n",
         RUNTIME_TARGET_LABEL
     ));
-    readme.push_str(&format!(
-        "- SolverForge UI target for this scaffold: `{}`\n",
-        UI_TARGET_LABEL
-    ));
-    readme.push_str(&format!(
-        "- SolverForge maps target for this scaffold: `{}`\n",
-        MAPS_TARGET_LABEL
-    ));
+    if shell == ScaffoldShell::Web {
+        readme.push_str(&format!(
+            "- SolverForge UI target for this scaffold: `{}`\n",
+            UI_TARGET_LABEL
+        ));
+        readme.push_str(&format!(
+            "- SolverForge maps target for this scaffold: `{}`\n",
+            MAPS_TARGET_LABEL
+        ));
+    }
     readme.push_str(&format!(
         "- Runtime dependency currently wired into `Cargo.toml`: `{}`\n",
         RUNTIME_SOURCE_PATH
     ));
-    readme.push_str(&format!(
-        "- Frontend UI dependency currently wired into `Cargo.toml`: `{}`\n",
-        UI_SOURCE_PATH
-    ));
-    readme.push_str(&format!(
-        "- Maps dependency currently wired into `Cargo.toml`: `{}`\n\n",
-        MAPS_SOURCE_PATH
-    ));
+    if shell == ScaffoldShell::Web {
+        readme.push_str(&format!(
+            "- Frontend UI dependency currently wired into `Cargo.toml`: `{}`\n",
+            UI_SOURCE_PATH
+        ));
+        readme.push_str(&format!(
+            "- Maps dependency currently wired into `Cargo.toml`: `{}`\n",
+            MAPS_SOURCE_PATH
+        ));
+    }
+    readme.push_str(&format!("- Scaffold shell: `{}`\n\n", shell.as_str()));
     readme.push_str(&format!(
         "This project was scaffolded by `solverforge-cli`, and it currently targets `{}` through the configured crate dependency targets.\n\n",
         RUNTIME_TARGET_DISPLAY
     ));
     readme.push_str("## Quick Start\n\n");
     readme.push_str("```bash\n");
-    readme.push_str("# Start the solver server\n");
-    readme.push_str("solverforge server\n\n");
-    readme.push_str("# Or run directly\n");
-    readme.push_str("cargo run --release\n");
+    match shell {
+        ScaffoldShell::Web | ScaffoldShell::Api => {
+            readme.push_str("# Start the solver server\n");
+            readme.push_str("solverforge server\n\n");
+            readme.push_str("# Or run directly\n");
+            readme.push_str("cargo run --release\n");
+        }
+        ScaffoldShell::Cli => {
+            readme.push_str("# Print generated demo data\n");
+            readme.push_str("cargo run -- demo-data\n");
+        }
+    }
     readme.push_str("```\n\n");
     readme.push_str("## Development\n\n");
     readme.push_str("```bash\n");
@@ -335,6 +693,8 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
         .push_str("solverforge generate entity task --field label:String --field priority:i32\n\n");
     readme.push_str("# Add a scalar planning variable\n");
     readme.push_str("solverforge generate variable resource_idx --entity Task --kind scalar --range resources --allows-unassigned\n\n");
+    readme.push_str("# Or add scalar hook metadata when your domain owns the hook functions\n");
+    readme.push_str("# solverforge generate variable resource_idx --entity Task --kind scalar --range resources --candidate-values resource_candidates\n\n");
     readme.push_str("# Remove a resource\n");
     readme.push_str("solverforge destroy constraint my_rule\n");
     readme.push_str("```\n\n");
@@ -344,7 +704,14 @@ fn generate_readme(project_name: &str, _crate_name: &str, label: &str) -> String
     readme.push_str("| `src/domain/` | Planning entities, facts, and solution struct |\n");
     readme.push_str("| `src/constraints/` | Constraint definitions (scored by the solver) |\n");
     readme.push_str("| `src/solver/` | Solver service and configuration |\n");
-    readme.push_str("| `src/api/` | HTTP routes and DTOs |\n");
+    match shell {
+        ScaffoldShell::Web | ScaffoldShell::Api => {
+            readme.push_str("| `src/api/` | HTTP routes and DTOs |\n");
+        }
+        ScaffoldShell::Cli => {
+            readme.push_str("| `src/api/dto.rs` | Shared JSON DTOs used by the CLI shell |\n");
+        }
+    }
     readme.push_str("| `src/data/` | Data loading and generation |\n");
     readme.push_str("| `solverforge.app.toml` | Scaffolded app/domain contract |\n");
     readme.push_str("| `solver.toml` | Solver configuration (termination, phases) |\n");

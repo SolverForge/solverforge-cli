@@ -15,13 +15,35 @@ pub fn apply_generated_project_dependency_overrides(project_dir: &Path) -> Depen
         return DependencyOverrideMode::CratesIo;
     }
 
-    let paths = LocalSolverforgePaths::resolve();
-    let cargo_config = format!(
-        "[patch.crates-io]\nsolverforge = {{ path = \"{}\" }}\nsolverforge-ui = {{ path = \"{}\" }}\nsolverforge-maps = {{ path = \"{}\" }}\n",
-        toml_path(&paths.runtime_path),
-        toml_path(&paths.ui_path),
-        toml_path(&paths.maps_path)
+    let cargo_toml_path = project_dir.join("Cargo.toml");
+    let cargo_toml =
+        fs::read_to_string(&cargo_toml_path).expect("failed to read generated app Cargo.toml");
+    let ecosystem_root = resolve_ecosystem_root();
+    let runtime_path = required_path(
+        "solverforge",
+        ecosystem_root
+            .join("solverforge")
+            .join("crates")
+            .join("solverforge"),
     );
+    let mut cargo_config = format!(
+        "[patch.crates-io]\nsolverforge = {{ path = \"{}\" }}\n",
+        toml_path(&runtime_path)
+    );
+    if cargo_toml.contains("\nsolverforge-ui = ") {
+        let ui_path = required_path("solverforge-ui", ecosystem_root.join("solverforge-ui"));
+        cargo_config.push_str(&format!(
+            "solverforge-ui = {{ path = \"{}\" }}\n",
+            toml_path(&ui_path)
+        ));
+    }
+    if cargo_toml.contains("\nsolverforge-maps = ") {
+        let maps_path = required_path("solverforge-maps", ecosystem_root.join("solverforge-maps"));
+        cargo_config.push_str(&format!(
+            "solverforge-maps = {{ path = \"{}\" }}\n",
+            toml_path(&maps_path)
+        ));
+    }
     let cargo_dir = project_dir.join(".cargo");
     fs::create_dir_all(&cargo_dir).expect("failed to create generated app .cargo dir");
     let cargo_config_path = cargo_dir.join("config.toml");
@@ -47,35 +69,15 @@ fn use_local_patches() -> bool {
     )
 }
 
-struct LocalSolverforgePaths {
-    runtime_path: PathBuf,
-    ui_path: PathBuf,
-    maps_path: PathBuf,
-}
-
-impl LocalSolverforgePaths {
-    fn resolve() -> Self {
-        let ecosystem_root = std::env::var(ECOSYSTEM_ROOT_ENV)
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .expect("CLI repo should have an ecosystem parent")
-                    .to_path_buf()
-            });
-
-        Self {
-            runtime_path: required_path(
-                "solverforge",
-                ecosystem_root
-                    .join("solverforge-rs")
-                    .join("crates")
-                    .join("solverforge"),
-            ),
-            ui_path: required_path("solverforge-ui", ecosystem_root.join("solverforge-ui")),
-            maps_path: required_path("solverforge-maps", ecosystem_root.join("solverforge-maps")),
-        }
-    }
+fn resolve_ecosystem_root() -> PathBuf {
+    std::env::var(ECOSYSTEM_ROOT_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .expect("CLI repo should have an ecosystem parent")
+                .to_path_buf()
+        })
 }
 
 fn required_path(label: &str, path: PathBuf) -> PathBuf {

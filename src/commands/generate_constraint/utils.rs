@@ -15,17 +15,3 @@ pub(crate) fn validate_name(name: &str) -> CliResult {
     }
     Ok(())
 }
-
-/// Converts `snake_case` to `Title Case` (space-separated words, each capitalized).
-pub(crate) fn snake_to_title(name: &str) -> String {
-    name.split('_')
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}

@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::managed_block;
+use crate::scalar_variable_hooks::ScalarVariableHooks;
 
 const DOMAIN_EXPORTS_BLOCK: &str = "domain-exports";
 const SOLUTION_IMPORTS_BLOCK: &str = "solution-imports";
@@ -16,6 +17,12 @@ type DomainUseMap = BTreeMap<String, Vec<String>>;
 struct DomainExportSurface {
     module_names: Vec<String>,
     use_map: DomainUseMap,
+}
+
+#[derive(Debug, Clone)]
+struct ManagedFieldEntry {
+    field_name: String,
+    lines: Vec<String>,
 }
 
 pub(crate) fn rewrite_domain_mod_source(
@@ -402,6 +409,32 @@ where
     managed_block::replace_block(src, label, &lines.join("\n"))
 }
 
+fn remove_field_entry_from_block(src: &str, label: &str, field: &str) -> Result<String, String> {
+    let entries = read_managed_field_entries(src, label)?;
+    if !entries.iter().any(|entry| entry.field_name == field) {
+        return Err(format!("field '{field}' not found"));
+    }
+    let retained = entries
+        .into_iter()
+        .filter(|entry| entry.field_name != field)
+        .collect::<Vec<_>>();
+    managed_block::replace_block(src, label, &render_managed_field_entries(&retained))
+}
+
+fn block_has_field_entry(src: &str, label: &str, field: &str) -> Result<bool, String> {
+    Ok(read_managed_field_entries(src, label)?
+        .iter()
+        .any(|entry| entry.field_name == field))
+}
+
+fn render_managed_field_entries(entries: &[ManagedFieldEntry]) -> String {
+    entries
+        .iter()
+        .flat_map(|entry| entry.lines.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn block_contains<F>(src: &str, label: &str, mut predicate: F) -> Result<bool, String>
 where
     F: FnMut(&str) -> bool,
@@ -417,6 +450,90 @@ fn read_non_empty_block_lines(src: &str, label: &str) -> Result<Vec<String>, Str
         .map(|line| line.to_string())
         .filter(|line| !line.trim().is_empty())
         .collect())
+}
+
+fn read_managed_field_entries(src: &str, label: &str) -> Result<Vec<ManagedFieldEntry>, String> {
+    let lines = read_non_empty_block_lines(src, label)?;
+    let mut entries = Vec::new();
+    let mut current = Vec::new();
+    let mut seen = BTreeSet::new();
+
+    for line in lines {
+        let is_field_line = is_managed_field_declaration_line(&line);
+        current.push(line);
+        if is_field_line {
+            let entry = parse_managed_field_entry(label, &current)?;
+            if !seen.insert(entry.field_name.clone()) {
+                return Err(format!(
+                    "duplicate managed field '{}' in block '{label}'",
+                    entry.field_name
+                ));
+            }
+            entries.push(entry);
+            current.clear();
+        }
+    }
+
+    if !current.is_empty() {
+        return Err(format!(
+            "managed block '{label}' contains attached lines without a field declaration"
+        ));
+    }
+
+    Ok(entries)
+}
+
+fn is_managed_field_declaration_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with("pub ") && trimmed.ends_with(',')
+}
+
+fn parse_managed_field_entry(label: &str, lines: &[String]) -> Result<ManagedFieldEntry, String> {
+    let entry_src = lines.join("\n");
+    let wrapped = format!("struct __SolverForgeManagedField {{\n{entry_src}\n}}\n");
+    let file = syn::parse_file(&wrapped)
+        .map_err(|err| format!("invalid managed field entry in block '{label}': {err}"))?;
+    let mut items = file.items.into_iter();
+    let Some(syn::Item::Struct(item)) = items.next() else {
+        return Err(format!(
+            "managed field entry in block '{label}' did not parse as a struct field"
+        ));
+    };
+    if items.next().is_some() {
+        return Err(format!(
+            "managed field entry in block '{label}' parsed extra Rust items"
+        ));
+    }
+
+    let syn::Fields::Named(fields) = item.fields else {
+        return Err(format!(
+            "managed field entry in block '{label}' must use named fields"
+        ));
+    };
+    if fields.named.len() != 1 {
+        return Err(format!(
+            "managed field entry in block '{label}' must contain exactly one field"
+        ));
+    }
+    let field = fields
+        .named
+        .into_iter()
+        .next()
+        .expect("field length checked above");
+    if !matches!(field.vis, syn::Visibility::Public(_)) {
+        return Err(format!(
+            "managed field entry in block '{label}' must declare a public field"
+        ));
+    }
+    let field_name = field
+        .ident
+        .ok_or_else(|| format!("managed field entry in block '{label}' is missing a field name"))?
+        .to_string();
+
+    Ok(ManagedFieldEntry {
+        field_name,
+        lines: lines.to_vec(),
+    })
 }
 
 fn find_entry_start(lines: &[String], index: usize) -> usize {
@@ -443,7 +560,14 @@ pub(crate) fn inject_planning_variable(
     entity: &str,
     field: &str,
 ) -> Result<String, String> {
-    inject_scalar_variable(src, entity, field, "", true)
+    inject_scalar_variable(
+        src,
+        entity,
+        field,
+        "",
+        true,
+        &ScalarVariableHooks::default(),
+    )
 }
 
 pub(crate) fn inject_scalar_variable(
@@ -452,25 +576,50 @@ pub(crate) fn inject_scalar_variable(
     field: &str,
     range: &str,
     allows_unassigned: bool,
+    hooks: &ScalarVariableHooks,
 ) -> Result<String, String> {
     let field_line = format!("    pub {field}: Option<usize>,");
-    if block_contains(src, ENTITY_VARIABLES_BLOCK, |line| {
-        line.trim() == field_line.trim()
-    })? {
+    if block_has_field_entry(src, ENTITY_VARIABLES_BLOCK, field)? {
         return Err(format!("field '{field}' already exists in {entity}"));
     }
 
-    let annotation = if range.is_empty() {
-        format!("    #[planning_variable(allows_unassigned = {allows_unassigned})]")
-    } else {
-        format!(
-            "    #[planning_variable(value_range_provider = \"{range}\", allows_unassigned = {allows_unassigned})]"
-        )
-    };
+    let annotation = render_scalar_variable_annotation(range, allows_unassigned, hooks);
     let init_line = format!("            {field}: None,");
 
     let src = append_unique_lines(src, ENTITY_VARIABLES_BLOCK, &[annotation, field_line])?;
     append_unique_line(&src, ENTITY_VARIABLE_INIT_BLOCK, &init_line)
+}
+
+fn render_scalar_variable_annotation(
+    range: &str,
+    allows_unassigned: bool,
+    hooks: &ScalarVariableHooks,
+) -> String {
+    let mut args = Vec::new();
+    if !range.is_empty() {
+        args.push(format!("value_range_provider = \"{range}\""));
+    }
+    args.push(format!("allows_unassigned = {allows_unassigned}"));
+    for (name, value) in hooks.entries() {
+        if let Some(value) = value {
+            args.push(format!("{name} = \"{value}\""));
+        }
+    }
+
+    if hooks.is_empty() {
+        return format!("    #[planning_variable({})]", args.join(", "));
+    }
+
+    let rendered_args = args
+        .iter()
+        .enumerate()
+        .map(|(index, arg)| {
+            let suffix = if index + 1 == args.len() { "" } else { "," };
+            format!("        {arg}{suffix}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("    #[planning_variable(\n{rendered_args}\n    )]")
 }
 
 pub(crate) fn inject_list_variable(
@@ -480,9 +629,7 @@ pub(crate) fn inject_list_variable(
     elements: &str,
 ) -> Result<String, String> {
     let field_line = format!("    pub {field}: Vec<usize>,");
-    if block_contains(src, ENTITY_VARIABLES_BLOCK, |line| {
-        line.trim() == field_line.trim()
-    })? {
+    if block_has_field_entry(src, ENTITY_VARIABLES_BLOCK, field)? {
         return Err(format!("field '{field}' already exists in {entity}"));
     }
 
@@ -494,16 +641,7 @@ pub(crate) fn inject_list_variable(
 }
 
 pub(crate) fn remove_variable_field(src: &str, field: &str) -> Result<String, String> {
-    let field_prefix = format!("pub {field}:");
-    if !block_contains(src, ENTITY_VARIABLES_BLOCK, |line| {
-        line.trim().starts_with(&field_prefix)
-    })? {
-        return Err(format!("field '{field}' not found"));
-    }
-
-    let src = remove_entry_from_block(src, ENTITY_VARIABLES_BLOCK, |line| {
-        line.trim().starts_with(&field_prefix)
-    })?;
+    let src = remove_field_entry_from_block(src, ENTITY_VARIABLES_BLOCK, field)?;
     remove_entry_from_block(src.as_str(), ENTITY_VARIABLE_INIT_BLOCK, |line| {
         let trimmed = line.trim();
         trimmed == format!("{field}: None,") || trimmed == format!("{field}: Vec::new(),")

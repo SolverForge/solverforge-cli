@@ -1,19 +1,26 @@
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 
 mod app_spec;
 mod commands;
 mod error;
 mod managed_block;
+mod model_contract;
+mod model_id;
 mod output;
 mod rc;
 mod scaffold_target;
+mod scalar_variable_hooks;
+mod solver_config;
 mod template;
 #[cfg(test)]
 mod test_support;
 
+use commands::model_resource::{ConflictRepairRequest, ScalarGroupRequest};
+use commands::new::ScaffoldShell;
 use error::CliResult;
 use scaffold_target::LONG_VERSION_TEXT;
+use scalar_variable_hooks::ScalarVariableHooks;
 
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -27,6 +34,7 @@ fn parse_variable_kind(value: &str) -> Result<String, String> {
 
 const EXAMPLES: &str = "\x1b[1mExamples:\x1b[0m
   solverforge new my-optimizer
+  solverforge new batch-optimizer --shell cli
   solverforge generate entity shift --planning-variable employee_idx
   solverforge generate constraint no_overlap --pair --hard
   solverforge server
@@ -65,10 +73,16 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Scaffold a new SolverForge project
-    #[command(after_help = "Examples:\n  solverforge new my-optimizer")]
+    #[command(
+        after_help = "Examples:\n  solverforge new my-optimizer\n  solverforge new batch-optimizer --shell cli\n  solverforge new api-optimizer --shell api"
+    )]
     New {
         /// Project name (directory that will be created)
         name: String,
+
+        /// Generated shell: web, api, or cli
+        #[arg(long, value_enum, default_value_t = ScaffoldShell::Web)]
+        shell: ScaffoldShell,
 
         /// Skip running `git init` and initial commit
         #[arg(long)]
@@ -84,7 +98,7 @@ enum Command {
     )]
     Generate {
         #[command(subcommand)]
-        resource: GenerateResource,
+        resource: Box<GenerateResource>,
     },
     /// Remove a resource from the current project
     #[command(
@@ -179,24 +193,44 @@ enum GenerateResource {
         soft: bool,
 
         /// Penalize matching entities (for_each + filter + penalize)
-        #[arg(long, conflicts_with_all = ["pair", "join", "balance", "reward"])]
+        #[arg(long, conflicts_with_all = ["pair", "join", "balance", "reward", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         unary: bool,
 
         /// Penalize conflicting pairs (for_each_unique_pair)
-        #[arg(long, conflicts_with_all = ["unary", "join", "balance", "reward"])]
+        #[arg(long, conflicts_with_all = ["unary", "join", "balance", "reward", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         pair: bool,
 
         /// Penalize entity-fact mismatch (for_each + join)
-        #[arg(long, conflicts_with_all = ["unary", "pair", "balance", "reward"])]
+        #[arg(long, conflicts_with_all = ["unary", "pair", "balance", "reward", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         join: bool,
 
         /// Balance assignments across entities
-        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "reward"])]
+        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "reward", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         balance: bool,
 
         /// Reward matching entities (for_each + filter + reward)
-        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "balance"])]
+        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "balance", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         reward: bool,
+
+        /// Generate a grouped consecutive-runs collector skeleton
+        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "balance", "reward", "presence", "collect_vec", "group_complement", "projected_group"])]
+        runs: bool,
+
+        /// Generate a grouped indexed-presence collector skeleton
+        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "balance", "reward", "runs", "collect_vec", "group_complement", "projected_group"])]
+        presence: bool,
+
+        /// Generate a grouped collect_vec collector skeleton
+        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "balance", "reward", "runs", "presence", "group_complement", "projected_group"])]
+        collect_vec: bool,
+
+        /// Generate a grouped complement skeleton
+        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "balance", "reward", "runs", "presence", "collect_vec", "projected_group"])]
+        group_complement: bool,
+
+        /// Generate a projected join plus grouped collector skeleton
+        #[arg(long, conflicts_with_all = ["unary", "pair", "join", "balance", "reward", "runs", "presence", "collect_vec", "group_complement"])]
+        projected_group: bool,
 
         /// Overwrite if constraint already exists
         #[arg(long, short)]
@@ -264,32 +298,9 @@ enum GenerateResource {
     },
     /// Add a planning variable field to an existing entity
     #[command(
-        after_help = "Examples:\n  solverforge generate variable employee_idx --entity Shift --kind scalar --range employees --allows-unassigned\n  solverforge generate variable stops --entity Route --kind list --elements visits"
+        after_help = "Examples:\n  solverforge generate variable employee_idx --entity Shift --kind scalar --range employees --allows-unassigned\n  solverforge generate variable employee_idx --entity Shift --kind scalar --range employees --candidate-values employee_candidates\n  solverforge generate variable stops --entity Route --kind list --elements visits"
     )]
-    Variable {
-        /// Field name in snake_case (e.g. preferred_shift)
-        field: String,
-
-        /// Entity struct name (e.g. Shift)
-        #[arg(long, value_name = "ENTITY_TYPE")]
-        entity: String,
-
-        /// Variable kind (`scalar` or `list`)
-        #[arg(long, value_parser = parse_variable_kind)]
-        kind: String,
-
-        /// Scalar-variable value range collection (e.g. employees)
-        #[arg(long, value_name = "FACT_COLLECTION")]
-        range: Option<String>,
-
-        /// List-variable element collection (e.g. visits)
-        #[arg(long, value_name = "FACT_COLLECTION")]
-        elements: Option<String>,
-
-        /// Allow leaving the scalar variable unassigned
-        #[arg(long, default_value_t = false)]
-        allows_unassigned: bool,
-    },
+    Variable(Box<VariableArgs>),
     /// Change the score type in the existing planning solution
     #[command(after_help = "Examples:\n  solverforge generate score HardSoftDecimalScore")]
     Score {
@@ -309,6 +320,174 @@ enum GenerateResource {
         #[arg(long, value_parser = ["small", "standard", "large"])]
         size: Option<String>,
     },
+    /// Declare a SolverForge scalar group for coupled scalar construction/search
+    #[command(
+        after_help = "Examples:\n  solverforge generate scalar-group required_assignment --assignment Task.resource_idx --required-entity required_task\n  solverforge generate scalar-group paired_assignment --candidates paired_candidates --target Task.primary_idx --target Task.secondary_idx"
+    )]
+    ScalarGroup(Box<ScalarGroupArgs>),
+    /// Declare a conflict repair provider for a constraint
+    #[command(
+        after_help = "Examples:\n  solverforge generate conflict-repair required_assignment --provider repair_required_assignment"
+    )]
+    ConflictRepair(Box<ConflictRepairArgs>),
+}
+
+#[derive(Args)]
+struct VariableArgs {
+    /// Field name in snake_case (e.g. preferred_shift)
+    field: String,
+
+    /// Entity struct name (e.g. Shift)
+    #[arg(long, value_name = "ENTITY_TYPE")]
+    entity: String,
+
+    /// Variable kind (`scalar` or `list`)
+    #[arg(long, value_parser = parse_variable_kind)]
+    kind: String,
+
+    /// Scalar-variable value range collection (e.g. employees)
+    #[arg(long, value_name = "FACT_COLLECTION")]
+    range: Option<String>,
+
+    /// List-variable element collection (e.g. visits)
+    #[arg(long, value_name = "FACT_COLLECTION")]
+    elements: Option<String>,
+
+    /// Allow leaving the scalar variable unassigned
+    #[arg(long, default_value_t = false)]
+    allows_unassigned: bool,
+
+    /// Scalar hook returning candidate value indexes for construction/search
+    #[arg(long, value_name = "FN_PATH")]
+    candidate_values: Option<String>,
+
+    /// Scalar hook returning nearby value indexes for nearby change moves
+    #[arg(long, value_name = "FN_PATH")]
+    nearby_value_candidates: Option<String>,
+
+    /// Scalar hook returning nearby entity indexes for nearby swap moves
+    #[arg(long, value_name = "FN_PATH")]
+    nearby_entity_candidates: Option<String>,
+
+    /// Scalar distance meter for nearby value candidates
+    #[arg(long, value_name = "FN_PATH")]
+    nearby_value_distance_meter: Option<String>,
+
+    /// Scalar distance meter for nearby entity candidates
+    #[arg(long, value_name = "FN_PATH")]
+    nearby_entity_distance_meter: Option<String>,
+
+    /// Scalar construction hook ranking entity assignment order
+    #[arg(long, value_name = "FN_PATH")]
+    construction_entity_order_key: Option<String>,
+
+    /// Scalar construction hook ranking candidate value order
+    #[arg(long, value_name = "FN_PATH")]
+    construction_value_order_key: Option<String>,
+}
+
+#[derive(Args)]
+struct ScalarGroupArgs {
+    /// Group name used by ScalarGroup and solver.toml group_name
+    name: String,
+
+    /// Assignment-backed scalar target in Entity.field form
+    #[arg(long, value_name = "ENTITY.FIELD", conflicts_with = "candidates")]
+    assignment: Option<String>,
+
+    /// Candidate-backed provider function path
+    #[arg(long, value_name = "FN_PATH", conflicts_with = "assignment")]
+    candidates: Option<String>,
+
+    /// Candidate-backed scalar target in Entity.field form; repeat for multi-target groups
+    #[arg(long = "target", value_name = "ENTITY.FIELD")]
+    targets: Vec<String>,
+
+    /// Assignment hook deciding whether an entity must be assigned
+    #[arg(long, value_name = "FN_PATH")]
+    required_entity: Option<String>,
+
+    /// Assignment hook returning a capacity bucket for entity/value pairs
+    #[arg(long, value_name = "FN_PATH")]
+    capacity_key: Option<String>,
+
+    /// Assignment hook filtering legal pairwise assignments
+    #[arg(long, value_name = "FN_PATH")]
+    assignment_rule: Option<String>,
+
+    /// Assignment hook returning sequence position for an entity
+    #[arg(long, value_name = "FN_PATH")]
+    position_key: Option<String>,
+
+    /// Assignment hook returning sequence key for entity/value pairs
+    #[arg(long, value_name = "FN_PATH")]
+    sequence_key: Option<String>,
+
+    /// Assignment hook ranking entity construction order
+    #[arg(long, value_name = "FN_PATH")]
+    entity_order: Option<String>,
+
+    /// Assignment hook ranking candidate values
+    #[arg(long, value_name = "FN_PATH")]
+    value_order: Option<String>,
+
+    /// Limit candidate values per scalar target
+    #[arg(long, value_name = "N")]
+    value_candidate_limit: Option<usize>,
+
+    /// Limit grouped construction candidates
+    #[arg(long, value_name = "N")]
+    group_candidate_limit: Option<usize>,
+
+    /// Limit grouped scalar local-search moves per step
+    #[arg(long, value_name = "N")]
+    max_moves_per_step: Option<usize>,
+
+    /// Limit augmenting-path depth for assignment groups
+    #[arg(long, value_name = "N")]
+    max_augmenting_depth: Option<usize>,
+
+    /// Limit rematch size for assignment groups
+    #[arg(long, value_name = "N")]
+    max_rematch_size: Option<usize>,
+
+    /// Do not add matching solver.toml phases
+    #[arg(long)]
+    skip_solver_config: bool,
+}
+
+#[derive(Args)]
+struct ConflictRepairArgs {
+    /// Exact constraint ID matched by the repair selector
+    constraint: String,
+
+    /// Repair provider function path
+    #[arg(long, value_name = "FN_PATH")]
+    provider: String,
+
+    /// Move selector kind to add to solver.toml
+    #[arg(long, value_parser = ["compound", "conflict"], default_value = "compound")]
+    selector: String,
+
+    /// Limit conflict matches per step
+    #[arg(long, value_name = "N")]
+    max_matches_per_step: Option<usize>,
+
+    /// Limit repairs per matched conflict
+    #[arg(long, value_name = "N")]
+    max_repairs_per_match: Option<usize>,
+
+    /// Limit emitted repair moves per step
+    #[arg(long, value_name = "N")]
+    max_moves_per_step: Option<usize>,
+
+    /// Allow selectors to match soft-constraint conflicts
+    #[arg(long)]
+    include_soft_matches: bool,
+
+    /// Do not add a matching solver.toml phase
+    #[arg(long)]
+    skip_solver_config: bool,
 }
 
 #[derive(Subcommand)]
@@ -336,7 +515,17 @@ enum DestroyResource {
     },
     /// Remove a constraint
     Constraint {
-        /// Constraint name to remove
+        /// Exact constraint ID to remove
+        name: String,
+    },
+    /// Remove a scalar group declaration
+    ScalarGroup {
+        /// Scalar group name to remove
+        name: String,
+    },
+    /// Remove a conflict repair declaration
+    ConflictRepair {
+        /// Exact constraint ID to remove
         name: String,
     },
 }
@@ -360,78 +549,168 @@ fn main() {
     let result: CliResult = match cli.command {
         Command::New {
             name,
+            shell,
             skip_git,
             skip_readme,
-        } => commands::new::run(&name, skip_git, skip_readme, cli.quiet),
-        Command::Generate {
-            resource:
-                GenerateResource::Constraint {
-                    name,
-                    hard: _,
-                    soft,
-                    unary,
-                    pair,
-                    join,
-                    balance,
-                    reward,
-                    force,
-                    pretend,
-                },
-        } => commands::generate_constraint::run(
-            &name, soft, unary, pair, join, balance, reward, force, pretend,
-        ),
-        Command::Generate {
-            resource:
-                GenerateResource::Entity {
-                    name,
-                    planning_variable,
-                    fields,
-                    force,
-                    pretend,
-                },
-        } => commands::generate_domain::run_entity(
-            &name,
-            planning_variable.as_deref(),
-            &fields,
-            force,
-            pretend,
-        ),
-        Command::Generate {
-            resource:
-                GenerateResource::Fact {
-                    name,
-                    fields,
-                    force,
-                    pretend,
-                },
-        } => commands::generate_domain::run_fact(&name, &fields, force, pretend),
-        Command::Generate {
-            resource: GenerateResource::Solution { name, score },
-        } => commands::generate_domain::run_solution(&name, &score),
-        Command::Generate {
-            resource:
-                GenerateResource::Variable {
+        } => commands::new::run(&name, shell, skip_git, skip_readme, cli.quiet),
+        Command::Generate { resource } => match *resource {
+            GenerateResource::Constraint {
+                name,
+                hard: _,
+                soft,
+                unary,
+                pair,
+                join,
+                balance,
+                reward,
+                runs,
+                presence,
+                collect_vec,
+                group_complement,
+                projected_group,
+                force,
+                pretend,
+            } => commands::generate_constraint::run(
+                &name,
+                soft,
+                unary,
+                pair,
+                join,
+                balance,
+                reward,
+                runs,
+                presence,
+                collect_vec,
+                group_complement,
+                projected_group,
+                force,
+                pretend,
+            ),
+            GenerateResource::Entity {
+                name,
+                planning_variable,
+                fields,
+                force,
+                pretend,
+            } => commands::generate_domain::run_entity(
+                &name,
+                planning_variable.as_deref(),
+                &fields,
+                force,
+                pretend,
+            ),
+            GenerateResource::Fact {
+                name,
+                fields,
+                force,
+                pretend,
+            } => commands::generate_domain::run_fact(&name, &fields, force, pretend),
+            GenerateResource::Solution { name, score } => {
+                commands::generate_domain::run_solution(&name, &score)
+            }
+            GenerateResource::Variable(variable_args) => {
+                let VariableArgs {
                     field,
                     entity,
                     kind,
                     range,
                     elements,
                     allows_unassigned,
-                },
-        } => commands::generate_domain::run_variable(
-            &field,
-            &entity,
-            &kind,
-            range.as_deref(),
-            elements.as_deref(),
-            allows_unassigned,
-        ),
-        Command::Generate {
-            resource: GenerateResource::Score { score_type },
-        } => commands::generate_domain::run_score(&score_type),
-        Command::Generate {
-            resource: GenerateResource::Data { mode, size },
-        } => commands::generate_domain::run_data(&mode, size.as_deref()),
+                    candidate_values,
+                    nearby_value_candidates,
+                    nearby_entity_candidates,
+                    nearby_value_distance_meter,
+                    nearby_entity_distance_meter,
+                    construction_entity_order_key,
+                    construction_value_order_key,
+                } = *variable_args;
+                commands::generate_domain::run_variable(
+                    &field,
+                    &entity,
+                    &kind,
+                    range.as_deref(),
+                    elements.as_deref(),
+                    allows_unassigned,
+                    &ScalarVariableHooks {
+                        candidate_values,
+                        nearby_value_candidates,
+                        nearby_entity_candidates,
+                        nearby_value_distance_meter,
+                        nearby_entity_distance_meter,
+                        construction_entity_order_key,
+                        construction_value_order_key,
+                    },
+                )
+            }
+            GenerateResource::Score { score_type } => {
+                commands::generate_domain::run_score(&score_type)
+            }
+            GenerateResource::Data { mode, size } => {
+                commands::generate_domain::run_data(&mode, size.as_deref())
+            }
+            GenerateResource::ScalarGroup(args) => {
+                let ScalarGroupArgs {
+                    name,
+                    assignment,
+                    candidates,
+                    targets,
+                    required_entity,
+                    capacity_key,
+                    assignment_rule,
+                    position_key,
+                    sequence_key,
+                    entity_order,
+                    value_order,
+                    value_candidate_limit,
+                    group_candidate_limit,
+                    max_moves_per_step,
+                    max_augmenting_depth,
+                    max_rematch_size,
+                    skip_solver_config,
+                } = *args;
+                commands::model_resource::run_scalar_group(ScalarGroupRequest {
+                    name,
+                    assignment,
+                    candidates,
+                    targets,
+                    required_entity,
+                    capacity_key,
+                    assignment_rule,
+                    position_key,
+                    sequence_key,
+                    entity_order,
+                    value_order,
+                    value_candidate_limit,
+                    group_candidate_limit,
+                    max_moves_per_step,
+                    max_augmenting_depth,
+                    max_rematch_size,
+                    skip_solver_config,
+                })
+            }
+            GenerateResource::ConflictRepair(args) => {
+                let ConflictRepairArgs {
+                    constraint,
+                    provider,
+                    selector,
+                    max_matches_per_step,
+                    max_repairs_per_match,
+                    max_moves_per_step,
+                    include_soft_matches,
+                    skip_solver_config,
+                } = *args;
+                commands::model_resource::run_conflict_repair(ConflictRepairRequest {
+                    constraint,
+                    provider,
+                    selector,
+                    max_matches_per_step,
+                    max_repairs_per_match,
+                    max_moves_per_step,
+                    include_soft_matches,
+                    skip_solver_config,
+                })
+            }
+        },
         Command::Destroy {
             yes,
             resource: DestroyResource::Solution,
@@ -452,6 +731,14 @@ fn main() {
             yes,
             resource: DestroyResource::Constraint { name },
         } => commands::destroy::run_constraint(&name, yes),
+        Command::Destroy {
+            yes,
+            resource: DestroyResource::ScalarGroup { name },
+        } => commands::destroy::run_scalar_group(&name, yes),
+        Command::Destroy {
+            yes,
+            resource: DestroyResource::ConflictRepair { name },
+        } => commands::destroy::run_conflict_repair(&name, yes),
         Command::Server { port, debug } => commands::server::run(port, debug),
         Command::Info => commands::info::run(),
         Command::Check => commands::check::run(),

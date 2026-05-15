@@ -3,8 +3,9 @@ use super::{
     mod_rewriter::{remove_constraint_from_source, rewrite_mod, validate_constraint_mod_source},
     run::run as run_generate_constraint,
     skeleton::{generate_skeleton, Pattern},
-    utils::{snake_to_title, validate_name},
+    utils::validate_name,
 };
+use crate::scalar_variable_hooks::ScalarVariableHooks;
 use crate::test_support;
 use std::{
     fs,
@@ -38,14 +39,6 @@ fn test_validate_name() {
     assert!(validate_name("1bad").is_err());
     assert!(validate_name("bad-name").is_err());
     assert!(validate_name("").is_err());
-}
-
-#[test]
-fn test_snake_to_title() {
-    assert_eq!(snake_to_title("max_hours"), "Max Hours");
-    assert_eq!(snake_to_title("required_skill"), "Required Skill");
-    assert_eq!(snake_to_title("all_assigned"), "All Assigned");
-    assert_eq!(snake_to_title("capacity"), "Capacity");
 }
 
 #[test]
@@ -245,7 +238,8 @@ mod assemble {
     fs::write("src/constraints/mod.rs", invalid_mod).expect("failed to write constraints mod");
 
     let err = run_generate_constraint(
-        "capacity", false, true, false, false, false, false, false, false,
+        "capacity", false, true, false, false, false, false, false, false, false, false, false,
+        false, false,
     )
     .expect_err("invalid managed block markers should fail before file creation");
 
@@ -274,7 +268,8 @@ fn test_run_rejects_hard_constraint_for_soft_score() {
     write_minimal_constraints_mod("SoftScore");
 
     let err = run_generate_constraint(
-        "capacity", false, true, false, false, false, false, false, false,
+        "capacity", false, true, false, false, false, false, false, false, false, false, false,
+        false, false,
     )
     .expect_err("hard generated constraints should be rejected for SoftScore");
 
@@ -302,6 +297,11 @@ fn test_run_accepts_soft_constraint_for_soft_score() {
         "preference",
         true,
         true,
+        false,
+        false,
+        false,
+        false,
+        false,
         false,
         false,
         false,
@@ -421,6 +421,8 @@ fn test_generate_skeleton_unary_hard() {
     let domain = DomainModel {
         solution_type: "EmployeeSchedule".to_string(),
         score_type: "HardSoftDecimalScore".to_string(),
+        scalar_groups_path: None,
+        conflict_repairs_path: None,
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
@@ -428,6 +430,7 @@ fn test_generate_skeleton_unary_hard() {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
+                hooks: ScalarVariableHooks::default(),
             }],
             list_vars: vec![],
         }],
@@ -439,12 +442,16 @@ fn test_generate_skeleton_unary_hard() {
         false,
         "EmployeeSchedule",
         "HardSoftDecimalScore",
-        "No Overlap",
+        "no_overlap",
         Some(&domain),
     );
-    assert!(result.contains("for_each(|s: &EmployeeSchedule| s.shifts.as_slice())"));
+    assert!(result.contains(".for_each(entity_items)"));
     assert!(result.contains("<HardSoftDecimalScore as Score>::one_hard()"));
     assert!(result.contains("HARD:"));
+    assert!(result.contains(".penalize(hard_weight(unary_weight))"));
+    assert!(result.contains("fn unary_weight"));
+    assert!(result.contains(".named(\"no_overlap\")"));
+    assert!(!result.contains(".filter("));
     assert!(!result.contains("todo!"));
     assert!(result
         .contains("panic!(\"replace placeholder condition before enabling this constraint\")"));
@@ -455,6 +462,8 @@ fn test_generate_skeleton_pair_hard() {
     let domain = DomainModel {
         solution_type: "EmployeeSchedule".to_string(),
         score_type: "HardSoftDecimalScore".to_string(),
+        scalar_groups_path: None,
+        conflict_repairs_path: None,
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
@@ -462,6 +471,7 @@ fn test_generate_skeleton_pair_hard() {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
+                hooks: ScalarVariableHooks::default(),
             }],
             list_vars: vec![],
         }],
@@ -473,11 +483,14 @@ fn test_generate_skeleton_pair_hard() {
         false,
         "EmployeeSchedule",
         "HardSoftDecimalScore",
-        "No Overlap",
+        "no_overlap",
         Some(&domain),
     );
-    assert!(result.contains("for_each(|s: &EmployeeSchedule| s.shifts.as_slice())"));
-    assert!(result.contains("joiner::equal(|e: &Shift| e.employee_idx)"));
+    assert!(result.contains(".for_each(entity_items)"));
+    assert!(result.contains(".join(joiner::equal(employee_idx_join_key))"));
+    assert!(result.contains(".penalize(hard_weight(pair_weight))"));
+    assert!(result.contains(".named(\"no_overlap\")"));
+    assert!(!result.contains(".filter("));
     assert!(result.contains(
         "panic!(\"replace placeholder pair condition before enabling this constraint\")"
     ));
@@ -489,6 +502,8 @@ fn test_generate_skeleton_join_hard() {
     let domain = DomainModel {
         solution_type: "EmployeeSchedule".to_string(),
         score_type: "HardSoftDecimalScore".to_string(),
+        scalar_groups_path: None,
+        conflict_repairs_path: None,
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
@@ -496,6 +511,7 @@ fn test_generate_skeleton_join_hard() {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
+                hooks: ScalarVariableHooks::default(),
             }],
             list_vars: vec![],
         }],
@@ -510,13 +526,17 @@ fn test_generate_skeleton_join_hard() {
         false,
         "EmployeeSchedule",
         "HardSoftDecimalScore",
-        "Required Skill",
+        "required_skill",
         Some(&domain),
     );
     assert!(result.contains("equal_bi"));
     assert!(result.contains("employees.as_slice()"));
     assert!(result.contains("Employee"));
-    assert!(result.contains("|e: &Shift| e.employee_idx"));
+    assert!(result.contains("entity_join_key"));
+    assert!(result.contains("fact_join_key"));
+    assert!(result.contains(".penalize(hard_weight(join_weight))"));
+    assert!(result.contains(".named(\"required_skill\")"));
+    assert!(!result.contains(".filter("));
     assert!(
         result.contains("replace placeholder join key extractor before enabling this constraint")
     );
@@ -529,6 +549,8 @@ fn test_generate_skeleton_balance_soft() {
     let domain = DomainModel {
         solution_type: "EmployeeSchedule".to_string(),
         score_type: "HardSoftDecimalScore".to_string(),
+        scalar_groups_path: None,
+        conflict_repairs_path: None,
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
@@ -536,6 +558,7 @@ fn test_generate_skeleton_balance_soft() {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
+                hooks: ScalarVariableHooks::default(),
             }],
             list_vars: vec![],
         }],
@@ -547,10 +570,13 @@ fn test_generate_skeleton_balance_soft() {
         true,
         "EmployeeSchedule",
         "HardSoftDecimalScore",
-        "Balance",
+        "balance",
         Some(&domain),
     );
-    assert!(result.contains(".balance(|e: &Shift| e.employee_idx)"));
+    assert!(result.contains("load_balance(balance_group_key, balance_metric)"));
+    assert!(result.contains(".penalize(balance_weight)"));
+    assert!(result.contains(".named(\"balance\")"));
+    assert!(!result.contains(".filter("));
     assert!(result.contains("SOFT:"));
 }
 
@@ -559,6 +585,8 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
     let domain = DomainModel {
         solution_type: "EmployeeSchedule".to_string(),
         score_type: "HardSoftDecimalScore".to_string(),
+        scalar_groups_path: None,
+        conflict_repairs_path: None,
         entities: vec![EntityInfo {
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
@@ -566,6 +594,7 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
                 allows_unassigned: true,
+                hooks: ScalarVariableHooks::default(),
             }],
             list_vars: vec![],
         }],
@@ -577,12 +606,100 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
         true,
         "EmployeeSchedule",
         "HardSoftDecimalScore",
-        "Preferred Assignment",
+        "preferred_assignment",
         Some(&domain),
     );
-    assert!(result.contains(".reward(<HardSoftDecimalScore as Score>::one_soft())"));
+    assert!(result.contains(".reward(reward_weight)"));
+    assert!(result.contains(".named(\"preferred_assignment\")"));
+    assert!(result.contains("fn reward_weight"));
+    assert!(!result.contains(".filter("));
     assert!(result.contains(
         "panic!(\"replace placeholder reward condition before enabling this constraint\")"
     ));
     assert!(!result.contains("todo!"));
+}
+
+#[test]
+fn test_grouped_skeletons_use_weight_closures_instead_of_post_group_filters() {
+    let domain = grouped_skeleton_domain();
+
+    for (pattern, expected_weight, extra_expected) in [
+        (
+            Pattern::Runs,
+            ".penalize(hard_weight(runs_weight))",
+            "fn runs_weight",
+        ),
+        (
+            Pattern::IndexedPresence,
+            ".penalize(hard_weight(indexed_presence_weight))",
+            "fn indexed_presence_weight",
+        ),
+        (
+            Pattern::CollectVec,
+            ".penalize(hard_weight(collected_values_weight))",
+            "fn collected_values_weight",
+        ),
+        (
+            Pattern::GroupComplement,
+            ".penalize(hard_weight(group_complement_weight))",
+            ".complement(",
+        ),
+        (
+            Pattern::ProjectedGroup,
+            ".penalize(hard_weight(projected_group_weight))",
+            ".project(projected_group_entry)",
+        ),
+    ] {
+        let result = generate_skeleton(
+            "advanced",
+            pattern,
+            false,
+            "EmployeeSchedule",
+            "HardSoftScore",
+            "advanced",
+            Some(&domain),
+        );
+
+        assert!(
+            result.contains(expected_weight),
+            "{pattern:?} should score through a grouped weight helper: {result}"
+        );
+        assert!(
+            result.contains(extra_expected),
+            "{pattern:?} should contain expected grouped API shape: {result}"
+        );
+        assert!(
+            !result.contains(".filter(|_value_idx")
+                && !result.contains(".filter(|_key")
+                && !result.contains(".filter(|_e:"),
+            "{pattern:?} should not emit unsupported post-group filters: {result}"
+        );
+        assert!(result.contains("<HardSoftScore as Score>::zero()"));
+        assert!(result.contains(".named(\"advanced\")"));
+        syn::parse_file(&result).expect("generated skeleton should parse as Rust");
+    }
+}
+
+fn grouped_skeleton_domain() -> DomainModel {
+    DomainModel {
+        solution_type: "EmployeeSchedule".to_string(),
+        score_type: "HardSoftScore".to_string(),
+        scalar_groups_path: None,
+        conflict_repairs_path: None,
+        entities: vec![EntityInfo {
+            field_name: "shifts".to_string(),
+            item_type: "Shift".to_string(),
+            scalar_vars: vec![ScalarVarInfo {
+                field: "employee_idx".to_string(),
+                value_range_provider: "employees".to_string(),
+                allows_unassigned: true,
+                hooks: ScalarVariableHooks::default(),
+            }],
+            list_vars: vec![],
+        }],
+        facts: vec![FactInfo {
+            field_name: "employees".to_string(),
+            item_type: "Employee".to_string(),
+        }],
+    }
 }

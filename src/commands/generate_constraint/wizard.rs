@@ -4,21 +4,47 @@ use owo_colors::OwoColorize;
 use super::domain::DomainModel;
 use super::skeleton::Pattern;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PatternFlags {
+    pub soft: bool,
+    pub unary: bool,
+    pub pair: bool,
+    pub join: bool,
+    pub balance: bool,
+    pub reward: bool,
+    pub runs: bool,
+    pub presence: bool,
+    pub collect_vec: bool,
+    pub group_complement: bool,
+    pub projected_group: bool,
+}
+
 pub(crate) fn resolve_pattern_and_hardness(
-    soft: bool,
-    unary: bool,
-    pair: bool,
-    join: bool,
-    balance: bool,
-    reward: bool,
+    flags: PatternFlags,
     domain: &DomainModel,
 ) -> Result<(Pattern, bool), String> {
-    let explicit_pattern: Option<Pattern> = match (unary, pair, join, balance, reward) {
-        (true, _, _, _, _) => Some(Pattern::Unary),
-        (_, true, _, _, _) => Some(Pattern::Pair),
-        (_, _, true, _, _) => Some(Pattern::Join),
-        (_, _, _, true, _) => Some(Pattern::Balance),
-        (_, _, _, _, true) => Some(Pattern::Reward),
+    let explicit_pattern: Option<Pattern> = match (
+        flags.unary,
+        flags.pair,
+        flags.join,
+        flags.balance,
+        flags.reward,
+        flags.runs,
+        flags.presence,
+        flags.collect_vec,
+        flags.group_complement,
+        flags.projected_group,
+    ) {
+        (true, _, _, _, _, _, _, _, _, _) => Some(Pattern::Unary),
+        (_, true, _, _, _, _, _, _, _, _) => Some(Pattern::Pair),
+        (_, _, true, _, _, _, _, _, _, _) => Some(Pattern::Join),
+        (_, _, _, true, _, _, _, _, _, _) => Some(Pattern::Balance),
+        (_, _, _, _, true, _, _, _, _, _) => Some(Pattern::Reward),
+        (_, _, _, _, _, true, _, _, _, _) => Some(Pattern::Runs),
+        (_, _, _, _, _, _, true, _, _, _) => Some(Pattern::IndexedPresence),
+        (_, _, _, _, _, _, _, true, _, _) => Some(Pattern::CollectVec),
+        (_, _, _, _, _, _, _, _, true, _) => Some(Pattern::GroupComplement),
+        (_, _, _, _, _, _, _, _, _, true) => Some(Pattern::ProjectedGroup),
         _ => None,
     };
 
@@ -27,13 +53,13 @@ pub(crate) fn resolve_pattern_and_hardness(
         explicit_pattern,
         Some(Pattern::Balance) | Some(Pattern::Reward)
     );
-    let is_soft_explicit = soft || pattern_implies_soft;
+    let is_soft_explicit = flags.soft || pattern_implies_soft;
 
     match explicit_pattern {
         Some(p) => Ok((p, is_soft_explicit)),
         None => {
             // Interactive wizard
-            run_wizard(soft, domain)
+            run_wizard(flags.soft, domain)
         }
     }
 }

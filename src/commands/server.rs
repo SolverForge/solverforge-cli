@@ -1,9 +1,18 @@
+use std::path::Path;
 use std::process::Command;
 
+use crate::app_spec;
 use crate::error::{CliError, CliResult};
 use crate::output;
 
 pub fn run(port: u16, debug: bool) -> CliResult {
+    if is_cli_shell()? {
+        return Err(CliError::with_hint(
+            "`solverforge server` is not available for CLI-shell projects",
+            "run the generated command-line app with `cargo run -- demo-data`",
+        ));
+    }
+
     let mode = if debug { "debug" } else { "release" };
 
     output::print_status("start", &format!("SolverForge server ({})", mode));
@@ -36,4 +45,12 @@ pub fn run(port: u16, debug: bool) -> CliResult {
             command: format!("cargo run --{}", mode),
         })
     }
+}
+
+fn is_cli_shell() -> CliResult<bool> {
+    if !Path::new("solverforge.app.toml").exists() {
+        return Ok(false);
+    }
+    let spec = app_spec::load()?;
+    Ok(spec.app.shell == "cli")
 }

@@ -1,11 +1,22 @@
 use std::fs;
 use std::path::Path;
 
+use crate::app_spec;
 use crate::error::{CliError, CliResult};
 use crate::output;
 
 // Parses src/api/ for axum `.route()` calls and prints a METHOD/PATH/HANDLER table.
 pub fn run() -> CliResult {
+    if Path::new("solverforge.app.toml").exists() {
+        let spec = app_spec::load()?;
+        if spec.app.shell == "cli" {
+            return Err(CliError::with_hint(
+                "`solverforge routes` is not available for CLI-shell projects",
+                "CLI-shell projects do not generate Axum routes",
+            ));
+        }
+    }
+
     let candidates = ["src/api/routes.rs", "src/api/mod.rs", "src/api.rs"];
 
     let (source_path, content) = candidates

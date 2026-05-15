@@ -4,6 +4,7 @@ pub mod destroy;
 pub mod generate_constraint;
 pub mod generate_domain;
 pub mod info;
+pub mod model_resource;
 pub mod new;
 pub mod routes;
 pub mod server;
