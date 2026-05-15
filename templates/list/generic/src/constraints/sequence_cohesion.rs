@@ -10,7 +10,7 @@ use solverforge::IncrementalConstraint;
 pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
     ConstraintFactory::<Plan, HardSoftScore>::new()
         .for_each(vec(|p: &Plan| &p.containers))
-        .penalize_with(|c: &Container| {
+        .penalize(|c: &Container| {
             let gap_penalty: i64 = c
                 .items
                 .windows(2)
@@ -20,7 +20,7 @@ pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
                     (right - left).abs().saturating_sub(1)
                 })
                 .sum();
-            HardSoftScore::of(0, gap_penalty)
+            HardSoftScore::of_soft(gap_penalty)
         })
-        .named("Sequence cohesion")
+        .named("sequence_cohesion")
 }

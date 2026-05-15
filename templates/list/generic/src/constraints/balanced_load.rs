@@ -13,9 +13,9 @@ use solverforge::IncrementalConstraint;
 pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
     ConstraintFactory::<Plan, HardSoftScore>::new()
         .for_each(vec(|p: &Plan| &p.containers))
-        .penalize_with(|c: &Container| {
+        .penalize(|c: &Container| {
             let load = c.items.len() as i64;
-            HardSoftScore::of(0, load * load)
+            HardSoftScore::of_soft(load * load)
         })
-        .named("Balanced load")
+        .named("balanced_load")
 }
