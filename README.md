@@ -6,15 +6,15 @@ Use this CLI to scaffold, grow, and validate SolverForge applications. The CLI
 is its own versioned product: `solverforge --version` reports the CLI package
 version and the scaffold dependency targets separately.
 
-Current CLI package version: `2.0.4`.
+Current CLI package version: `2.1.0`.
 
 Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.12.0`
-- `solverforge-ui 0.6.5`
-- `solverforge-maps 2.1.4`
+- `solverforge 0.13.1`
+- `solverforge-ui 0.6.5` for the default web shell
+- `solverforge-maps 2.1.4` for the default web shell
 
 ```bash
 cargo install solverforge-cli
@@ -27,14 +27,48 @@ Public scaffold path:
 
 - `solverforge new <name>`
 
-That command creates a neutral app shell. Users shape the app afterward through
+That command creates a neutral app shell. The default shell is `web`; use
+`--shell api` for an HTTP API without frontend assets or `--shell cli` for a
+Clap command-line app without Axum. Users shape the app afterward through
 facts, entities, solution/score metadata, variables, constraints, generated
-data, and `solverforge.app.toml`. There are no public scaffold-family flags.
+data, and `solverforge.app.toml`. Shell choice is recorded as
+`[app].shell`; it is not a modeling family selector.
 
 Planning variable kinds are canonical:
 
 - `scalar` for single-value assignment variables backed by `--range <facts>`
 - `list` for sequence variables backed by `--elements <facts>`
+
+Scalar variables can also carry opt-in SolverForge hook metadata for
+model-owned candidate selection, nearby candidate selection, distance meters,
+and construction ordering:
+
+```bash
+solverforge generate variable resource_idx --entity Task --kind scalar --range resources \
+  --candidate-values resource_candidates \
+  --nearby-value-candidates nearby_resources \
+  --nearby-entity-candidates nearby_tasks \
+  --nearby-value-distance-meter resource_distance \
+  --nearby-entity-distance-meter task_distance \
+  --construction-entity-order-key task_priority \
+  --construction-value-order-key resource_priority
+```
+
+Those flags only write `#[planning_variable(...)]` metadata and project it into
+`solverforge.app.toml` plus `static/generated/ui-model.json`; users still own
+the Rust hook functions.
+
+Scalar groups and conflict repairs are opt-in modeling resources. They are
+identified only by exact IDs: scalar-group names and snake_case constraint IDs.
+Unless `--skip-solver-config` is passed, `solverforge generate scalar-group`
+writes both grouped construction and grouped local-search `solver.toml` refs
+for assignment-backed and candidate-backed groups. `solverforge check` validates
+those refs across the solver config graph, including construction phases,
+top-level selectors, neighborhoods, nested selector children, and partition
+child phases. The CLI writes those generated refs inside one
+`# @solverforge:begin solver-config` / `# @solverforge:end solver-config`
+region with exact-ID owner comments for each generated phase; generated apps
+still consume plain `solver.toml` through the umbrella `solverforge` crate.
 
 `standard` is only a demo dataset size label in `solverforge.app.toml`; it is
 not a variable kind.
@@ -49,6 +83,13 @@ solverforge generate entity task --field label:String --field priority:i32
 solverforge generate variable resource_idx --entity Task --kind scalar --range resources --allows-unassigned
 solverforge generate data --size large
 solverforge server
+```
+
+Shell variants:
+
+```bash
+solverforge new batch-scheduler --shell cli
+solverforge new service-scheduler --shell api
 ```
 
 Generated projects use managed block markers as the canonical CLI edit points.
@@ -67,32 +108,42 @@ dataset size defaults in `solverforge.app.toml`. `sample` is the default mode;
 `small`, `standard`, and `large`. Generated values are structurally useful
 rather than domain-specific fake business data.
 
-The generated frontend is intentionally thin. It composes shipped
+The default generated frontend is intentionally thin. It composes shipped
 `solverforge-ui 0.6.5` primitives such as `SF.createBackend(...)`,
 `SF.createSolver(...)`, and `SF.rail.createTimeline(...)` instead of vendoring
 app-specific UI frameworks. Domain-specific examples belong in quickstarts, not
-in the built-in scaffold catalog.
+in the built-in scaffold catalog. API-shell and CLI-shell projects do not
+generate `static/`; later domain mutations keep that shell boundary intact.
 
 ## Command Surface
 
 Core commands:
 
-- `solverforge new <name>` creates the neutral scaffold. `--skip-git` skips the
+- `solverforge new <name>` creates the neutral scaffold. `--shell web|api|cli`
+  selects the generated app shell; `web` is the default. `--skip-git` skips the
   initial Git repository/commit, and `--skip-readme` skips the generated project
   README.
 - `solverforge generate fact|entity|variable|constraint|solution|score|data`
   mutates the current project through the canonical generated surfaces.
-- `solverforge destroy fact|entity|variable|constraint|solution` removes
-  generated resources and rewrites the app spec/UI projection.
+- `solverforge generate scalar-group|conflict-repair` wires opt-in model
+  resources by exact ID.
+- `solverforge destroy fact|entity|variable|constraint|solution|scalar-group|conflict-repair`
+  removes generated resources and rewrites the app spec/UI projection.
 - `solverforge check`, `solverforge info`, and `solverforge routes` inspect the
-  generated project.
-- `solverforge config show|set` reads and writes `solver.toml`.
-- `solverforge server` runs the generated app through Cargo.
+  generated project. `routes` applies only to web/API shells.
+- `solverforge config show|set` reads and writes non-phase `solver.toml`
+  settings. Ordered `phases` edits are manual. Generated model-resource refs in
+  that file are exact-ID graph references, not aliases; destroy re-renders the
+  CLI-managed solver config region and blocks when nested or user-authored
+  solver config still references the resource.
+- `solverforge server` runs web/API generated apps through Cargo. CLI-shell
+  projects run directly with `cargo run -- demo-data`.
 - `solverforge test` delegates to `cargo test`.
 - `solverforge completions <shell>` emits shell completions.
 
-Generated project manifests include `rust-version = "1.95"` and current direct
-web/runtime support dependencies:
+Generated project manifests include `rust-version = "1.95"` and dependencies
+for the selected shell. The web shell includes the current direct web/runtime
+support dependencies:
 
 - `axum 0.8.9`
 - `tokio 1.52.2`
@@ -103,6 +154,12 @@ web/runtime support dependencies:
 - `serde_json 1.0.149`
 - `uuid 1.23.1`
 - `parking_lot 0.12.5`
+
+The API shell keeps `solverforge`, Axum, Tokio, SSE, serialization, and
+`parking_lot`, but excludes `solverforge-ui`, `solverforge-maps`, and static
+file serving. The CLI shell keeps `solverforge`, Clap, Tokio, serialization,
+and `parking_lot`, but excludes Axum, `tower-http`, `tokio-stream`,
+`solverforge-ui`, `solverforge-maps`, and `static/`.
 
 Persistent `.solverforgerc` files are loaded from the project root first and
 then from `~/.solverforgerc`. Recognized preferences are intentionally narrow:
@@ -131,9 +188,8 @@ automatically. Failure artifacts are written under `target/test-artifacts/`.
 By default, end-to-end validation keeps generated temp-app `Cargo.toml` files on
 the published crate targets. To test a prerelease local ecosystem, set
 `SF_USE_LOCAL_PATCHES=1`; the harness writes a temporary `.cargo/config.toml`
-with explicit `[patch.crates-io]` entries for the sibling `solverforge-rs`,
-`solverforge-ui`, and `solverforge-maps` checkouts. Generated manifests are not
-rewritten.
+with explicit `[patch.crates-io]` entries only for dependencies present in the
+generated manifest. Generated manifests are not rewritten.
 
 Current scenario coverage:
 
@@ -151,9 +207,9 @@ scalar-plus-list combination end to end, so the test suite keeps that boundary
 visible.
 
 For solver and domain extension guidance after scaffolding, see the runtime docs
-in [solverforge-rs](https://github.com/solverforge/solverforge-rs):
-[Extend the solver](https://github.com/solverforge/solverforge-rs/blob/main/docs/extend-solver.md)
-and [Extend the domain](https://github.com/solverforge/solverforge-rs/blob/main/docs/extend-domain.md).
+in [solverforge](https://github.com/SolverForge/solverforge):
+[Extend the solver](https://github.com/SolverForge/solverforge/blob/main/docs/extend-solver.md)
+and [Extend the domain](https://github.com/SolverForge/solverforge/blob/main/docs/extend-domain.md).
 
 ## License
 

@@ -6,19 +6,21 @@
 
 - `solverforge new <name>`
 
-The generated project is a neutral shell. Users add facts, entities, variables,
+The generated project is a neutral shell. The default shell is `web`; users can
+choose `--shell api` for an HTTP API without frontend assets or `--shell cli`
+for a Clap command-line app without Axum. Users add facts, entities, variables,
 solution/score metadata, constraints, solver config, and generated data after
-scaffolding. The CLI does not expose scaffold-family flags.
+scaffolding. Shell choice is a delivery surface, not a model family.
 
-Current CLI package version: `2.0.4`.
+Current CLI package version: `2.1.0`.
 
 Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.12.0`
-- `solverforge-ui 0.6.5`
-- `solverforge-maps 2.1.4`
+- `solverforge 0.13.1`
+- `solverforge-ui 0.6.5` for the web shell
+- `solverforge-maps 2.1.4` for the web shell
 
 The CLI version is separate from those targets and must remain visible in
 version output and generated README content.
@@ -32,16 +34,38 @@ Planning variable kinds are:
 - `list`: an ordered sequence of values from a fact collection, configured with
   `--elements <FACT_COLLECTION>`
 
+Scalar variable generation accepts optional hook-name flags for current
+SolverForge scalar metadata:
+
+- `--candidate-values`
+- `--nearby-value-candidates`
+- `--nearby-entity-candidates`
+- `--nearby-value-distance-meter`
+- `--nearby-entity-distance-meter`
+- `--construction-entity-order-key`
+- `--construction-value-order-key`
+
+These flags are metadata-only. The CLI emits the planning-variable attribute,
+syncs the values through `solverforge.app.toml` and `static/generated/ui-model.json`,
+and leaves the Rust hook function bodies under domain ownership.
+
+Scalar groups and conflict repairs are exact-ID resources. Scalar groups are
+named by the user-provided group ID; conflict repairs are named by the
+snake_case constraint ID they repair. Assignment-backed and candidate-backed
+scalar groups participate in grouped construction and grouped local search
+unless `--skip-solver-config` is used.
+
 `standard` is not a planning variable kind. It is only the default demo data
 size name alongside `small` and `large`.
 
 ## Generated Project Shape
 
-The neutral scaffold generates:
+The web shell generates:
 
 - `Cargo.toml` with Rust `1.95`, `solverforge`, `solverforge-ui`, and
   `solverforge-maps` dependencies, plus explicit current web, serialization,
-  and utility dependency baselines
+  and utility dependency baselines. Generated projects do not depend on
+  SolverForge runtime subcrates directly.
 - `solver.toml` as the search strategy and termination configuration layer
 - `solverforge.app.toml` as the scaffolded app/domain contract
 - `src/domain/` with a neutral `Plan` solution and managed domain exports
@@ -56,6 +80,15 @@ The neutral scaffold generates:
 - `static/app.js` containing app composition and projection-specific rendering
 - `static/generated/ui-model.json` as the compiler-owned UI model projection
 - `static/sf-config.json` as the preserved customization seam
+
+The API shell uses the same domain, constraints, solver, data, DTO, route, and
+SSE surfaces, but omits `static/`, `solverforge-ui`, `solverforge-maps`, and
+static file serving.
+
+The CLI shell keeps the domain, constraints, solver, data, and shared DTO
+surface, but omits Axum routes, SSE route files, frontend assets,
+`solverforge-ui`, and `solverforge-maps`. Its binary is a Clap command-line
+entry point.
 
 `templates/scalar/generic` is the embedded template used by `solverforge new`.
 `templates/list/generic` is not a public scaffold selector.
@@ -73,6 +106,10 @@ Required managed surfaces:
   `solution-constructor-params`, and `solution-constructor-init`
 - entity files: `entity-variables` and `entity-variable-init`
 - `src/constraints/mod.rs`: `constraint-modules` and `constraint-calls`
+- `solver.toml`: one generated model-resource region marked with
+  `# @solverforge:begin solver-config` and
+  `# @solverforge:end solver-config`; each generated phase has an exact-ID
+  `# @solverforge:owner <kind> <exact-id> <role>` marker
 
 Commands that add or remove generated resources should fail clearly when those
 current markers are missing or duplicated.
@@ -84,8 +121,8 @@ emit the same managed block set; free-form overrides are intentionally rejected.
 `solverforge.app.toml` is the project model used to regenerate frontend and data
 projections. It tracks:
 
-- app metadata, including fixed `starter = "neutral-shell"` metadata and CLI
-  version
+- app metadata, including fixed `starter = "neutral-shell"` metadata, selected
+  `shell`, and CLI version
 - runtime target metadata, `runtime_source`, and `ui_source`
 - demo data sizes
 - solution name and score type
@@ -93,9 +130,11 @@ projections. It tracks:
 - planning entity collections
 - `scalar` and `list` variable declarations
 - constraint modules
+- scalar groups and conflict repairs by exact ID
 
-`static/generated/ui-model.json` is derived from the app spec and current domain
-parsing. Unknown variable kinds are errors, not aliases.
+For the web shell, `static/generated/ui-model.json` is derived from the app
+spec and current domain parsing. API and CLI shells do not create frontend
+projection files. Unknown variable kinds are errors, not aliases.
 
 ## Frontend Rule
 
@@ -150,8 +189,17 @@ testing. It should not pretend to be domain-specific business data.
 ## Configuration
 
 `solver.toml` owns solver behavior, including phases and termination settings.
-`solverforge config show|set` edits that file through dotted TOML paths such as
-`termination.seconds_spent_limit`.
+`solverforge config show|set` edits non-phase settings in that file through
+dotted TOML paths such as `termination.seconds_spent_limit`. Ordered `phases`
+are the solver execution graph and are not edited through `config set`.
+Model-resource entries in `solver.toml` are graph references, not flat text
+matches. Validation must inspect construction phases, top-level
+`move_selector`, `neighborhoods`, nested selector children, and partition child
+phases. Destroy re-renders the CLI-managed solver config region from
+`solverforge.app.toml`; nested or user-authored refs block the destroy before
+any project file is written. `solverforge-cli` must not link to
+`solverforge-config` for this; the graph scan is CLI-private TOML-structure
+validation.
 
 `.solverforgerc` is loaded from the project root first, then from
 `~/.solverforgerc`. It is intentionally narrow and only carries local CLI
