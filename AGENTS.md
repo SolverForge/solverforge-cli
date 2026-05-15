@@ -9,14 +9,16 @@
 Current scaffold policy:
 - current CLI package version is `2.1.0`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
-- generated projects currently target `solverforge 0.13.1`, `solverforge-ui 0.6.5`, and `solverforge-maps 2.1.4` as their crate dependency versions
-- `solverforge new <name>` is the only public scaffold path and produces a neutral shell
+- generated projects currently target `solverforge 0.13.1`; the default web shell additionally targets `solverforge-ui 0.6.5` and `solverforge-maps 2.1.4`
+- `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
+- `--shell web|api|cli` is the current public shell selector; `web` is the default, `api` omits frontend assets, and `cli` omits Axum/SSE routes and frontend assets
+- Tauri scaffolding is deferred; do not document or implement a public Tauri shell unless that work is explicitly reopened
 - users shape the app afterward through facts, entities, solution/score metadata, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
 - `scalar` and `list` are the only planning variable kinds accepted by the public CLI and app-spec projection
 - `standard` is a demo size label only; do not reintroduce it as a variable kind or scaffold family
 - `templates/scalar/generic` is the embedded neutral scaffold used by `solverforge new`; `templates/list/generic` is not a public `new` selector
-- generated `Cargo.toml` files must carry `rust-version = "1.95"` plus the current explicit web, serialization, and utility dependency baselines from the template files
+- generated `Cargo.toml` files must carry `rust-version = "1.95"` plus the current explicit dependency baselines for the selected shell from the template/materialization code
 
 When changing templates or scaffold behavior, follow the current repo reality over older starter-template assumptions. Do not add legacy aliases, compatibility shims, migration fallbacks, or automatic rewrites for unmanaged pre-refactor file shapes unless that is explicitly requested.
 
@@ -62,7 +64,7 @@ Current end-to-end scenario policy:
 Do not claim mixed seeded solving is supported until the underlying runtime actually supports that combination.
 
 For scaffold changes, prefer assertions that check the generated contract directly:
-- dependency wiring for `solverforge`, `solverforge-ui`, and `solverforge-maps`
+- dependency wiring for the selected shell: `solverforge` everywhere, `solverforge-ui` and `solverforge-maps` only for web-shell projects
 - CLI version vs runtime target messaging
 - generated README version/runtime source disclosure
 - typed solver SSE payload shape and typed frontend hooks
@@ -71,7 +73,7 @@ For scaffold changes, prefer assertions that check the generated contract direct
 - managed block ownership boundaries:
   domain exports, solution collections, entity variables, constraint modules, and constraint calls require their `@solverforge:begin ...` / `@solverforge:end ...` markers
 - `solverforge.app.toml` projection:
-  facts, entities, variables, constraints, demo sizes, solution/score metadata, runtime target metadata, and `static/generated/ui-model.json`
+  facts, entities, variables, constraints, demo sizes, solution/score metadata, runtime target metadata, and web-shell `static/generated/ui-model.json`
 - scaffolded `cargo check` against the published crate targets by default; prerelease sibling-checkout validation must be explicit via `SF_USE_LOCAL_PATCHES=1`, which writes a temporary `.cargo/config.toml` patch file without rewriting generated `Cargo.toml`
 
 ## Commit & Pull Request Guidelines
@@ -95,8 +97,8 @@ domain shapes that users create afterward:
 - Pause resumes from the runtime-retained checkpoint, Stop maps to `/jobs/{id}/cancel`, and Delete is terminal cleanup only
 - progress-only events update status, not the rendered board
 - generated demo data flows expose `/demo-data` as the catalog and `/demo-data/{id}` for selected data; frontends derive the default ID from the catalog and must not hard-code `/demo-data/STANDARD`
-- generated UI composition should use shipped `solverforge-ui` primitives before adding template-owned JavaScript
-- `src/data/data_seed.rs` and `static/generated/ui-model.json` are compiler-owned; user-facing seams are the `solverforge generate data` command, stable `src/data/mod.rs` wrapper, and `static/sf-config.json`
+- generated web-shell UI composition should use shipped `solverforge-ui` primitives before adding template-owned JavaScript
+- `src/data/data_seed.rs` and web-shell `static/generated/ui-model.json` are compiler-owned; user-facing seams are the `solverforge generate data` command, stable `src/data/mod.rs` wrapper, and web-shell `static/sf-config.json`
 - generated domain and constraint mutation is canonical-only: current managed block shapes are required, not inferred from old layouts
 
 Do not reintroduce:
@@ -105,6 +107,7 @@ Do not reintroduce:
 - docs that blur CLI version with runtime/UI target
 - `standard` as a planning variable kind
 - hidden scaffold/template aliases
+- Tauri or other shell aliases before a real scaffold implementation exists
 - fallback migration code for legacy generated files
 
 Test harness notes:
