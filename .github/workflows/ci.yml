@@ -33,6 +33,8 @@ jobs:
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ runner.os != 'Windows' }}
 
       - name: Check formatting
         run: cargo fmt --all -- --check
