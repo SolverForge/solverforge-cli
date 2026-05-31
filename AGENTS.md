@@ -12,6 +12,7 @@ Current scaffold policy:
 - generated projects currently target `solverforge 0.15.0`; the default web shell additionally targets `solverforge-ui 0.6.5` and `solverforge-maps 2.1.4`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
 - `--shell web|api|cli` is the current public shell selector; `web` is the default, `api` omits frontend assets, and `cli` omits Axum/SSE routes and frontend assets
+- API/CLI app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
 - Tauri scaffolding is deferred; do not document or implement a public Tauri shell unless that work is explicitly reopened
 - users shape the app afterward through facts, entities, solution/score metadata, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target

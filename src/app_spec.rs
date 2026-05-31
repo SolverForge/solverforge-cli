@@ -52,7 +52,7 @@ pub struct RuntimeMeta {
     pub target: String,
     #[serde(default)]
     pub runtime_source: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ui_source: String,
 }
 

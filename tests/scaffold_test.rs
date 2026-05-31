@@ -707,6 +707,18 @@ fn test_new_api_shell_excludes_frontend_assets() {
             && !main_rs.contains("ServeDir"),
         "api shell main.rs should start the API without frontend serving: {main_rs}"
     );
+    assert_cli_success(
+        &project_dir,
+        &["generate", "entity", "task", "--field", "label:String"],
+        "generate entity in api shell",
+    );
+    let app_spec_after_generate =
+        std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    assert!(
+        app_spec_after_generate.contains("shell = \"api\"")
+            && !app_spec_after_generate.contains("ui_source"),
+        "api shell should not reintroduce ui_source after domain mutations: {app_spec_after_generate}"
+    );
 
     let output = Command::new("cargo")
         .arg("check")
@@ -798,6 +810,13 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
             && !project_dir.join("src/api/routes.rs").exists()
             && !project_dir.join("src/api/sse.rs").exists(),
         "CLI-shell domain generation should not recreate frontend or Axum route assets"
+    );
+    let app_spec_after_generate =
+        std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    assert!(
+        app_spec_after_generate.contains("shell = \"cli\"")
+            && !app_spec_after_generate.contains("ui_source"),
+        "cli shell should not reintroduce ui_source after domain mutations: {app_spec_after_generate}"
     );
 
     let output = Command::new("cargo")

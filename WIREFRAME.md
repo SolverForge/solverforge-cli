@@ -127,7 +127,8 @@ projections. It tracks:
 - app metadata, including fixed `starter = "neutral-shell"` metadata, selected
   `shell`, and CLI version
 - runtime target metadata and `runtime_source`
-- web-shell `ui_source`
+- web-shell `ui_source`; API and CLI specs must keep `ui_source` absent,
+  including after follow-up domain mutations
 - demo data sizes
 - solution name and score type
 - fact collections
