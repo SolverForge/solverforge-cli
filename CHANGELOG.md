@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.2.0](///compare/v2.0.4...v2.2.0) (2026-05-31)
+
+
+### Features
+
+* **cli:** surface current SolverForge modeling resources fe68122
+
+
+### Bug Fixes
+
+* **scaffold:** preserve absent non-web ui source e12cdef
+
 ## [2.0.4](///compare/v2.0.3...v2.0.4) (2026-05-05)
 
 ## [2.0.3](///compare/v2.0.2...v2.0.3) (2026-05-03)
