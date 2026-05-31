@@ -1,10 +1,13 @@
 # SolverForge Upstream Feature Audit
 
-Audit date: 2026-05-14
+Audit date: 2026-05-31
 
 This audit compares the current `solverforge-cli` scaffold surface against the
 live SolverForge upstream checkout at `/srv/lab/dev/solverforge/solverforge`
-and the latest published `solverforge 0.13.1` crate.
+and the latest published `solverforge 0.15.0` crate that generated projects
+target. The local upstream checkout is currently ahead at `solverforge 0.15.1`;
+published scaffolds intentionally stay on the crates.io target until that
+release is published.
 
 The inclusion bar is starter-safe only: a feature is worth adding to the CLI
 when it helps generated projects express a current SolverForge capability
@@ -12,10 +15,19 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Source Evidence
 
-- Published gate: `cargo info solverforge` confirms `solverforge 0.13.1` is
+- Published gate: `cargo info solverforge` confirms `solverforge 0.15.0` is
   the latest published crate with Rust `1.95` and the scaffolded `serde`,
   `console`, and `verbose-logging` feature set still available.
-- Upstream release: `solverforge/CHANGELOG.md` lists `0.13.1` features for
+- Upstream local checkout: `solverforge/Cargo.toml` is at `0.15.1`, and
+  `solverforge/CHANGELOG.md` lists local follow-up work for fixed-owner list
+  placement and true-regret list insertion scoring.
+- Upstream release: `solverforge/CHANGELOG.md` lists `0.15.0` features for
+  typed shared constraint sets, shared grouped-node state, assignment
+  value-pattern neighborhoods, and required scalar assignment construction.
+- Upstream release: `solverforge/CHANGELOG.md` lists `0.14.1` and `0.14.0`
+  features for shared route metric classes, owner-aware route hooks,
+  complemented direct cross-join groups, and filtered join preservation.
+- Earlier upstream release: `solverforge/CHANGELOG.md` lists features for
   generalized grouped collectors and a scoring fix that preserves joined filter
   source indexes.
 - Upstream release: `solverforge/CHANGELOG.md` lists `0.13.0` features for
@@ -50,12 +62,12 @@ without turning the neutral scaffold into a domain-specific demo.
   `scalar_groups`, `ScalarGroup::assignment`, grouped scalar construction with
   `group_name`, `construction_obligation = "assign_when_candidate_exists"`, and
   `grouped_scalar_move_selector`.
-- CLI coverage today: the scaffold targets `solverforge 0.13.1` and includes
+- CLI coverage today: the scaffold targets `solverforge 0.15.0` and includes
   the retained `SolverManager` lifecycle, typed SSE, snapshots, analysis,
   pause/resume/cancel/delete, generated `solverforge.app.toml`, scalar/list
   variable generation, and scalar hook metadata projection.
 - Local checkout note: `/srv/lab/dev/solverforge/solverforge` remains the
-  source gate used to inspect the `0.13.1` release notes and feature surface.
+  source gate used to inspect the current release notes and feature surface.
 
 ## Inclusion Matrix
 
@@ -93,10 +105,12 @@ coverage for the opt-in advanced resources.
 
 ## Implementation Status
 
-- Validated: `solverforge 0.13.1` is the current upstream source target and the
-  latest crates.io publication. The audit uses the current `scalar_groups` /
-  `ScalarGroup::assignment` vocabulary instead of the superseded coverage-group
-  vocabulary from the earlier 0.12.0 candidate surface.
+- Validated: `solverforge 0.15.0` is the current published scaffold target and
+  latest crates.io publication. The local upstream checkout is `0.15.1`, so the
+  scaffold target should move again only after that crate is published. The
+  audit uses the current `scalar_groups` / `ScalarGroup::assignment` vocabulary
+  instead of the superseded coverage-group vocabulary from the earlier 0.12.0
+  candidate surface.
 - Implemented: scalar `candidate_values`, nearby candidate hooks, nearby
   distance meters, and construction order keys are accepted by
   `solverforge generate variable --kind scalar`, rendered into the
@@ -113,7 +127,7 @@ coverage for the opt-in advanced resources.
   planning inspect construction phases, top-level selectors, neighborhoods,
   nested selector children, and partition child phases instead of scanning only
   flat top-level TOML. This is implemented inside `solverforge-cli`; no
-  post-`0.13.1` upstream `solverforge-config` API is required.
+  unpublished upstream `solverforge-config` API is required.
 - Implemented: scalar-group model-contract validation is shared by
   `solverforge check` and destructive commands. Candidate-backed groups reject
   assignment-only hooks, assignment rules require sequence keys, stale
