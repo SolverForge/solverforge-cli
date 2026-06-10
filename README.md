@@ -6,13 +6,13 @@ Use this CLI to scaffold, grow, and validate SolverForge applications. The CLI
 is its own versioned product: `solverforge --version` reports the CLI package
 version and the scaffold dependency targets separately.
 
-Current CLI package version: `2.2.0`.
+Current CLI package version: `2.2.1`.
 
 Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.15.0`
+- `solverforge 0.15.1`
 - `solverforge-ui 0.6.5` for the default web shell
 - `solverforge-maps 2.1.4` for the default web shell
 
