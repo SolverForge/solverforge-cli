@@ -14,13 +14,13 @@ scaffolding. Shell choice is a delivery surface, not a model family. The
 current shell set is exactly `web`, `api`, and `cli`; Tauri is deferred and has
 no public scaffold selector in this release line.
 
-Current CLI package version: `2.2.1`.
+Current CLI package version: `2.2.2`.
 
 Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.15.1`
+- `solverforge 0.15.2`
 - `solverforge-ui 0.6.5` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
 

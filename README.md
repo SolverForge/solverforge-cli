@@ -6,13 +6,13 @@ Use this CLI to scaffold, grow, and validate SolverForge applications. The CLI
 is its own versioned product: `solverforge --version` reports the CLI package
 version and the scaffold dependency targets separately.
 
-Current CLI package version: `2.2.1`.
+Current CLI package version: `2.2.2`.
 
 Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.15.1`
+- `solverforge 0.15.2`
 - `solverforge-ui 0.6.5` for the default web shell
 - `solverforge-maps 2.1.4` for the default web shell
 
@@ -158,11 +158,12 @@ support dependencies:
 - `uuid 1.23.1`
 - `parking_lot 0.12.5`
 
-The API shell keeps `solverforge`, Axum, Tokio, SSE, serialization, and
-`parking_lot`, but excludes `solverforge-ui`, `solverforge-maps`, and static
-file serving. The CLI shell keeps `solverforge`, Clap, Tokio, serialization,
-and `parking_lot`, but excludes Axum, `tower-http`, `tokio-stream`,
-`solverforge-ui`, `solverforge-maps`, and `static/`.
+The API shell keeps `solverforge`, Axum, Tokio, SSE, `tower-http` CORS,
+serialization, and `parking_lot`, but excludes `solverforge-ui`,
+`solverforge-maps`, and static file serving. The CLI shell keeps
+`solverforge`, Clap, Tokio, serialization, and `parking_lot`, but excludes
+Axum, `tower-http`, `tokio-stream`, `solverforge-ui`, `solverforge-maps`, and
+`static/`.
 
 Persistent `.solverforgerc` files are loaded from the project root first and
 then from `~/.solverforgerc`. Recognized preferences are intentionally narrow:

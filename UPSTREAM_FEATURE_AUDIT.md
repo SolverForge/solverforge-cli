@@ -4,9 +4,9 @@ Audit date: 2026-06-10
 
 This audit compares the current `solverforge-cli` scaffold surface against the
 live SolverForge upstream checkout at `/srv/lab/dev/solverforge/solverforge`
-and the latest published `solverforge 0.15.1` crate that generated projects
+and the latest published `solverforge 0.15.2` crate that generated projects
 target. The local upstream checkout and published scaffold target are aligned
-at `solverforge 0.15.1`.
+at `solverforge 0.15.2`.
 
 The inclusion bar is starter-safe only: a feature is worth adding to the CLI
 when it helps generated projects express a current SolverForge capability
@@ -14,18 +14,21 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Source Evidence
 
-- Published gate: `cargo info solverforge` confirms `solverforge 0.15.1` is
+- Published gate: `cargo info solverforge` confirms `solverforge 0.15.2` is
   the latest published crate with Rust `1.95` and the scaffolded `serde`,
   `console`, and `verbose-logging` feature set still available.
-- Upstream local checkout: `solverforge/Cargo.toml` is at `0.15.1`, and
-  `solverforge/CHANGELOG.md` lists the published `0.15.1` bridge, dynamic
-  runtime slot, precedence, fixed-owner list, and mandatory list construction
-  work.
-- Upstream release: `solverforge/CHANGELOG.md` lists earlier `0.15.1` features
+- Upstream local checkout: `solverforge/Cargo.toml` is at `0.15.2`, and
+  `solverforge/CHANGELOG.md` lists the published `0.15.2` directed projected
+  self-join scoring work.
+- Previous upstream release: `solverforge/CHANGELOG.md` lists `0.15.1`
+  features for the bridge crate, dynamic runtime slots, list precedence hooks,
+  fixed-owner list handling, and mandatory list construction.
+- Earlier upstream release: `solverforge/CHANGELOG.md` lists `0.15.1` features
   for fixed-owner list placement and true-regret list insertion scoring.
-- Previous upstream release: `solverforge/CHANGELOG.md` lists `0.15.0` features for
-  typed shared constraint sets, shared grouped-node state, assignment
-  value-pattern neighborhoods, and required scalar assignment construction.
+- Previous upstream release: `solverforge/CHANGELOG.md` lists `0.15.0`
+  features for typed shared constraint sets, shared grouped-node state,
+  assignment value-pattern neighborhoods, and required scalar assignment
+  construction.
 - Upstream release: `solverforge/CHANGELOG.md` lists `0.14.1` and `0.14.0`
   features for shared route metric classes, owner-aware route hooks,
   complemented direct cross-join groups, and filtered join preservation.
@@ -64,7 +67,7 @@ without turning the neutral scaffold into a domain-specific demo.
   `scalar_groups`, `ScalarGroup::assignment`, grouped scalar construction with
   `group_name`, `construction_obligation = "assign_when_candidate_exists"`, and
   `grouped_scalar_move_selector`.
-- CLI coverage today: the scaffold targets `solverforge 0.15.1` and includes
+- CLI coverage today: the scaffold targets `solverforge 0.15.2` and includes
   the retained `SolverManager` lifecycle, typed SSE, snapshots, analysis,
   pause/resume/cancel/delete, generated `solverforge.app.toml`, scalar/list
   variable generation, and scalar hook metadata projection.
@@ -107,8 +110,8 @@ coverage for the opt-in advanced resources.
 
 ## Implementation Status
 
-- Validated: `solverforge 0.15.1` is the current published scaffold target and
-  latest crates.io publication. The local upstream checkout is also `0.15.1`,
+- Validated: `solverforge 0.15.2` is the current published scaffold target and
+  latest crates.io publication. The local upstream checkout is also `0.15.2`,
   so published scaffolds no longer need a prerelease local-patch gate for this
   target. The audit uses the current `scalar_groups` /
   `ScalarGroup::assignment` vocabulary instead of the superseded coverage-group
