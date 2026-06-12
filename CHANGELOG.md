@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.2.2](///compare/v2.2.0...v2.2.2) (2026-06-12)
+
+
+### Bug Fixes
+
+* **ci:** harden forgejo rust checks c033b2f
+
 ## [2.2.0](///compare/v2.0.4...v2.2.0) (2026-05-31)
 
 
