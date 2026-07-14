@@ -429,6 +429,7 @@ fn test_generate_skeleton_unary_hard() {
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
+                countable_range: None,
                 allows_unassigned: true,
                 hooks: ScalarVariableHooks::default(),
             }],
@@ -470,6 +471,7 @@ fn test_generate_skeleton_pair_hard() {
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
+                countable_range: None,
                 allows_unassigned: true,
                 hooks: ScalarVariableHooks::default(),
             }],
@@ -510,6 +512,7 @@ fn test_generate_skeleton_join_hard() {
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
+                countable_range: None,
                 allows_unassigned: true,
                 hooks: ScalarVariableHooks::default(),
             }],
@@ -557,6 +560,7 @@ fn test_generate_skeleton_balance_soft() {
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
+                countable_range: None,
                 allows_unassigned: true,
                 hooks: ScalarVariableHooks::default(),
             }],
@@ -593,6 +597,7 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
+                countable_range: None,
                 allows_unassigned: true,
                 hooks: ScalarVariableHooks::default(),
             }],
@@ -692,6 +697,7 @@ fn grouped_skeleton_domain() -> DomainModel {
             scalar_vars: vec![ScalarVarInfo {
                 field: "employee_idx".to_string(),
                 value_range_provider: "employees".to_string(),
+                countable_range: None,
                 allows_unassigned: true,
                 hooks: ScalarVariableHooks::default(),
             }],

@@ -442,7 +442,6 @@ pub(crate) fn resolve_scalar_target(domain: &DomainModel, raw: &str) -> CliResul
             kind: "scalar variable",
             name: raw.to_string(),
         })?;
-
     Ok(ScalarTargetRef {
         entity: snake_case(&entity.item_type),
         entity_type: entity.item_type.clone(),
@@ -814,6 +813,7 @@ mod tests {
                     scalar_vars: vec![ScalarVarInfo {
                         field: "resource_idx".to_string(),
                         value_range_provider: "resources".to_string(),
+                        countable_range: None,
                         allows_unassigned: true,
                         hooks: Default::default(),
                     }],

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::list_variable_metadata::ListVariableMetadata;
 use crate::managed_block;
 use crate::scalar_variable_hooks::ScalarVariableHooks;
 
@@ -409,18 +410,6 @@ where
     managed_block::replace_block(src, label, &lines.join("\n"))
 }
 
-fn remove_field_entry_from_block(src: &str, label: &str, field: &str) -> Result<String, String> {
-    let entries = read_managed_field_entries(src, label)?;
-    if !entries.iter().any(|entry| entry.field_name == field) {
-        return Err(format!("field '{field}' not found"));
-    }
-    let retained = entries
-        .into_iter()
-        .filter(|entry| entry.field_name != field)
-        .collect::<Vec<_>>();
-    managed_block::replace_block(src, label, &render_managed_field_entries(&retained))
-}
-
 fn block_has_field_entry(src: &str, label: &str, field: &str) -> Result<bool, String> {
     Ok(read_managed_field_entries(src, label)?
         .iter()
@@ -564,40 +553,59 @@ pub(crate) fn inject_planning_variable(
         src,
         entity,
         field,
-        "",
-        true,
-        &ScalarVariableHooks::default(),
+        ScalarVariableWiring {
+            range: "",
+            countable_range: None,
+            allows_unassigned: true,
+            hooks: &ScalarVariableHooks::default(),
+        },
     )
+}
+
+pub(crate) struct ScalarVariableWiring<'a> {
+    pub(crate) range: &'a str,
+    pub(crate) countable_range: Option<&'a str>,
+    pub(crate) allows_unassigned: bool,
+    pub(crate) hooks: &'a ScalarVariableHooks,
 }
 
 pub(crate) fn inject_scalar_variable(
     src: &str,
     entity: &str,
     field: &str,
-    range: &str,
-    allows_unassigned: bool,
-    hooks: &ScalarVariableHooks,
+    wiring: ScalarVariableWiring<'_>,
 ) -> Result<String, String> {
-    let field_line = format!("    pub {field}: Option<usize>,");
+    let ScalarVariableWiring {
+        range,
+        countable_range,
+        allows_unassigned,
+        hooks,
+    } = wiring;
     if block_has_field_entry(src, ENTITY_VARIABLES_BLOCK, field)? {
         return Err(format!("field '{field}' already exists in {entity}"));
     }
 
-    let annotation = render_scalar_variable_annotation(range, allows_unassigned, hooks);
-    let init_line = format!("            {field}: None,");
+    let annotation =
+        render_scalar_variable_annotation(range, countable_range, allows_unassigned, hooks);
+    let field_lines = vec![annotation, format!("    pub {field}: Option<usize>,")];
+    let init_lines = [format!("            {field}: None,")];
 
-    let src = append_unique_lines(src, ENTITY_VARIABLES_BLOCK, &[annotation, field_line])?;
-    append_unique_line(&src, ENTITY_VARIABLE_INIT_BLOCK, &init_line)
+    let src = append_unique_lines(src, ENTITY_VARIABLES_BLOCK, &field_lines)?;
+    append_unique_lines(&src, ENTITY_VARIABLE_INIT_BLOCK, &init_lines)
 }
 
 fn render_scalar_variable_annotation(
     range: &str,
+    countable_range: Option<&str>,
     allows_unassigned: bool,
     hooks: &ScalarVariableHooks,
 ) -> String {
     let mut args = Vec::new();
     if !range.is_empty() {
         args.push(format!("value_range_provider = \"{range}\""));
+    }
+    if let Some(range) = countable_range {
+        args.push(format!("countable_range = \"{range}\""));
     }
     args.push(format!("allows_unassigned = {allows_unassigned}"));
     for (name, value) in hooks.entries() {
@@ -627,25 +635,66 @@ pub(crate) fn inject_list_variable(
     entity: &str,
     field: &str,
     elements: &str,
+    metadata: &ListVariableMetadata,
 ) -> Result<String, String> {
     let field_line = format!("    pub {field}: Vec<usize>,");
     if block_has_field_entry(src, ENTITY_VARIABLES_BLOCK, field)? {
         return Err(format!("field '{field}' already exists in {entity}"));
     }
 
-    let annotation = format!("    #[planning_list_variable(element_collection = \"{elements}\")]");
+    let annotation = render_list_variable_annotation(elements, metadata);
     let init_line = format!("            {field}: Vec::new(),");
 
     let src = append_unique_lines(src, ENTITY_VARIABLES_BLOCK, &[annotation, field_line])?;
     append_unique_line(&src, ENTITY_VARIABLE_INIT_BLOCK, &init_line)
 }
 
+fn render_list_variable_annotation(elements: &str, metadata: &ListVariableMetadata) -> String {
+    let mut args = vec![format!("element_collection = \"{elements}\"")];
+    for (name, value) in metadata.entries() {
+        if let Some(value) = value {
+            args.push(format!("{name} = \"{value}\""));
+        }
+    }
+
+    if metadata.is_empty() {
+        return format!("    #[planning_list_variable({})]", args.join(", "));
+    }
+
+    let rendered_args = args
+        .iter()
+        .enumerate()
+        .map(|(index, arg)| {
+            let suffix = if index + 1 == args.len() { "" } else { "," };
+            format!("        {arg}{suffix}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("    #[planning_list_variable(\n{rendered_args}\n    )]")
+}
+
 pub(crate) fn remove_variable_field(src: &str, field: &str) -> Result<String, String> {
-    let src = remove_field_entry_from_block(src, ENTITY_VARIABLES_BLOCK, field)?;
-    remove_entry_from_block(src.as_str(), ENTITY_VARIABLE_INIT_BLOCK, |line| {
-        let trimmed = line.trim();
-        trimmed == format!("{field}: None,") || trimmed == format!("{field}: Vec::new(),")
-    })
+    let entries = read_managed_field_entries(src, ENTITY_VARIABLES_BLOCK)?;
+    if !entries.iter().any(|entry| entry.field_name == field) {
+        return Err(format!("field '{field}' not found"));
+    }
+    let retained = entries
+        .into_iter()
+        .filter(|entry| entry.field_name != field)
+        .collect::<Vec<_>>();
+    let src = managed_block::replace_block(
+        src,
+        ENTITY_VARIABLES_BLOCK,
+        &render_managed_field_entries(&retained),
+    )?;
+    let initializers = read_non_empty_block_lines(&src, ENTITY_VARIABLE_INIT_BLOCK)?
+        .into_iter()
+        .filter(|line| {
+            let trimmed = line.trim();
+            trimmed != format!("{field}: None,") && trimmed != format!("{field}: Vec::new(),")
+        })
+        .collect::<Vec<_>>();
+    managed_block::replace_block(&src, ENTITY_VARIABLE_INIT_BLOCK, &initializers.join("\n"))
 }
 
 /// Replaces the score type in the solution file.

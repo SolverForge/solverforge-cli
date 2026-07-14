@@ -122,7 +122,6 @@ fn mixed_runtime_pipeline() {
             "scalar",
             "--range",
             "resources",
-            "--allows-unassigned",
         ],
     );
     app.run_cli("Generate fact items", &["generate", "fact", "item"]);
@@ -146,9 +145,10 @@ fn mixed_runtime_pipeline() {
     );
     app.phase("Seed non-empty mixed demo data");
     app.write_file("src/data/data_seed.rs", seeded_mixed_data_module());
+    app.write_file("solver.toml", short_runtime_solver_config());
     app.cargo_build("Build generated mixed app");
 
-    // PHASE 2: boot the generated server and verify the mixed runtime surface.
+    // PHASE 2: boot the generated server and execute the mixed runtime surface.
     let port = app.start_server();
     let client: Client = app.client();
     let base_url = app.base_url(port);
@@ -176,6 +176,68 @@ fn mixed_runtime_pipeline() {
             .expect("containers array")
             .len()
             >= 3
+    );
+
+    let job_id = app.create_job_from_demo(&client, port, "STANDARD");
+    let live = wait_for_live_job_snapshot(&client, &base_url, &job_id);
+    assert_eq!(live["lifecycleState"], "SOLVING");
+
+    let snapshot = client
+        .get(format!("{base_url}/jobs/{job_id}/snapshot"))
+        .send()
+        .expect("mixed snapshot request failed")
+        .error_for_status()
+        .expect("mixed snapshot should be successful")
+        .json::<Value>()
+        .expect("mixed snapshot should return JSON");
+    let solution = &snapshot["solution"];
+    assert!(solution["tasks"].is_array());
+    assert!(solution["containers"].is_array());
+    assert!(
+        solution["tasks"]
+            .as_array()
+            .is_some_and(|tasks| tasks.iter().any(|task| task["resource_idx"].is_number())),
+        "mixed construction should assign at least one scalar variable: {solution:?}"
+    );
+    let assigned_items = solution["containers"]
+        .as_array()
+        .expect("containers should be an array")
+        .iter()
+        .map(|container| {
+            container["item_order"]
+                .as_array()
+                .expect("item_order should be an array")
+                .len()
+        })
+        .sum::<usize>();
+    assert_eq!(
+        assigned_items,
+        solution["items"]
+            .as_array()
+            .expect("items should be an array")
+            .len(),
+        "mixed construction should place every list element"
+    );
+
+    assert_eq!(
+        client
+            .post(format!("{base_url}/jobs/{job_id}/cancel"))
+            .send()
+            .expect("mixed cancel request failed")
+            .status()
+            .as_u16(),
+        202
+    );
+    let cancelled = wait_for_job_state(&client, &base_url, &job_id, "CANCELLED");
+    assert_eq!(cancelled["terminalReason"], "cancelled");
+    assert_eq!(
+        client
+            .delete(format!("{base_url}/jobs/{job_id}"))
+            .send()
+            .expect("mixed delete request failed")
+            .status()
+            .as_u16(),
+        204
     );
 
     app.mark_success();
@@ -231,8 +293,19 @@ fn scalar_solver_pipeline() {
     assert!(solving.get("currentScore").is_some());
     assert!(solving.get("bestScore").is_some());
     assert!(solving["telemetry"]["movesGenerated"].is_number());
+    assert!(solving["telemetry"]["movesApplied"].is_number());
+    assert!(solving["telemetry"]["movesNotDoable"].is_number());
+    assert!(solving["telemetry"]["movesAcceptorRejected"].is_number());
+    assert!(solving["telemetry"]["movesForagerIgnored"].is_number());
+    assert!(solving["telemetry"]["movesHardImproving"].is_number());
+    assert!(solving["telemetry"]["conflictRepairExposed"].is_number());
+    assert!(solving["telemetry"]["constructionSlotsAssigned"].is_number());
+    assert!(solving["telemetry"]["scalarAssignmentRequiredRemaining"].is_number());
     assert!(solving["telemetry"]["generationMs"].is_number());
     assert!(solving["telemetry"]["evaluationMs"].is_number());
+    assert!(solving["telemetry"]["selectorTelemetry"].is_array());
+    assert!(solving["telemetry"]["moveTelemetry"].is_array());
+    assert!(solving["telemetry"]["appliedMoveTrace"].is_array());
 
     let latest_snapshot = client
         .get(format!("{base_url}/jobs/{live_job_id}/snapshot"))
@@ -448,6 +521,24 @@ fn scalar_solver_pipeline() {
         .json::<Value>()
         .expect("completed analysis should return JSON");
     assert!(completed_analysis["analysis"]["constraints"].is_array());
+    let completed_telemetry = client
+        .get(format!("{base_url}/jobs/{completed_job_id}/telemetry"))
+        .send()
+        .expect("completed telemetry request failed")
+        .error_for_status()
+        .expect("completed telemetry should be successful")
+        .json::<Value>()
+        .expect("completed telemetry should return JSON");
+    assert_eq!(completed_telemetry["jobId"], completed_job_id);
+    assert_eq!(
+        completed_telemetry["candidateTrace"]["header"]["formatVersion"],
+        3
+    );
+    assert_eq!(completed_telemetry["candidateTrace"]["maxEntries"], 128);
+    assert!(completed_telemetry["candidateTrace"]["totalPulls"].is_number());
+    assert!(completed_telemetry["candidateTrace"]["pulls"].is_array());
+    assert!(completed_telemetry["candidateTrace"]["prefixDigest"]["firstHex"].is_string());
+    assert!(completed_telemetry["candidateTrace"]["provenanceStatus"]["qualification"].is_string());
     assert_eq!(
         app.read_first_sse_event(&client, port, &completed_job_id)["eventType"],
         "completed"
@@ -459,6 +550,59 @@ fn scalar_solver_pipeline() {
         .expect("completed cancel request failed")
         .status();
     assert_eq!(completed_cancel_status.as_u16(), 409);
+
+    let digest = "00".repeat(32);
+    let qualified_response = client
+        .post(format!("{base_url}/jobs/qualified"))
+        .json(&serde_json::json!({
+            "plan": fetch_demo_data(&client, &base_url, "SMALL"),
+            "provenance": {
+                "schemaDigestSha256": digest,
+                "instanceDigestSha256": "11".repeat(32),
+                "initialStateDigestSha256": "22".repeat(32),
+                "coreTreeDigestSha256": "33".repeat(32),
+                "buildDigestSha256": "44".repeat(32),
+                "producer": "solverforge-cli-runtime-test"
+            }
+        }))
+        .send()
+        .expect("qualified job request failed")
+        .error_for_status()
+        .expect("qualified job should be accepted")
+        .json::<Value>()
+        .expect("qualified job response should be JSON");
+    let qualified_job_id = qualified_response["id"]
+        .as_str()
+        .expect("qualified job response should contain an id")
+        .to_string();
+    let _qualified_completed =
+        wait_for_job_state(&client, &base_url, &qualified_job_id, "COMPLETED");
+    let qualified_telemetry = client
+        .get(format!("{base_url}/jobs/{qualified_job_id}/telemetry"))
+        .send()
+        .expect("qualified telemetry request failed")
+        .error_for_status()
+        .expect("qualified telemetry should be successful")
+        .json::<Value>()
+        .expect("qualified telemetry should return JSON");
+    assert_eq!(
+        qualified_telemetry["candidateTrace"]["provenanceStatus"]["qualification"],
+        "qualified"
+    );
+    assert_eq!(
+        qualified_telemetry["candidateTrace"]["header"]["qualifiedRunProvenance"]
+            ["attestationProducer"],
+        "solverforge-cli-runtime-test"
+    );
+    assert_eq!(
+        client
+            .delete(format!("{base_url}/jobs/{qualified_job_id}"))
+            .send()
+            .expect("qualified job delete failed")
+            .status()
+            .as_u16(),
+        204
+    );
 
     let completed_delete_status = client
         .delete(format!("{base_url}/jobs/{completed_job_id}"))
@@ -535,5 +679,8 @@ limit = 4
 
 [termination]
 seconds_spent_limit = 5
+
+[candidate_trace]
+max_entries = 128
 "#
 }

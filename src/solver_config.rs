@@ -187,6 +187,7 @@ impl SolverConfigDocument {
     fn from_raw(path: PathBuf, raw: String) -> CliResult<Self> {
         let doc = Self { path, raw };
         doc.validate_managed_blocks()?;
+        validate_current_settings(&doc.raw)?;
         doc.index()?;
         Ok(doc)
     }
@@ -377,6 +378,29 @@ impl AppSpec {
 
 pub(crate) fn validate_managed_blocks(raw: &str) -> CliResult {
     parse_managed_region(raw).map(|_| ())
+}
+
+pub(crate) fn validate_current_settings(raw: &str) -> CliResult {
+    let value: toml::Value = toml::from_str(raw)
+        .map_err(|err| CliError::general(format!("failed to parse solver.toml: {err}")))?;
+    let Some(candidate_trace) = value.get("candidate_trace") else {
+        return Ok(());
+    };
+    let table = candidate_trace
+        .as_table()
+        .ok_or_else(|| CliError::general("solver.toml candidate_trace must be a TOML table"))?;
+    let max_entries = table
+        .get("max_entries")
+        .and_then(toml::Value::as_integer)
+        .ok_or_else(|| {
+            CliError::general("solver.toml candidate_trace.max_entries must be a positive integer")
+        })?;
+    if max_entries <= 0 {
+        return Err(CliError::general(
+            "solver.toml candidate_trace.max_entries must be a positive integer",
+        ));
+    }
+    Ok(())
 }
 
 fn parse_managed_region(raw: &str) -> CliResult<Option<ManagedRegion>> {
@@ -1476,5 +1500,23 @@ group_name = "other"
         .unwrap_err();
 
         assert!(err.to_string().contains("does not match reference"));
+    }
+
+    #[test]
+    fn candidate_trace_requires_positive_capacity() {
+        for raw in [
+            "[candidate_trace]\n",
+            "[candidate_trace]\nmax_entries = 0\n",
+            "candidate_trace = \"enabled\"\n",
+        ] {
+            let err = validate_current_settings(raw).expect_err("invalid trace config should fail");
+            assert!(err.to_string().contains("candidate_trace"));
+        }
+    }
+
+    #[test]
+    fn candidate_trace_accepts_bounded_capacity() {
+        validate_current_settings("[candidate_trace]\nmax_entries = 128\n")
+            .expect("positive trace capacity should validate");
     }
 }

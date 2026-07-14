@@ -173,6 +173,46 @@ fn run_set_updates_nested_value_in_inline_table() {
 }
 
 #[test]
+fn run_set_enables_bounded_candidate_trace() {
+    let _cwd_guard = lock_cwd();
+    let tmp = tempdir().expect("failed to create temp dir");
+    let original_dir = std::env::current_dir().expect("failed to read current dir");
+    std::env::set_current_dir(tmp.path()).expect("failed to enter temp dir");
+    fs::write("solver.toml", "[termination]\nseconds_spent_limit = 30\n")
+        .expect("failed to write solver.toml");
+
+    run_set("candidate_trace.max_entries", "1024").expect("trace setting should succeed");
+
+    let saved = fs::read_to_string("solver.toml").expect("failed to read solver.toml");
+    std::env::set_current_dir(original_dir).expect("failed to restore current dir");
+    let saved_doc: toml::Value = toml::from_str(&saved).expect("saved toml should be valid");
+    assert_eq!(
+        saved_doc["candidate_trace"]["max_entries"],
+        toml::Value::Integer(1024)
+    );
+}
+
+#[test]
+fn run_set_rejects_zero_candidate_trace_capacity_without_writing() {
+    let _cwd_guard = lock_cwd();
+    let tmp = tempdir().expect("failed to create temp dir");
+    let original_dir = std::env::current_dir().expect("failed to read current dir");
+    std::env::set_current_dir(tmp.path()).expect("failed to enter temp dir");
+    let original = "[termination]\nseconds_spent_limit = 30\n";
+    fs::write("solver.toml", original).expect("failed to write solver.toml");
+
+    let error =
+        run_set("candidate_trace.max_entries", "0").expect_err("zero trace capacity should fail");
+
+    let saved = fs::read_to_string("solver.toml").expect("failed to read solver.toml");
+    std::env::set_current_dir(original_dir).expect("failed to restore current dir");
+    assert_eq!(saved, original);
+    assert!(error
+        .to_string()
+        .contains("candidate_trace.max_entries must be a positive TOML integer"));
+}
+
+#[test]
 fn run_set_stores_string_values_as_strings() {
     let _cwd_guard = lock_cwd();
     let tmp = tempdir().expect("failed to create temp dir");

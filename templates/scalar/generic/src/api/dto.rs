@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use solverforge::{
-    HardSoftScore, SolverLifecycleState, SolverSnapshot, SolverSnapshotAnalysis, SolverStatus,
-    SolverTelemetry, SolverTerminalReason,
+    CandidateTraceExternalDigest, HardSoftScore, QualifiedCandidateTraceRunProvenance,
+    SolverLifecycleState, SolverSnapshot, SolverSnapshotAnalysis, SolverStatus,
+    SolverTelemetryDetail, SolverTerminalReason,
 };
-use std::time::Duration;
+
+use super::telemetry::{CandidateTraceDto, TelemetryDto};
 
 use crate::domain::Plan;
 
@@ -32,21 +34,6 @@ pub struct ConstraintAnalysisDto {
 pub struct AnalyzeResponse {
     pub score: String,
     pub constraints: Vec<ConstraintAnalysisDto>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TelemetryDto {
-    pub elapsed_ms: u64,
-    pub step_count: u64,
-    pub moves_generated: u64,
-    pub moves_evaluated: u64,
-    pub moves_accepted: u64,
-    pub score_calculations: u64,
-    pub generation_ms: u64,
-    pub evaluation_ms: u64,
-    pub moves_per_second: u64,
-    pub acceptance_rate: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -89,6 +76,33 @@ pub struct JobAnalysisDto {
     pub analysis: AnalyzeResponse,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobTelemetryDetailDto {
+    pub id: String,
+    pub job_id: String,
+    pub status: JobSummaryDto,
+    pub candidate_trace: Option<CandidateTraceDto>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QualifiedJobRequestDto {
+    pub plan: PlanDto,
+    pub provenance: QualifiedCandidateTraceProvenanceDto,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QualifiedCandidateTraceProvenanceDto {
+    pub schema_digest_sha256: String,
+    pub instance_digest_sha256: String,
+    pub initial_state_digest_sha256: String,
+    pub core_tree_digest_sha256: String,
+    pub build_digest_sha256: String,
+    pub producer: String,
+}
+
 impl PlanDto {
     pub fn from_plan(plan: &Plan) -> Self {
         let mut fields = match serde_json::to_value(plan).expect("failed to serialize plan") {
@@ -116,26 +130,6 @@ impl PlanDto {
     }
 }
 
-impl TelemetryDto {
-    pub fn from_runtime(telemetry: &SolverTelemetry) -> Self {
-        Self {
-            elapsed_ms: duration_to_millis(telemetry.elapsed),
-            step_count: telemetry.step_count,
-            moves_generated: telemetry.moves_generated,
-            moves_evaluated: telemetry.moves_evaluated,
-            moves_accepted: telemetry.moves_accepted,
-            score_calculations: telemetry.score_calculations,
-            generation_ms: duration_to_millis(telemetry.generation_time),
-            evaluation_ms: duration_to_millis(telemetry.evaluation_time),
-            moves_per_second: whole_units_per_second(telemetry.moves_evaluated, telemetry.elapsed),
-            acceptance_rate: derive_acceptance_rate(
-                telemetry.moves_accepted,
-                telemetry.moves_evaluated,
-            ),
-        }
-    }
-}
-
 impl JobSummaryDto {
     pub fn from_status(job_id: usize, status: &SolverStatus<HardSoftScore>) -> Self {
         Self {
@@ -150,6 +144,38 @@ impl JobSummaryDto {
             best_score: status.best_score.map(|score| score.to_string()),
             telemetry: TelemetryDto::from_runtime(&status.telemetry),
         }
+    }
+}
+
+impl JobTelemetryDetailDto {
+    pub fn from_runtime(detail: &SolverTelemetryDetail<HardSoftScore>) -> Self {
+        let job_id = detail.status.job_id;
+        Self {
+            id: job_id.to_string(),
+            job_id: job_id.to_string(),
+            status: JobSummaryDto::from_status(job_id, &detail.status),
+            candidate_trace: detail
+                .candidate_trace
+                .as_ref()
+                .map(CandidateTraceDto::from_runtime),
+        }
+    }
+}
+
+impl QualifiedCandidateTraceProvenanceDto {
+    pub fn to_runtime(&self) -> Result<QualifiedCandidateTraceRunProvenance, String> {
+        QualifiedCandidateTraceRunProvenance::externally_attested(
+            parse_sha256("schemaDigestSha256", &self.schema_digest_sha256)?,
+            parse_sha256("instanceDigestSha256", &self.instance_digest_sha256)?,
+            parse_sha256(
+                "initialStateDigestSha256",
+                &self.initial_state_digest_sha256,
+            )?,
+            parse_sha256("coreTreeDigestSha256", &self.core_tree_digest_sha256)?,
+            parse_sha256("buildDigestSha256", &self.build_digest_sha256)?,
+            self.producer.clone(),
+        )
+        .map_err(|error| error.to_string())
     }
 }
 
@@ -221,27 +247,26 @@ pub fn terminal_reason_label(reason: SolverTerminalReason) -> &'static str {
     }
 }
 
-fn duration_to_millis(duration: Duration) -> u64 {
-    duration.as_millis().min(u128::from(u64::MAX)) as u64
-}
-
-fn whole_units_per_second(count: u64, elapsed: Duration) -> u64 {
-    let nanos = elapsed.as_nanos();
-    if nanos == 0 {
-        0
-    } else {
-        let per_second = u128::from(count)
-            .saturating_mul(1_000_000_000)
-            .checked_div(nanos)
-            .unwrap_or(0);
-        per_second.min(u128::from(u64::MAX)) as u64
+fn parse_sha256(name: &str, value: &str) -> Result<CandidateTraceExternalDigest, String> {
+    if value.len() != 64 {
+        return Err(format!(
+            "{name} must contain exactly 64 hexadecimal characters"
+        ));
     }
+    let mut bytes = [0_u8; 32];
+    for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+        let high = hex_nibble(pair[0]).ok_or_else(|| format!("{name} must be hexadecimal"))?;
+        let low = hex_nibble(pair[1]).ok_or_else(|| format!("{name} must be hexadecimal"))?;
+        bytes[index] = (high << 4) | low;
+    }
+    Ok(CandidateTraceExternalDigest::sha256(bytes))
 }
 
-fn derive_acceptance_rate(moves_accepted: u64, moves_evaluated: u64) -> f64 {
-    if moves_evaluated == 0 {
-        0.0
-    } else {
-        moves_accepted as f64 / moves_evaluated as f64
+fn hex_nibble(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
     }
 }

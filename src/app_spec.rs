@@ -5,6 +5,7 @@ use std::path::Path;
 
 use crate::commands::generate_constraint::domain::{list_constraints, parse_domain};
 use crate::error::{CliError, CliResult};
+use crate::list_variable_metadata::ListVariableMetadata;
 use crate::scalar_variable_hooks::ScalarVariableHooks;
 
 const APP_SPEC_PATH: &str = "solverforge.app.toml";
@@ -91,12 +92,16 @@ pub struct VariableSpec {
     pub kind: String,
     #[serde(default)]
     pub range: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub countable_range: Option<String>,
     #[serde(default)]
     pub elements: String,
     #[serde(default)]
     pub allows_unassigned: bool,
     #[serde(default, flatten)]
     pub scalar_hooks: ScalarVariableHooks,
+    #[serde(default, flatten)]
+    pub list_metadata: ListVariableMetadata,
     #[serde(default = "default_true")]
     pub enabled: bool,
 }
@@ -289,14 +294,18 @@ pub fn sync_from_project() -> CliResult {
                         entity_plural: entity_plural.clone(),
                         field: var.field.clone(),
                         kind: "scalar".to_string(),
-                        range: if var.value_range_provider.is_empty() {
+                        range: if var.value_range_provider.is_empty()
+                            && var.countable_range.is_none()
+                        {
                             default_fact_plural.clone()
                         } else {
                             var.value_range_provider.clone()
                         },
+                        countable_range: var.countable_range.clone(),
                         elements: String::new(),
                         allows_unassigned: var.allows_unassigned,
                         scalar_hooks: var.hooks.clone(),
+                        list_metadata: ListVariableMetadata::default(),
                         enabled: true,
                     });
                 }
@@ -307,6 +316,7 @@ pub fn sync_from_project() -> CliResult {
                         field: var.field.clone(),
                         kind: "list".to_string(),
                         range: String::new(),
+                        countable_range: None,
                         elements: if var.element_collection.is_empty() {
                             default_fact_plural.clone()
                         } else {
@@ -314,6 +324,7 @@ pub fn sync_from_project() -> CliResult {
                         },
                         allows_unassigned: false,
                         scalar_hooks: ScalarVariableHooks::default(),
+                        list_metadata: var.metadata.clone(),
                         enabled: true,
                     });
                 }
@@ -417,6 +428,12 @@ fn write_ui_model(spec: &AppSpec) -> CliResult {
         .map(|variable| {
             let (kind, source_collection) = variable_source_collection(variable)?;
             let source_plural = resolve_collection_plural(&spec.facts, source_collection);
+            let countable_range = variable
+                .countable_range
+                .as_deref()
+                .map(crate::countable_range::CountableRange::parse)
+                .transpose()
+                .map_err(CliError::general)?;
             Ok(json!({
                 "id": format!("{}-{}", variable.entity, variable.field),
                 "kind": kind,
@@ -424,9 +441,14 @@ fn write_ui_model(spec: &AppSpec) -> CliResult {
                 "entity": variable.entity,
                 "entityPlural": variable.entity_plural,
                 "sourcePlural": source_plural,
+                "countableRange": countable_range.map(|range| json!({
+                    "from": range.from,
+                    "to": range.to
+                })),
                 "variableField": variable.field,
                 "allowsUnassigned": variable.allows_unassigned,
-                "scalarHooks": scalar_hook_metadata_json(&variable.scalar_hooks)
+                "scalarHooks": scalar_hook_metadata_json(&variable.scalar_hooks),
+                "listMetadata": list_metadata_json(&variable.list_metadata)
             }))
         })
         .collect::<CliResult<Vec<_>>>()?;
@@ -477,6 +499,16 @@ fn scalar_hook_metadata_json(hooks: &ScalarVariableHooks) -> serde_json::Value {
     for (name, hook) in hooks.entries() {
         if let Some(hook) = hook {
             value.insert(snake_to_camel(name), json!(hook));
+        }
+    }
+    serde_json::Value::Object(value)
+}
+
+fn list_metadata_json(metadata: &ListVariableMetadata) -> serde_json::Value {
+    let mut value = serde_json::Map::new();
+    for (name, entry) in metadata.entries() {
+        if let Some(entry) = entry {
+            value.insert(snake_to_camel(name), json!(entry));
         }
     }
     serde_json::Value::Object(value)

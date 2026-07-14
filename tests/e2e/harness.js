@@ -337,7 +337,7 @@ async function scaffoldScenario(name, generatorCommands) {
   });
   const dependencyMode = applyGeneratedProjectDependencyOverrides(projectDir);
   if (dependencyMode === 'crates-io') {
-    phase(suite, 'Using published SolverForge crate targets');
+    phase(suite, 'Using registry SolverForge dependency targets');
   } else {
     phase(suite, 'Using explicit local Cargo patches from generated .cargo/config.toml');
   }

@@ -2,35 +2,19 @@ use parking_lot::RwLock;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 
 use solverforge::{
-    HardSoftScore, SolverEvent, SolverEventMetadata, SolverLifecycleState, SolverManager,
-    SolverManagerError, SolverSnapshot, SolverSnapshotAnalysis, SolverStatus, SolverTelemetry,
-    SolverTerminalReason,
+    HardSoftScore, QualifiedCandidateTraceRunProvenance, SolverEvent, SolverEventMetadata,
+    SolverLifecycleState, SolverManager, SolverManagerError, SolverSnapshot,
+    SolverSnapshotAnalysis, SolverStatus, SolverTelemetryDetail, SolverTerminalReason,
 };
 
-use crate::api::PlanDto;
+use crate::api::{PlanDto, TelemetryDto};
 use crate::domain::Plan;
 
 // Static manager — must be 'static for retained job execution.
 static MANAGER: SolverManager<Plan> = SolverManager::new();
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TelemetryPayload {
-    elapsed_ms: u64,
-    step_count: u64,
-    moves_generated: u64,
-    moves_evaluated: u64,
-    moves_accepted: u64,
-    score_calculations: u64,
-    generation_ms: u64,
-    evaluation_ms: u64,
-    moves_per_second: u64,
-    acceptance_rate: f64,
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,7 +25,7 @@ struct JobEventPayload {
     event_sequence: u64,
     lifecycle_state: &'static str,
     terminal_reason: Option<&'static str>,
-    telemetry: TelemetryPayload,
+    telemetry: TelemetryDto,
     current_score: Option<String>,
     best_score: Option<String>,
     snapshot_revision: Option<u64>,
@@ -67,6 +51,24 @@ impl SolverService {
 
     pub fn start_job(&self, plan: Plan) -> Result<String, SolverManagerError> {
         let (job_id, receiver) = MANAGER.solve(plan)?;
+        Ok(self.retain_job(job_id, receiver))
+    }
+
+    pub fn start_qualified_job(
+        &self,
+        plan: Plan,
+        provenance: QualifiedCandidateTraceRunProvenance,
+    ) -> Result<String, SolverManagerError> {
+        let (job_id, receiver) =
+            MANAGER.solve_with_qualified_candidate_trace_provenance(plan, provenance)?;
+        Ok(self.retain_job(job_id, receiver))
+    }
+
+    fn retain_job(
+        &self,
+        job_id: usize,
+        receiver: mpsc::UnboundedReceiver<SolverEvent<Plan>>,
+    ) -> String {
         let (sse_tx, _) = broadcast::channel(64);
 
         self.jobs.write().insert(
@@ -81,7 +83,7 @@ impl SolverService {
             drain_receiver(jobs, job_id, sse_tx, receiver).await;
         });
 
-        Ok(job_id.to_string())
+        job_id.to_string()
     }
 
     pub fn subscribe(&self, id: &str) -> Option<broadcast::Receiver<String>> {
@@ -115,6 +117,13 @@ impl SolverService {
     pub fn get_status(&self, id: &str) -> Result<SolverStatus<HardSoftScore>, SolverManagerError> {
         let job_id = parse_job_id(id)?;
         MANAGER.get_status(job_id)
+    }
+
+    pub fn get_telemetry_detail(
+        &self,
+        id: &str,
+    ) -> Result<SolverTelemetryDetail<HardSoftScore>, SolverManagerError> {
+        MANAGER.get_telemetry_detail(parse_job_id(id)?)
     }
 
     pub fn pause(&self, id: &str) -> Result<(), SolverManagerError> {
@@ -212,7 +221,7 @@ fn status_event_payload(
         event_sequence: status.event_sequence,
         lifecycle_state: lifecycle_state_label(status.lifecycle_state),
         terminal_reason: status.terminal_reason.map(terminal_reason_label),
-        telemetry: telemetry_payload(&status.telemetry),
+        telemetry: TelemetryDto::from_runtime(&status.telemetry),
         current_score: status.current_score.map(|score| score.to_string()),
         best_score: status.best_score.map(|score| score.to_string()),
         snapshot_revision: status.latest_snapshot_revision,
@@ -234,7 +243,7 @@ fn snapshot_status_event_payload(
         event_sequence: status.event_sequence,
         lifecycle_state: lifecycle_state_label(status.lifecycle_state),
         terminal_reason: status.terminal_reason.map(terminal_reason_label),
-        telemetry: telemetry_payload(&status.telemetry),
+        telemetry: TelemetryDto::from_runtime(&status.telemetry),
         current_score: status
             .current_score
             .or(snapshot.current_score)
@@ -281,7 +290,7 @@ fn event_payload(
         event_sequence: metadata.event_sequence,
         lifecycle_state: lifecycle_state_label(metadata.lifecycle_state),
         terminal_reason: metadata.terminal_reason.map(terminal_reason_label),
-        telemetry: telemetry_payload(&metadata.telemetry),
+        telemetry: TelemetryDto::from_runtime(&metadata.telemetry),
         current_score: metadata.current_score.map(|score| score.to_string()),
         best_score: metadata.best_score.map(|score| score.to_string()),
         snapshot_revision: metadata.snapshot_revision,
@@ -292,24 +301,6 @@ fn event_payload(
 
 fn serialize_payload(payload: JobEventPayload) -> String {
     serde_json::to_string(&payload).expect("failed to serialize solver lifecycle payload")
-}
-
-fn telemetry_payload(telemetry: &SolverTelemetry) -> TelemetryPayload {
-    TelemetryPayload {
-        elapsed_ms: duration_to_millis(telemetry.elapsed),
-        step_count: telemetry.step_count,
-        moves_generated: telemetry.moves_generated,
-        moves_evaluated: telemetry.moves_evaluated,
-        moves_accepted: telemetry.moves_accepted,
-        score_calculations: telemetry.score_calculations,
-        generation_ms: duration_to_millis(telemetry.generation_time),
-        evaluation_ms: duration_to_millis(telemetry.evaluation_time),
-        moves_per_second: whole_units_per_second(telemetry.moves_evaluated, telemetry.elapsed),
-        acceptance_rate: derive_acceptance_rate(
-            telemetry.moves_accepted,
-            telemetry.moves_evaluated,
-        ),
-    }
 }
 
 fn lifecycle_state_label(state: SolverLifecycleState) -> &'static str {
@@ -335,30 +326,5 @@ fn terminal_reason_label(reason: SolverTerminalReason) -> &'static str {
 impl Default for SolverService {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn duration_to_millis(duration: Duration) -> u64 {
-    duration.as_millis().min(u128::from(u64::MAX)) as u64
-}
-
-fn whole_units_per_second(count: u64, elapsed: Duration) -> u64 {
-    let nanos = elapsed.as_nanos();
-    if nanos == 0 {
-        0
-    } else {
-        let per_second = u128::from(count)
-            .saturating_mul(1_000_000_000)
-            .checked_div(nanos)
-            .unwrap_or(0);
-        per_second.min(u128::from(u64::MAX)) as u64
-    }
-}
-
-fn derive_acceptance_rate(moves_accepted: u64, moves_evaluated: u64) -> f64 {
-    if moves_evaluated == 0 {
-        0.0
-    } else {
-        moves_accepted as f64 / moves_evaluated as f64
     }
 }

@@ -13,3 +13,8 @@ limit = 4
 
 [termination]
 seconds_spent_limit = 30
+
+# Opt in to bounded candidate-pull diagnostics when needed. Trace detail is
+# retained separately from ordinary status, snapshot, and SSE telemetry.
+# [candidate_trace]
+# max_entries = 100000

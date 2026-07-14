@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::list_variable_metadata::ListVariableMetadata;
 use crate::scalar_variable_hooks::ScalarVariableHooks;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream, Parser};
@@ -14,6 +15,7 @@ use syn::{
 pub(crate) struct ScalarVarInfo {
     pub field: String,
     pub value_range_provider: String,
+    pub countable_range: Option<String>,
     pub allows_unassigned: bool,
     pub hooks: ScalarVariableHooks,
 }
@@ -22,6 +24,7 @@ pub(crate) struct ScalarVarInfo {
 pub(crate) struct ListVarInfo {
     pub field: String,
     pub element_collection: String,
+    pub metadata: ListVariableMetadata,
 }
 
 #[derive(Debug)]
@@ -448,13 +451,11 @@ fn parse_entity(item_struct: &ItemStruct) -> Result<EntityStructInfo, String> {
                 continue;
             };
             let attr = get_attribute(&field.attrs, "planning_variable").unwrap();
-            if parse_attribute_bool(attr, "chained").unwrap_or(false) {
-                continue;
-            }
             scalar_vars.push(ScalarVarInfo {
                 field: field_ident.to_string(),
                 value_range_provider: parse_attribute_string(attr, "value_range_provider")
                     .unwrap_or_default(),
+                countable_range: parse_attribute_string(attr, "countable_range"),
                 allows_unassigned: parse_attribute_bool(attr, "allows_unassigned").unwrap_or(false),
                 hooks: parse_scalar_variable_hooks(attr),
             });
@@ -475,6 +476,7 @@ fn parse_entity(item_struct: &ItemStruct) -> Result<EntityStructInfo, String> {
             list_vars.push(ListVarInfo {
                 field: field_ident.to_string(),
                 element_collection,
+                metadata: parse_list_variable_metadata(attr),
             });
         }
     }
@@ -497,6 +499,25 @@ fn parse_scalar_variable_hooks(attr: &Attribute) -> ScalarVariableHooks {
             "construction_entity_order_key",
         ),
         construction_value_order_key: parse_attribute_string(attr, "construction_value_order_key"),
+    }
+}
+
+fn parse_list_variable_metadata(attr: &Attribute) -> ListVariableMetadata {
+    ListVariableMetadata {
+        domain: parse_attribute_string(attr, "domain"),
+        distance_meter: parse_attribute_string(attr, "distance_meter"),
+        intra_distance_meter: parse_attribute_string(attr, "intra_distance_meter"),
+        route_hooks: parse_attribute_string(attr, "route_hooks"),
+        savings_hooks: parse_attribute_string(attr, "savings_hooks"),
+        savings_metric_class_fn: parse_attribute_string(attr, "savings_metric_class_fn"),
+        element_owner_fn: parse_attribute_string(attr, "element_owner_fn"),
+        construction_element_order_key: parse_attribute_string(
+            attr,
+            "construction_element_order_key",
+        ),
+        precedence_duration_fn: parse_attribute_string(attr, "precedence_duration_fn"),
+        precedence_successors_fn: parse_attribute_string(attr, "precedence_successors_fn"),
+        solution_trait: parse_attribute_string(attr, "solution_trait"),
     }
 }
 
@@ -776,6 +797,24 @@ pub struct Task {
         construction_value_order_key = "worker_priority",
     )]
     pub worker: Option<usize>,
+
+    #[planning_variable(countable_range = "2..7")]
+    pub priority: Option<usize>,
+
+    #[planning_list_variable(
+        element_collection = "workers",
+        distance_meter = "cross_distance",
+        intra_distance_meter = "intra_distance",
+        route_hooks = "route_hooks",
+        savings_hooks = "savings_hooks",
+        savings_metric_class_fn = "metric_class",
+        element_owner_fn = "fixed_owner",
+        construction_element_order_key = "worker_order",
+        precedence_duration_fn = "worker_duration",
+        precedence_successors_fn = "worker_successors",
+        solution_trait = "RouteSolution",
+    )]
+    pub worker_order: Vec<usize>,
 }
 "#,
         )
@@ -831,6 +870,10 @@ pub struct Plan {
         );
         assert!(domain.entities[0].scalar_vars[0].allows_unassigned);
         assert_eq!(
+            domain.entities[0].scalar_vars[1].countable_range.as_deref(),
+            Some("2..7")
+        );
+        assert_eq!(
             domain.entities[0].scalar_vars[0]
                 .hooks
                 .candidate_values
@@ -878,6 +921,46 @@ pub struct Plan {
                 .construction_value_order_key
                 .as_deref(),
             Some("worker_priority")
+        );
+        let list = &domain.entities[0].list_vars[0];
+        assert_eq!(list.field, "worker_order");
+        assert_eq!(list.element_collection, "workers");
+        assert_eq!(
+            list.metadata.distance_meter.as_deref(),
+            Some("cross_distance")
+        );
+        assert_eq!(
+            list.metadata.intra_distance_meter.as_deref(),
+            Some("intra_distance")
+        );
+        assert_eq!(list.metadata.route_hooks.as_deref(), Some("route_hooks"));
+        assert_eq!(
+            list.metadata.savings_hooks.as_deref(),
+            Some("savings_hooks")
+        );
+        assert_eq!(
+            list.metadata.savings_metric_class_fn.as_deref(),
+            Some("metric_class")
+        );
+        assert_eq!(
+            list.metadata.element_owner_fn.as_deref(),
+            Some("fixed_owner")
+        );
+        assert_eq!(
+            list.metadata.construction_element_order_key.as_deref(),
+            Some("worker_order")
+        );
+        assert_eq!(
+            list.metadata.precedence_duration_fn.as_deref(),
+            Some("worker_duration")
+        );
+        assert_eq!(
+            list.metadata.precedence_successors_fn.as_deref(),
+            Some("worker_successors")
+        );
+        assert_eq!(
+            list.metadata.solution_trait.as_deref(),
+            Some("RouteSolution")
         );
         assert_eq!(domain.facts[0].item_type, "Worker");
 

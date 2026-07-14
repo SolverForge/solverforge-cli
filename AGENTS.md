@@ -1,15 +1,15 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in files like `src/app_spec.rs`, `src/error.rs`, `src/managed_block.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, and `src/template.rs`. Integration tests live in `tests/`, and scaffold/template assets live in `templates/`.
+`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in files like `src/app_spec.rs`, `src/countable_range.rs`, `src/error.rs`, `src/list_variable_metadata.rs`, `src/managed_block.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, and `src/template.rs`. Integration tests live in `tests/`, and scaffold/template assets live in `templates/`.
 
 ## Current Product Direction
 `solverforge-cli` is the default entry point for new SolverForge applications. Treat the CLI as its own versioned product, distinct from the runtime crates and UI assets that generated projects target.
 
 Current scaffold policy:
-- current CLI package version is `2.2.2`
+- current CLI package version is `2.2.3`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
-- generated projects currently target `solverforge 0.15.2`; the default web shell additionally targets `solverforge-ui 0.6.5` and `solverforge-maps 2.1.4`
+- generated projects currently target `solverforge 0.19.0`; the default web shell additionally targets `solverforge-ui 0.7.0` and `solverforge-maps 2.1.4`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
 - `--shell web|api|cli` is the current public shell selector; `web` is the default, `api` omits frontend assets, and `cli` omits Axum/SSE routes and frontend assets
 - API/CLI app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
@@ -17,6 +17,8 @@ Current scaffold policy:
 - users shape the app afterward through facts, entities, solution/score metadata, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
 - `scalar` and `list` are the only planning variable kinds accepted by the public CLI and app-spec projection
+- scalar variables accept either a fact-collection range or a validated non-negative half-open countable range and expose current candidate/nearby/construction hook metadata; list variables expose current domain, distance, route/savings, ownership, construction-order, precedence, and solution-trait metadata
+- ordered sequences and routes use list variables; do not model sequence topology as a scalar predecessor field
 - `standard` is a demo size label only; do not reintroduce it as a variable kind or scaffold family
 - `templates/scalar/generic` is the embedded neutral scaffold used by `solverforge new`; `templates/list/generic` is not a public `new` selector
 - generated `Cargo.toml` files must carry `rust-version = "1.95"` plus the current explicit dependency baselines for the selected shell from the template/materialization code
@@ -59,23 +61,28 @@ Both runtime and browser suites must:
 Current end-to-end scenario policy:
 
 - neutral shell is covered as a bootable empty app
-- mixed is covered as generated shape plus runtime/browser surface
-- seeded solver execution is covered in the scalar-only scenario
+- mixed is covered as a seeded generated solve in both runtime and browser
+  scenarios, with required scalar assignment and complete list placement
+- the scalar-only scenario covers the full pause/resume/cancel/delete lifecycle
+- the scalar-only runtime scenario covers full compact telemetry, bounded candidate detail, and qualified trace provenance
 
-Do not claim mixed seeded solving is supported until the underlying runtime actually supports that combination.
+SolverForge `0.19.0` uses list variables as the sequence and route model. The
+generated-app runtime and browser scenarios must continue to start and observe
+a real mixed scalar/list solve.
 
 For scaffold changes, prefer assertions that check the generated contract directly:
 - dependency wiring for the selected shell: `solverforge` everywhere, `solverforge-ui` and `solverforge-maps` only for web-shell projects
 - CLI version vs runtime target messaging
 - generated README version/runtime source disclosure
 - typed solver SSE payload shape and typed frontend hooks
+- full compact SolverTelemetry projection plus the separate retained candidate-trace diagnostics route and qualified-run entry point
 - `solverforge generate data` ownership boundaries:
   `src/data/mod.rs` is the stable wrapper and `src/data/data_seed.rs` is compiler-owned generated sample data
 - managed block ownership boundaries:
   domain exports, solution collections, entity variables, constraint modules, and constraint calls require their `@solverforge:begin ...` / `@solverforge:end ...` markers
 - `solverforge.app.toml` projection:
-  facts, entities, variables, constraints, demo sizes, solution/score metadata, runtime target metadata, and web-shell `static/generated/ui-model.json`
-- scaffolded `cargo check` against the published crate targets by default; prerelease sibling-checkout validation must be explicit via `SF_USE_LOCAL_PATCHES=1`, which writes a temporary `.cargo/config.toml` patch file without rewriting generated `Cargo.toml`
+  facts, entities, scalar/list variable metadata, constraints, demo sizes, solution/score metadata, runtime target metadata, and web-shell `static/generated/ui-model.json`
+- scaffolded `cargo check` must preserve generated registry declarations; before a coordinated target is published, sibling-checkout validation must be explicit via `SF_USE_LOCAL_PATCHES=1`, which writes a temporary `.cargo/config.toml` patch file without rewriting generated `Cargo.toml`; repeat the registry-only gate after publication
 
 ## Commit & Pull Request Guidelines
 Follow the commit style already used in history: `fix: ...`, `refactor: ...`, `style: ...`, `chore: ...`. Keep commits scoped to one behavior change. PRs should explain user-visible CLI impact, list verification commands run, and link the relevant issue. Include concrete examples when flags, generated files, or template output change.
@@ -89,6 +96,9 @@ Generated apps should behave like production references, not toy demos.
 Keep these rules aligned across the single neutral scaffold and all generated
 domain shapes that users create afterward:
 - backend services track best solution separately from live status telemetry
+- compact status/snapshot/SSE telemetry projects every current SolverTelemetry aggregate and phase/selector/move/applied-move breakdown
+- bounded candidate pulls are retained separately and exposed only through `/jobs/{id}/telemetry`; do not copy them into ordinary lifecycle traffic
+- qualified candidate-trace jobs use additive `/jobs/qualified` input with all five externally attested SHA-256 digests and a non-empty producer
 - status endpoints return `currentScore`, `bestScore`, solver status, and latest snapshot revision
 - SSE payloads carry typed lifecycle metadata including `eventType`, `eventSequence`, `lifecycleState`, and `snapshotRevision`
 - retained lifecycle events include `progress`, `best_solution`, `pause_requested`, `paused`, `resumed`, `completed`, `cancelled`, and `failed`
@@ -107,6 +117,7 @@ Do not reintroduce:
 - starter-specific solve/render lifecycles
 - docs that blur CLI version with runtime/UI target
 - `standard` as a planning variable kind
+- scalar predecessor topology; ordered sequences belong to list variables
 - hidden scaffold/template aliases
 - Tauri or other shell aliases before a real scaffold implementation exists
 - fallback migration code for legacy generated files

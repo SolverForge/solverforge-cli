@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [2.2.3](///compare/v2.2.2...v2.2.3) (2026-07-14)
+
+### Features
+
+* **scaffold:** target SolverForge 0.19.0 and solverforge-ui 0.7.0
+* **modeling:** expose countable scalar ranges and the complete executable scalar/list metadata surface
+* **modeling:** use list variables as the sole sequence and route model
+* **scaffold:** execute seeded mixed scalar/list solves in runtime and browser release gates
+* **telemetry:** expose full compact telemetry and separate bounded candidate-trace diagnostics
+* **telemetry:** support qualified retained jobs with externally attested trace provenance
+
+### Bug Fixes
+
+* **config:** apply `.solverforgerc` server ports and validate candidate trace capacity
+* **docs:** align repository contracts and runtime capability claims with the released targets
+
 ## [2.2.2](///compare/v2.2.0...v2.2.2) (2026-06-12)
 
 

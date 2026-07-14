@@ -7,7 +7,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use super::dto::{analysis_response, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, PlanDto};
+use super::dto::{
+    analysis_response, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, JobTelemetryDetailDto,
+    PlanDto, QualifiedJobRequestDto,
+};
 use super::sse;
 use crate::data::{generate, DemoData};
 use crate::solver::SolverService;
@@ -39,10 +42,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/demo-data", get(list_demo_data))
         .route("/demo-data/{id}", get(get_demo_data))
         .route("/jobs", post(create_job))
+        .route("/jobs/qualified", post(create_qualified_job))
         .route("/jobs/{id}", get(get_job).delete(delete_job))
         .route("/jobs/{id}/status", get(get_job_status))
         .route("/jobs/{id}/snapshot", get(get_snapshot))
         .route("/jobs/{id}/analysis", get(analyze_by_id))
+        .route("/jobs/{id}/telemetry", get(get_telemetry_detail))
         .route("/jobs/{id}/pause", post(pause_job))
         .route("/jobs/{id}/resume", post(resume_job))
         .route("/jobs/{id}/cancel", post(cancel_job))
@@ -116,6 +121,25 @@ async fn create_job(
     Ok(Json(CreateJobResponse { id }))
 }
 
+async fn create_qualified_job(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<QualifiedJobRequestDto>,
+) -> Result<Json<CreateJobResponse>, StatusCode> {
+    let plan = request
+        .plan
+        .to_domain()
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let provenance = request
+        .provenance
+        .to_runtime()
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let id = state
+        .solver
+        .start_qualified_job(plan, provenance)
+        .map_err(status_from_solver_error)?;
+    Ok(Json(CreateJobResponse { id }))
+}
+
 async fn get_job(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -133,6 +157,17 @@ async fn get_job_status(
     Path(id): Path<String>,
 ) -> Result<Json<JobSummaryDto>, StatusCode> {
     get_job(State(state), Path(id)).await
+}
+
+async fn get_telemetry_detail(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<JobTelemetryDetailDto>, StatusCode> {
+    let detail = state
+        .solver
+        .get_telemetry_detail(&id)
+        .map_err(status_from_solver_error)?;
+    Ok(Json(JobTelemetryDetailDto::from_runtime(&detail)))
 }
 
 #[derive(Debug, Default, Deserialize)]

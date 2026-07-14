@@ -3,7 +3,9 @@ use clap_complete::Shell;
 
 mod app_spec;
 mod commands;
+mod countable_range;
 mod error;
+mod list_variable_metadata;
 mod managed_block;
 mod model_contract;
 mod model_id;
@@ -19,10 +21,12 @@ mod test_support;
 use commands::model_resource::{ConflictRepairRequest, ScalarGroupRequest};
 use commands::new::ScaffoldShell;
 use error::CliResult;
+use list_variable_metadata::ListVariableMetadata;
 use scaffold_target::LONG_VERSION_TEXT;
 use scalar_variable_hooks::ScalarVariableHooks;
 
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+const DEFAULT_SERVER_PORT: u16 = 7860;
 
 fn parse_variable_kind(value: &str) -> Result<String, String> {
     match value {
@@ -94,7 +98,7 @@ enum Command {
     },
     /// Generate a new resource for the current project
     #[command(
-        after_help = "Examples:\n  solverforge generate entity shift --planning-variable employee_idx\n  solverforge generate fact employee\n  solverforge generate constraint no_overlap --pair --hard\n  solverforge generate solution schedule --score HardSoftScore\n  solverforge generate data\n  solverforge generate data --size large\n  solverforge generate data --mode stub"
+        after_help = "Examples:\n  solverforge generate entity shift --planning-variable employee_idx\n  solverforge generate fact employee\n  solverforge generate variable stops --entity Route --kind list --elements visits\n  solverforge generate constraint no_overlap --pair --hard\n  solverforge generate solution schedule --score HardSoftScore\n  solverforge generate data\n  solverforge generate data --size large\n  solverforge generate data --mode stub"
     )]
     Generate {
         #[command(subcommand)]
@@ -117,9 +121,9 @@ enum Command {
         after_help = "Examples:\n  solverforge server\n  solverforge server --port 8080\n  solverforge server --debug"
     )]
     Server {
-        /// Port to bind the server to
-        #[arg(long, short, default_value = "7860")]
-        port: u16,
+        /// Port to bind the server to; when omitted, use .solverforgerc and then 7860
+        #[arg(long, short)]
+        port: Option<u16>,
 
         /// Run in debug mode (faster compilation, slower runtime)
         #[arg(long)]
@@ -298,7 +302,7 @@ enum GenerateResource {
     },
     /// Add a planning variable field to an existing entity
     #[command(
-        after_help = "Examples:\n  solverforge generate variable employee_idx --entity Shift --kind scalar --range employees --allows-unassigned\n  solverforge generate variable employee_idx --entity Shift --kind scalar --range employees --candidate-values employee_candidates\n  solverforge generate variable stops --entity Route --kind list --elements visits"
+        after_help = "Examples:\n  solverforge generate variable employee_idx --entity Shift --kind scalar --range employees --allows-unassigned\n  solverforge generate variable hour --entity Shift --kind scalar --countable-range 0..24\n  solverforge generate variable employee_idx --entity Shift --kind scalar --range employees --candidate-values employee_candidates\n  solverforge generate variable stops --entity Route --kind list --elements visits"
     )]
     Variable(Box<VariableArgs>),
     /// Change the score type in the existing planning solution
@@ -346,12 +350,64 @@ struct VariableArgs {
     kind: String,
 
     /// Scalar-variable value range collection (e.g. employees)
-    #[arg(long, value_name = "FACT_COLLECTION")]
+    #[arg(
+        long,
+        value_name = "FACT_COLLECTION",
+        conflicts_with = "countable_range"
+    )]
     range: Option<String>,
+
+    /// Half-open scalar integer range (e.g. 0..24)
+    #[arg(long, value_name = "FROM..TO", conflicts_with = "range")]
+    countable_range: Option<String>,
 
     /// List-variable element collection (e.g. visits)
     #[arg(long, value_name = "FACT_COLLECTION")]
     elements: Option<String>,
+
+    /// Stock list-domain profile; currently `cvrp`
+    #[arg(long, value_parser = ["cvrp"], value_name = "PROFILE")]
+    domain: Option<String>,
+
+    /// Cross-entity list distance meter type/path
+    #[arg(long, value_name = "RUST_PATH")]
+    distance_meter: Option<String>,
+
+    /// Within-entity list distance meter type/path
+    #[arg(long, value_name = "RUST_PATH")]
+    intra_distance_meter: Option<String>,
+
+    /// Module providing route-local get/set/depot/distance/feasible hooks
+    #[arg(long, value_name = "MODULE_PATH")]
+    route_hooks: Option<String>,
+
+    /// Module providing Clarke-Wright depot/distance/feasible hooks
+    #[arg(long, value_name = "MODULE_PATH")]
+    savings_hooks: Option<String>,
+
+    /// Function assigning a savings metric class to each list owner
+    #[arg(long, value_name = "FN_PATH")]
+    savings_metric_class_fn: Option<String>,
+
+    /// Function returning a fixed owner for each list element
+    #[arg(long, value_name = "FN_PATH")]
+    element_owner_fn: Option<String>,
+
+    /// Function ranking list elements during construction
+    #[arg(long, value_name = "FN_PATH")]
+    construction_element_order_key: Option<String>,
+
+    /// Function returning precedence duration for a list element
+    #[arg(long, value_name = "FN_PATH")]
+    precedence_duration_fn: Option<String>,
+
+    /// Function appending precedence successors for a list element
+    #[arg(long, value_name = "FN_PATH")]
+    precedence_successors_fn: Option<String>,
+
+    /// Additional solution trait required by the list metadata
+    #[arg(long, value_name = "TRAIT_PATH")]
+    solution_trait: Option<String>,
 
     /// Allow leaving the scalar variable unassigned
     #[arg(long, default_value_t = false)]
@@ -537,7 +593,8 @@ fn main() {
     let cli = Cli::parse();
 
     // Configure output — CLI flags override rc config.
-    if cli.quiet || rc.quiet {
+    let quiet = cli.quiet || rc.quiet;
+    if quiet {
         output::set_verbosity(0);
     } else if cli.verbose {
         output::set_verbosity(2);
@@ -552,7 +609,7 @@ fn main() {
             shell,
             skip_git,
             skip_readme,
-        } => commands::new::run(&name, shell, skip_git, skip_readme, cli.quiet),
+        } => commands::new::run(&name, shell, skip_git, skip_readme, quiet),
         Command::Generate { resource } => match *resource {
             GenerateResource::Constraint {
                 name,
@@ -614,7 +671,19 @@ fn main() {
                     entity,
                     kind,
                     range,
+                    countable_range,
                     elements,
+                    domain,
+                    distance_meter,
+                    intra_distance_meter,
+                    route_hooks,
+                    savings_hooks,
+                    savings_metric_class_fn,
+                    element_owner_fn,
+                    construction_element_order_key,
+                    precedence_duration_fn,
+                    precedence_successors_fn,
+                    solution_trait,
                     allows_unassigned,
                     candidate_values,
                     nearby_value_candidates,
@@ -625,20 +694,36 @@ fn main() {
                     construction_value_order_key,
                 } = *variable_args;
                 commands::generate_domain::run_variable(
-                    &field,
-                    &entity,
-                    &kind,
-                    range.as_deref(),
-                    elements.as_deref(),
-                    allows_unassigned,
-                    &ScalarVariableHooks {
-                        candidate_values,
-                        nearby_value_candidates,
-                        nearby_entity_candidates,
-                        nearby_value_distance_meter,
-                        nearby_entity_distance_meter,
-                        construction_entity_order_key,
-                        construction_value_order_key,
+                    commands::generate_domain::VariableRequest {
+                        field,
+                        entity,
+                        kind,
+                        range,
+                        countable_range,
+                        elements,
+                        allows_unassigned,
+                        scalar_hooks: ScalarVariableHooks {
+                            candidate_values,
+                            nearby_value_candidates,
+                            nearby_entity_candidates,
+                            nearby_value_distance_meter,
+                            nearby_entity_distance_meter,
+                            construction_entity_order_key,
+                            construction_value_order_key,
+                        },
+                        list_metadata: ListVariableMetadata {
+                            domain,
+                            distance_meter,
+                            intra_distance_meter,
+                            route_hooks,
+                            savings_hooks,
+                            savings_metric_class_fn,
+                            element_owner_fn,
+                            construction_element_order_key,
+                            precedence_duration_fn,
+                            precedence_successors_fn,
+                            solution_trait,
+                        },
                     },
                 )
             }
@@ -739,7 +824,9 @@ fn main() {
             yes,
             resource: DestroyResource::ConflictRepair { name },
         } => commands::destroy::run_conflict_repair(&name, yes),
-        Command::Server { port, debug } => commands::server::run(port, debug),
+        Command::Server { port, debug } => {
+            commands::server::run(resolve_server_port(port, rc.port), debug)
+        }
         Command::Info => commands::info::run(),
         Command::Check => commands::check::run(),
         Command::Test { extra_args } => commands::test::run(&extra_args),
@@ -760,5 +847,52 @@ fn main() {
     if let Err(e) = result {
         output::print_error(&e.to_string());
         std::process::exit(1);
+    }
+}
+
+fn resolve_server_port(cli_port: Option<u16>, rc_port: Option<u16>) -> u16 {
+    cli_port.or(rc_port).unwrap_or(DEFAULT_SERVER_PORT)
+}
+
+#[cfg(test)]
+mod main_tests {
+    use super::{resolve_server_port, Cli, DEFAULT_SERVER_PORT};
+    use clap::{error::ErrorKind, Parser};
+
+    #[test]
+    fn explicit_server_port_overrides_rc_port() {
+        assert_eq!(resolve_server_port(Some(9000), Some(8080)), 9000);
+    }
+
+    #[test]
+    fn rc_server_port_overrides_builtin_default() {
+        assert_eq!(resolve_server_port(None, Some(8080)), 8080);
+    }
+
+    #[test]
+    fn server_port_uses_builtin_default_without_preference() {
+        assert_eq!(resolve_server_port(None, None), DEFAULT_SERVER_PORT);
+    }
+
+    #[test]
+    fn variable_command_rejects_scalar_predecessor_flags() {
+        for flag in ["--chained", "--inverse-shadow", "--anchor-shadow"] {
+            let error = Cli::try_parse_from([
+                "solverforge",
+                "generate",
+                "variable",
+                "previous",
+                "--entity",
+                "Visit",
+                "--kind",
+                "scalar",
+                "--range",
+                "depots",
+                flag,
+            ])
+            .err()
+            .expect("scalar predecessor flags must not be part of the public CLI");
+            assert_eq!(error.kind(), ErrorKind::UnknownArgument, "flag: {flag}");
+        }
     }
 }

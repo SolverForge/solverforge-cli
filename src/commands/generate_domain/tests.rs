@@ -4,6 +4,7 @@ use super::{
     utils::{pluralize, snake_to_pascal, validate_score_type},
     wiring::{add_import, replace_score_type},
 };
+use crate::list_variable_metadata::ListVariableMetadata;
 use crate::managed_block;
 use crate::scalar_variable_hooks::ScalarVariableHooks;
 use crate::test_support;
@@ -217,8 +218,8 @@ fn test_inject_list_variable() {
 
     let src = generate_builtin_entity("Route", None, &[])
         .expect("built-in entity template should render");
-    let result =
-        inject_list_variable(&src, "Route", "stops", "visits").expect("inject should succeed");
+    let result = inject_list_variable(&src, "Route", "stops", "visits", &Default::default())
+        .expect("inject should succeed");
 
     assert!(result.contains("#[planning_list_variable(element_collection = \"visits\")]"));
     assert!(result.contains("pub stops: Vec<usize>"));
@@ -226,8 +227,70 @@ fn test_inject_list_variable() {
 }
 
 #[test]
+fn test_inject_list_variable_with_current_runtime_metadata() {
+    use super::wiring::inject_list_variable;
+
+    let src = generate_builtin_entity("Route", None, &[])
+        .expect("built-in entity template should render");
+    let metadata = ListVariableMetadata {
+        domain: None,
+        distance_meter: Some("crate::distance::CrossRouteDistance".to_string()),
+        intra_distance_meter: Some("crate::distance::WithinRouteDistance".to_string()),
+        route_hooks: Some("crate::route_hooks".to_string()),
+        savings_hooks: Some("crate::savings_hooks".to_string()),
+        savings_metric_class_fn: Some("crate::savings_metric_class".to_string()),
+        element_owner_fn: Some("crate::fixed_owner".to_string()),
+        construction_element_order_key: Some("crate::visit_order".to_string()),
+        precedence_duration_fn: Some("crate::visit_duration".to_string()),
+        precedence_successors_fn: Some("crate::visit_successors".to_string()),
+        solution_trait: Some("crate::RouteSolution".to_string()),
+    };
+    let result = inject_list_variable(&src, "Route", "stops", "visits", &metadata)
+        .expect("inject should succeed");
+
+    for expected in [
+        "element_collection = \"visits\"",
+        "distance_meter = \"crate::distance::CrossRouteDistance\"",
+        "intra_distance_meter = \"crate::distance::WithinRouteDistance\"",
+        "route_hooks = \"crate::route_hooks\"",
+        "savings_hooks = \"crate::savings_hooks\"",
+        "savings_metric_class_fn = \"crate::savings_metric_class\"",
+        "element_owner_fn = \"crate::fixed_owner\"",
+        "construction_element_order_key = \"crate::visit_order\"",
+        "precedence_duration_fn = \"crate::visit_duration\"",
+        "precedence_successors_fn = \"crate::visit_successors\"",
+        "solution_trait = \"crate::RouteSolution\"",
+    ] {
+        assert!(result.contains(expected), "missing {expected}: {result}");
+    }
+    syn::parse_file(&result).expect("generated entity should remain valid Rust syntax");
+}
+
+#[test]
+fn test_inject_list_variable_with_cvrp_profile() {
+    use super::wiring::inject_list_variable;
+
+    let src = generate_builtin_entity("Route", None, &[])
+        .expect("built-in entity template should render");
+    let metadata = ListVariableMetadata {
+        domain: Some("cvrp".to_string()),
+        construction_element_order_key: Some("crate::visit_order".to_string()),
+        ..ListVariableMetadata::default()
+    };
+    metadata
+        .validate()
+        .expect("stock CVRP profile should validate");
+    let result = inject_list_variable(&src, "Route", "stops", "visits", &metadata)
+        .expect("inject should succeed");
+
+    assert!(result.contains("domain = \"cvrp\""));
+    assert!(result.contains("construction_element_order_key = \"crate::visit_order\""));
+    assert!(!result.contains("route_hooks ="));
+}
+
+#[test]
 fn test_inject_scalar_variable_with_hook_metadata() {
-    use super::wiring::inject_scalar_variable;
+    use super::wiring::{inject_scalar_variable, ScalarVariableWiring};
 
     let src =
         generate_builtin_entity("Task", None, &[]).expect("built-in entity template should render");
@@ -240,8 +303,18 @@ fn test_inject_scalar_variable_with_hook_metadata() {
         construction_entity_order_key: Some("task_priority".to_string()),
         construction_value_order_key: Some("resource_priority".to_string()),
     };
-    let result = inject_scalar_variable(&src, "Task", "resource_idx", "resources", true, &hooks)
-        .expect("inject should succeed");
+    let result = inject_scalar_variable(
+        &src,
+        "Task",
+        "resource_idx",
+        ScalarVariableWiring {
+            range: "resources",
+            countable_range: None,
+            allows_unassigned: true,
+            hooks: &hooks,
+        },
+    )
+    .expect("inject should succeed");
 
     assert!(result.contains(
         r#"    #[planning_variable(
@@ -261,12 +334,37 @@ fn test_inject_scalar_variable_with_hook_metadata() {
 }
 
 #[test]
+fn test_inject_scalar_variable_with_countable_range() {
+    use super::wiring::{inject_scalar_variable, ScalarVariableWiring};
+
+    let src =
+        generate_builtin_entity("Task", None, &[]).expect("built-in entity template should render");
+    let result = inject_scalar_variable(
+        &src,
+        "Task",
+        "priority",
+        ScalarVariableWiring {
+            range: "",
+            countable_range: Some("2..7"),
+            allows_unassigned: false,
+            hooks: &ScalarVariableHooks::default(),
+        },
+    )
+    .expect("inject should succeed");
+
+    assert!(result
+        .contains(r#"#[planning_variable(countable_range = "2..7", allows_unassigned = false)]"#));
+    assert!(result.contains("pub priority: Option<usize>"));
+}
+
+#[test]
 fn test_remove_variable_field() {
     use super::wiring::{inject_list_variable, inject_planning_variable, remove_variable_field};
 
     let src = generate_builtin_entity("Route", Some("driver_idx"), &[])
         .expect("built-in entity template should render");
-    let src = inject_list_variable(&src, "Route", "stops", "visits").expect("list inject");
+    let src = inject_list_variable(&src, "Route", "stops", "visits", &Default::default())
+        .expect("list inject");
     let src = inject_planning_variable(&src, "Route", "backup_idx").expect("var inject");
     let result = remove_variable_field(&src, "stops").expect("remove should succeed");
 
@@ -279,7 +377,9 @@ fn test_remove_variable_field() {
 
 #[test]
 fn test_remove_variable_field_removes_multiline_hook_attribute() {
-    use super::wiring::{inject_list_variable, inject_scalar_variable, remove_variable_field};
+    use super::wiring::{
+        inject_list_variable, inject_scalar_variable, remove_variable_field, ScalarVariableWiring,
+    };
 
     let src =
         generate_builtin_entity("Task", None, &[]).expect("built-in entity template should render");
@@ -292,10 +392,20 @@ fn test_remove_variable_field_removes_multiline_hook_attribute() {
         construction_entity_order_key: Some("task_priority".to_string()),
         construction_value_order_key: None,
     };
-    let src = inject_scalar_variable(&src, "Task", "resource_idx", "resources", true, &hooks)
-        .expect("scalar inject should succeed");
-    let src =
-        inject_list_variable(&src, "Task", "stops", "visits").expect("list inject should succeed");
+    let src = inject_scalar_variable(
+        &src,
+        "Task",
+        "resource_idx",
+        ScalarVariableWiring {
+            range: "resources",
+            countable_range: None,
+            allows_unassigned: true,
+            hooks: &hooks,
+        },
+    )
+    .expect("scalar inject should succeed");
+    let src = inject_list_variable(&src, "Task", "stops", "visits", &Default::default())
+        .expect("list inject should succeed");
 
     let result = remove_variable_field(&src, "resource_idx").expect("remove should succeed");
 
@@ -588,7 +698,7 @@ impl Plan {
 
 #[test]
 fn test_variable_injection_requires_managed_blocks() {
-    use super::wiring::inject_scalar_variable;
+    use super::wiring::{inject_scalar_variable, ScalarVariableWiring};
 
     let src = r#"use serde::{Deserialize, Serialize};
 use solverforge::prelude::*;
@@ -613,9 +723,12 @@ impl Task {
         src,
         "Task",
         "resource_idx",
-        "resources",
-        true,
-        &ScalarVariableHooks::default(),
+        ScalarVariableWiring {
+            range: "resources",
+            countable_range: None,
+            allows_unassigned: true,
+            hooks: &ScalarVariableHooks::default(),
+        },
     )
     .expect_err("unmanaged entity should fail");
 

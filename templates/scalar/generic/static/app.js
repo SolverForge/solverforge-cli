@@ -339,9 +339,11 @@
       { method: 'GET', path: '/demo-data', description: 'Discover the default and available demo data IDs', curl: buildCurlCommand('GET', '/demo-data') },
       { method: 'GET', path: defaultDemoPath, description: 'Fetch the discovered default demo data', curl: buildCurlCommand('GET', defaultDemoPath) },
       { method: 'POST', path: '/jobs', description: 'Create a retained solving job', curl: buildCurlCommand('POST', '/jobs', { json: true, data: '@plan.json' }) },
+      { method: 'POST', path: '/jobs/qualified', description: 'Create a retained job with qualified candidate-trace provenance', curl: buildCurlCommand('POST', '/jobs/qualified', { json: true, data: '@qualified-plan.json' }) },
       { method: 'GET', path: '/jobs/{id}', description: 'Get current job summary', curl: buildCurlCommand('GET', '/jobs/{id}') },
       { method: 'GET', path: '/jobs/{id}/snapshot', description: 'Fetch the latest retained snapshot', curl: buildCurlCommand('GET', '/jobs/{id}/snapshot') },
       { method: 'GET', path: '/jobs/{id}/analysis?snapshot_revision={n}', description: 'Analyze an exact snapshot revision', curl: buildCurlCommand('GET', '/jobs/{id}/analysis?snapshot_revision=3', { quoteUrl: true }) },
+      { method: 'GET', path: '/jobs/{id}/telemetry', description: 'Fetch atomically retained aggregate and candidate-trace diagnostics', curl: buildCurlCommand('GET', '/jobs/{id}/telemetry') },
       { method: 'POST', path: '/jobs/{id}/pause', description: 'Request an exact runtime pause', curl: buildCurlCommand('POST', '/jobs/{id}/pause') },
       { method: 'POST', path: '/jobs/{id}/resume', description: 'Resume a paused retained job', curl: buildCurlCommand('POST', '/jobs/{id}/resume') },
       { method: 'POST', path: '/jobs/{id}/cancel', description: 'Cancel a live or paused job', curl: buildCurlCommand('POST', '/jobs/{id}/cancel') },
@@ -507,12 +509,21 @@
 
   function buildScalarViewPayload(data, view) {
     var entities = data[view.entityPlural] || [];
-    var facts = data[view.sourcePlural] || [];
+    var countable = view.countableRange;
+    var usesCountableRange = countable
+      && Number.isInteger(countable.from)
+      && Number.isInteger(countable.to)
+      && countable.from < countable.to;
+    var facts = usesCountableRange
+      ? Array.from({ length: countable.to - countable.from }, function (_, offset) {
+          return { value: countable.from + offset };
+        })
+      : (data[view.sourcePlural] || []);
     if (!entities.length || !facts.length) return null;
 
     var byIndex = {};
     facts.forEach(function (fact, index) {
-      byIndex[index] = fact;
+      byIndex[usesCountableRange ? fact.value : index] = index;
     });
 
     var assignments = facts.map(function () { return []; });
@@ -523,7 +534,7 @@
         detached.push(entity);
         return;
       }
-      assignments[idx].push(entity);
+      assignments[byIndex[idx]].push(entity);
     });
 
     var peakLoad = assignments.reduce(function (maxCount, items) {
@@ -535,7 +546,7 @@
       var items = assignments[factIndex] || [];
       return {
         id: view.id + '-lane-' + factIndex,
-        label: String(factLabel(fact, factIndex)),
+        label: usesCountableRange ? String(fact.value) : String(factLabel(fact, factIndex)),
         mode: 'detailed',
         badges: items.length ? [] : ['Empty'],
         stats: [{ label: title(view.entityPlural), value: items.length }],
@@ -572,7 +583,7 @@
 
     return {
       summary: buildSummarySection(
-        ['Source lanes', title(view.entityPlural), 'Peak load', 'Unassigned'],
+        [usesCountableRange ? 'Value lanes' : 'Source lanes', title(view.entityPlural), 'Peak load', 'Unassigned'],
         [
           String(facts.length),
           String(entities.length),
@@ -581,10 +592,11 @@
         ]
       ),
       timeline: {
-        label: title(view.sourcePlural),
+        label: usesCountableRange ? 'Values' : title(view.sourcePlural),
         labelWidth: 280,
         title: view.label,
-        subtitle: title(view.entityPlural) + ' grouped by ' + title(view.sourcePlural),
+        subtitle: title(view.entityPlural) + ' grouped by '
+          + (usesCountableRange ? 'value' : title(view.sourcePlural)),
         model: {
           axis: axis,
           lanes: lanes,

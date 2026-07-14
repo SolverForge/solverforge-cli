@@ -17,7 +17,6 @@ module.exports = async function globalSetup() {
       'scalar',
       '--range',
       'resources',
-      '--allows-unassigned',
     ],
     ['generate', 'fact', 'item'],
     ['generate', 'entity', 'container'],

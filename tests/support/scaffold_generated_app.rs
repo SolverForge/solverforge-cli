@@ -74,7 +74,7 @@ impl ScaffoldGeneratedApp {
         match apply_generated_project_dependency_overrides(&self.project_dir) {
             DependencyOverrideMode::CratesIo => {
                 println!(
-                    "=== INFO: {} :: Using published SolverForge crate targets for generated-app validation (set {}=1 to apply explicit local Cargo patches) ===",
+                    "=== INFO: {} :: Using registry SolverForge dependency targets for generated-app validation (set {}=1 to apply explicit local Cargo patches) ===",
                     self.test_name, USE_LOCAL_PATCHES_ENV
                 );
             }

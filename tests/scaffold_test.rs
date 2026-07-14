@@ -16,12 +16,12 @@ use dependency_overrides::{
 };
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
-const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.15.2";
-const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.6.5";
+const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.19.0";
+const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.7.0";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.4";
 const SOLVERFORGE_DEP_SPEC: &str =
-    r#"{ version = "0.15.2", features = ["serde", "console", "verbose-logging"] }"#;
-const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.6.5" }"#;
+    r#"{ version = "0.19.0", features = ["serde", "console", "verbose-logging"] }"#;
+const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.7.0" }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.4" }"#;
 const GENERATED_RUST_VERSION_SPEC: &str = r#"rust-version = "1.95""#;
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -273,8 +273,8 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
     assert!(
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
-            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.15.2")
-            && stdout.contains("Scaffold UI target: solverforge-ui 0.6.5")
+            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.19.0")
+            && stdout.contains("Scaffold UI target: solverforge-ui 0.7.0")
             && stdout.contains("Scaffold maps target: solverforge-maps 2.1.4")
             && stdout.contains(RUNTIME_DEP_LABEL)
             && stdout.contains(UI_DEP_LABEL)
@@ -395,8 +395,11 @@ fn test_new_creates_neutral_project_files() {
         std::fs::read_to_string(project_dir.join("src").join("solver").join("service.rs")).unwrap();
     let routes_rs =
         std::fs::read_to_string(project_dir.join("src").join("api").join("routes.rs")).unwrap();
+    let telemetry_rs =
+        std::fs::read_to_string(project_dir.join("src").join("api").join("telemetry.rs")).unwrap();
     let sse_rs =
         std::fs::read_to_string(project_dir.join("src").join("api").join("sse.rs")).unwrap();
+    let solver_toml = std::fs::read_to_string(project_dir.join("solver.toml")).unwrap();
     let data_mod =
         std::fs::read_to_string(project_dir.join("src").join("data").join("mod.rs")).unwrap();
     let data_seed =
@@ -405,6 +408,8 @@ fn test_new_creates_neutral_project_files() {
     assert!(
         app_spec.contains("starter = \"neutral-shell\"")
             && app_spec.contains("shell = \"web\"")
+            && app_spec.contains("target = \"solverforge 0.19.0\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.0\"")
             && app_spec.contains("[demo]")
             && app_spec.contains("default_size = \"standard\"")
             && app_spec.contains("available_sizes = [\"small\", \"standard\", \"large\"]")
@@ -432,6 +437,8 @@ fn test_new_creates_neutral_project_files() {
             && app_js.contains("SF.rail.createTimeline")
             && app_js.contains("generated/ui-model.json")
             && app_js.contains("requestJson('/demo-data', 'demo data catalog')")
+            && app_js.contains("path: '/jobs/qualified'")
+            && app_js.contains("path: '/jobs/{id}/telemetry'")
             && app_js.contains("buildScalarViewPayload")
             && app_js.contains("buildListViewPayload")
             && app_js.contains("defaultId")
@@ -452,16 +459,16 @@ fn test_new_creates_neutral_project_files() {
     );
     assert!(
         cargo_toml.contains(
-            "solverforge = { version = \"0.15.2\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
-        ) && cargo_toml.contains("solverforge-ui = { version = \"0.6.5\" }")
+            "solverforge = { version = \"0.19.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+        ) && cargo_toml.contains("solverforge-ui = { version = \"0.7.0\" }")
             && cargo_toml.contains("solverforge-maps = { version = \"2.1.4\" }")
             && cargo_toml.contains(GENERATED_RUST_VERSION_SPEC)
             && cargo_toml.contains("axum = \"0.8.9\"")
-            && cargo_toml.contains("tokio = { version = \"1.52.2\", features = [\"full\"] }")
+            && cargo_toml.contains("tokio = { version = \"1.52.3\", features = [\"full\"] }")
             && cargo_toml.contains(
-                "tower-http = { version = \"0.6.8\", features = [\"fs\", \"cors\"] }"
+                "tower-http = { version = \"0.6.11\", features = [\"fs\", \"cors\"] }"
             )
-            && cargo_toml.contains("uuid = { version = \"1.23.1\", features = [\"v4\", \"serde\"] }"),
+            && cargo_toml.contains("uuid = { version = \"1.23.5\", features = [\"v4\", \"serde\"] }"),
         "unified scaffold should point at the current SolverForge, solverforge-ui, and solverforge-maps crate targets: {}",
         cargo_toml
     );
@@ -531,6 +538,9 @@ fn test_new_creates_neutral_project_files() {
             && solver_service.contains("\"cancelled\"")
             && solver_service.contains("\"failed\"")
             && solver_service.contains("pub fn start_job(&self, plan: Plan)")
+            && solver_service.contains("pub fn start_qualified_job")
+            && solver_service.contains("solve_with_qualified_candidate_trace_provenance")
+            && solver_service.contains("MANAGER.get_telemetry_detail")
             && solver_service.contains("\"best_solution\"")
             && solver_service.contains("MANAGER.pause(parse_job_id(id)?)")
             && solver_service.contains("MANAGER.resume(parse_job_id(id)?)")
@@ -545,13 +555,36 @@ fn test_new_creates_neutral_project_files() {
             && routes_rs.contains("DemoData::default_demo_data().id()")
             && routes_rs.contains("DemoData::available_demo_data()")
             && routes_rs.contains(".route(\"/jobs\", post(create_job))")
+            && routes_rs.contains(".route(\"/jobs/qualified\", post(create_qualified_job))")
             && routes_rs.contains(".route(\"/jobs/{id}/snapshot\", get(get_snapshot))")
+            && routes_rs.contains(".route(\"/jobs/{id}/telemetry\", get(get_telemetry_detail))")
             && routes_rs.contains(".route(\"/jobs/{id}/pause\", post(pause_job))")
             && routes_rs.contains(".route(\"/jobs/{id}/resume\", post(resume_job))")
             && routes_rs.contains(".route(\"/jobs/{id}/cancel\", post(cancel_job))")
             && routes_rs.contains("StatusCode::BAD_REQUEST"),
         "neutral scaffold should expose the retained /jobs lifecycle routes: {}",
         routes_rs
+    );
+    assert!(
+        telemetry_rs.contains("pub struct TelemetryDto")
+            && telemetry_rs.contains("pub moves_applied: u64")
+            && telemetry_rs.contains("pub moves_not_doable: u64")
+            && telemetry_rs.contains("pub conflict_repair_exposed: u64")
+            && telemetry_rs.contains("pub scalar_assignment_required_remaining: u64")
+            && telemetry_rs.contains("pub selector_telemetry: Vec<SelectorTelemetryDto>")
+            && telemetry_rs.contains("pub move_telemetry: Vec<MoveTelemetryDto>")
+            && telemetry_rs.contains("pub applied_move_trace: Vec<AppliedMoveTelemetryDto>")
+            && telemetry_rs.contains("pub struct CandidateTraceDto")
+            && telemetry_rs.contains("pub qualified_run_provenance")
+            && telemetry_rs.contains("CandidateTraceSource::ListClarkeWrightCompletionInsertion")
+            && telemetry_rs.contains("CandidateTraceDisposition::Applied"),
+        "neutral scaffold should project the complete compact and diagnostic SolverForge telemetry surfaces: {telemetry_rs}"
+    );
+    assert!(
+        solver_toml.contains("[candidate_trace]")
+            && solver_toml.contains("max_entries = 100000")
+            && solver_toml.contains("retained separately"),
+        "neutral solver config should document the opt-in candidate trace surface: {solver_toml}"
     );
     assert!(
         sse_rs.contains(".bootstrap_event(&id)")
@@ -580,6 +613,8 @@ fn test_list_template_api_docs_follow_runtime_origin() {
             && !list_app_js.contains("localhost:7860")
             && list_app_js.contains("buildApiGuideEndpoints")
             && list_app_js.contains("requestJson('/demo-data', 'demo data catalog')")
+            && list_app_js.contains("path: '/jobs/qualified'")
+            && list_app_js.contains("path: '/jobs/{id}/telemetry'")
             && list_app_js.contains("defaultId")
             && list_app_js.contains("availableIds")
             && list_app_js.contains("throw err;")
@@ -614,8 +649,8 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
         readme.contains(&format!(
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
-        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.15.2`")
-            && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.6.5`")
+        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.19.0`")
+            && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.7.0`")
             && readme
                 .contains("SolverForge maps target for this scaffold: `solverforge-maps 2.1.4`")
             && readme.contains(RUNTIME_DEP_LABEL)
@@ -683,7 +718,10 @@ fn test_new_api_shell_excludes_frontend_assets() {
     let main_rs = std::fs::read_to_string(project_dir.join("src/main.rs")).unwrap();
 
     assert!(
-        app_spec.contains("shell = \"api\"") && !app_spec.contains("ui_source"),
+        app_spec.contains("shell = \"api\"")
+            && app_spec.contains("target = \"solverforge 0.19.0\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.0\"")
+            && !app_spec.contains("ui_source"),
         "api shell should be recorded in solverforge.app.toml: {app_spec}"
     );
     assert!(
@@ -693,9 +731,10 @@ fn test_new_api_shell_excludes_frontend_assets() {
         "api shell should keep HTTP API files and exclude frontend assets"
     );
     assert!(
-        cargo_toml.contains("axum = \"0.8.9\"")
+        cargo_toml.contains(&format!("solverforge = {SOLVERFORGE_DEP_SPEC}"))
+            && cargo_toml.contains("axum = \"0.8.9\"")
             && cargo_toml.contains("tokio-stream = { version = \"0.1.18\", features = [\"sync\"] }")
-            && cargo_toml.contains("tower-http = { version = \"0.6.8\", features = [\"cors\"] }")
+            && cargo_toml.contains("tower-http = { version = \"0.6.11\", features = [\"cors\"] }")
             && !cargo_toml.contains("solverforge-ui")
             && !cargo_toml.contains("solverforge-maps")
             && !cargo_toml.contains("features = [\"fs\", \"cors\"]"),
@@ -716,8 +755,11 @@ fn test_new_api_shell_excludes_frontend_assets() {
         std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     assert!(
         app_spec_after_generate.contains("shell = \"api\"")
+            && app_spec_after_generate.contains("target = \"solverforge 0.19.0\"")
+            && app_spec_after_generate
+                .contains("runtime_source = \"crates.io: solverforge 0.19.0\"")
             && !app_spec_after_generate.contains("ui_source"),
-        "api shell should not reintroduce ui_source after domain mutations: {app_spec_after_generate}"
+        "api shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
 
     let output = Command::new("cargo")
@@ -763,7 +805,10 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
     let api_mod = std::fs::read_to_string(project_dir.join("src/api/mod.rs")).unwrap();
 
     assert!(
-        app_spec.contains("shell = \"cli\"") && !app_spec.contains("ui_source"),
+        app_spec.contains("shell = \"cli\"")
+            && app_spec.contains("target = \"solverforge 0.19.0\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.0\"")
+            && !app_spec.contains("ui_source"),
         "cli shell should be recorded in solverforge.app.toml: {app_spec}"
     );
     assert!(
@@ -774,7 +819,8 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         "cli shell should keep shared DTOs and exclude Axum route files"
     );
     assert!(
-        cargo_toml.contains("clap = { version = \"4.6.1\", features = [\"derive\"] }")
+        cargo_toml.contains(&format!("solverforge = {SOLVERFORGE_DEP_SPEC}"))
+            && cargo_toml.contains("clap = { version = \"4.6.1\", features = [\"derive\"] }")
             && !cargo_toml.contains("axum")
             && !cargo_toml.contains("tower-http")
             && !cargo_toml.contains("tower =")
@@ -815,8 +861,11 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     assert!(
         app_spec_after_generate.contains("shell = \"cli\"")
+            && app_spec_after_generate.contains("target = \"solverforge 0.19.0\"")
+            && app_spec_after_generate
+                .contains("runtime_source = \"crates.io: solverforge 0.19.0\"")
             && !app_spec_after_generate.contains("ui_source"),
-        "cli shell should not reintroduce ui_source after domain mutations: {app_spec_after_generate}"
+        "cli shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
 
     let output = Command::new("cargo")
@@ -867,7 +916,7 @@ fn test_new_neutral_cargo_check_passes() {
     match apply_generated_project_dependency_overrides(&project_dir) {
         DependencyOverrideMode::CratesIo => {
             eprintln!(
-                "using published SolverForge crate targets for scaffold validation; set {}=1 to apply explicit local Cargo patches",
+                "using registry SolverForge dependency targets for scaffold validation; set {}=1 to apply explicit local Cargo patches",
                 USE_LOCAL_PATCHES_ENV
             );
         }
@@ -911,6 +960,13 @@ fn test_list_template_direct_check_and_boot_passes() {
     let routes_rs =
         std::fs::read_to_string(app.project_dir().join("src").join("api").join("routes.rs"))
             .unwrap();
+    let telemetry_rs = std::fs::read_to_string(
+        app.project_dir()
+            .join("src")
+            .join("api")
+            .join("telemetry.rs"),
+    )
+    .unwrap();
     let app_js = std::fs::read_to_string(app.project_dir().join("static").join("app.js")).unwrap();
 
     assert!(
@@ -935,9 +991,13 @@ fn test_list_template_direct_check_and_boot_passes() {
             && data_seed.contains("pub enum DemoData")
             && data_seed.contains("available_demo_data()")
             && routes_rs.contains(".route(\"/jobs\", post(create_job))")
+            && routes_rs.contains(".route(\"/jobs/qualified\", post(create_qualified_job))")
             && routes_rs.contains(".route(\"/jobs/{id}/events\", get(sse::events))")
             && routes_rs.contains(".route(\"/jobs/{id}/snapshot\", get(get_snapshot))")
+            && routes_rs.contains(".route(\"/jobs/{id}/telemetry\", get(get_telemetry_detail))")
             && routes_rs.contains(".route(\"/jobs/{id}/cancel\", post(cancel_job))")
+            && telemetry_rs.contains("pub struct CandidateTraceDto")
+            && telemetry_rs.contains("pub selector_telemetry: Vec<SelectorTelemetryDto>")
             && app_js.contains("SF.createSolver")
             && app_js.contains("SF.rail.createTimeline"),
         "list template files should expose the retained lifecycle and sequence-board surface"
@@ -2299,6 +2359,211 @@ pub(super) fn resource_priority(_plan: &Plan, _task: &Task, _resource: usize) ->
         check_status.success(),
         "cargo check failed after adding scalar hook functions"
     );
+}
+
+#[test]
+fn test_generate_countable_scalar_range_projects_renders_and_compiles() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_generated_countable_range";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+    assert!(
+        cli_command()
+            .args(["generate", "entity", "task"])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate entity")
+            .success(),
+        "entity generation failed"
+    );
+    assert!(
+        cli_command()
+            .args([
+                "generate",
+                "variable",
+                "priority",
+                "--entity",
+                "Task",
+                "--kind",
+                "scalar",
+                "--countable-range",
+                "2..7",
+            ])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate countable scalar variable")
+            .success(),
+        "countable scalar generation failed"
+    );
+
+    let task_rs = std::fs::read_to_string(project_dir.join("src/domain/task.rs")).unwrap();
+    assert!(task_rs.contains("countable_range = \"2..7\""));
+    assert!(!task_rs.contains("value_range_provider ="));
+
+    let spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    assert!(spec.contains("countable_range = \"2..7\""));
+
+    let ui_model: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(project_dir.join("static/generated/ui-model.json")).unwrap(),
+    )
+    .expect("ui model should be valid JSON");
+    assert_eq!(ui_model["views"][0]["countableRange"]["from"], 2);
+    assert_eq!(ui_model["views"][0]["countableRange"]["to"], 7);
+    assert_eq!(ui_model["views"][0]["sourcePlural"], "");
+
+    assert!(
+        Command::new("cargo")
+            .arg("check")
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to run cargo check")
+            .success(),
+        "countable scalar project failed cargo check"
+    );
+}
+
+#[test]
+fn test_generate_list_variable_metadata_projects_current_runtime_surface() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_generated_list_metadata";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    assert!(cli_command()
+        .args(["generate", "fact", "visit"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate fact")
+        .success());
+    assert!(cli_command()
+        .args(["generate", "entity", "route"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate entity")
+        .success());
+    assert!(
+        cli_command()
+            .args([
+                "generate",
+                "variable",
+                "visit_order",
+                "--entity",
+                "Route",
+                "--kind",
+                "list",
+                "--elements",
+                "visits",
+                "--distance-meter",
+                "cross_distance",
+                "--intra-distance-meter",
+                "intra_distance",
+                "--route-hooks",
+                "route_hooks",
+                "--savings-hooks",
+                "savings_hooks",
+                "--savings-metric-class-fn",
+                "metric_class",
+                "--element-owner-fn",
+                "fixed_owner",
+                "--construction-element-order-key",
+                "visit_priority",
+                "--precedence-duration-fn",
+                "visit_duration",
+                "--precedence-successors-fn",
+                "visit_successors",
+                "--solution-trait",
+                "RouteSolution",
+            ])
+            .current_dir(&project_dir)
+            .status()
+            .expect("failed to generate list variable")
+            .success(),
+        "list variable generation failed"
+    );
+
+    let route_rs = std::fs::read_to_string(project_dir.join("src/domain/route.rs")).unwrap();
+    let spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    for expected in [
+        "distance_meter = \"cross_distance\"",
+        "intra_distance_meter = \"intra_distance\"",
+        "route_hooks = \"route_hooks\"",
+        "savings_hooks = \"savings_hooks\"",
+        "savings_metric_class_fn = \"metric_class\"",
+        "element_owner_fn = \"fixed_owner\"",
+        "construction_element_order_key = \"visit_priority\"",
+        "precedence_duration_fn = \"visit_duration\"",
+        "precedence_successors_fn = \"visit_successors\"",
+        "solution_trait = \"RouteSolution\"",
+    ] {
+        assert!(
+            route_rs.contains(expected),
+            "domain missing {expected}: {route_rs}"
+        );
+        assert!(
+            spec.contains(expected),
+            "app spec missing {expected}: {spec}"
+        );
+    }
+
+    let ui_model: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(project_dir.join("static/generated/ui-model.json")).unwrap(),
+    )
+    .expect("ui model should be valid JSON");
+    let metadata = &ui_model["views"][0]["listMetadata"];
+    assert_eq!(metadata["distanceMeter"], "cross_distance");
+    assert_eq!(metadata["routeHooks"], "route_hooks");
+    assert_eq!(metadata["savingsHooks"], "savings_hooks");
+    assert_eq!(metadata["precedenceSuccessorsFn"], "visit_successors");
+    assert_eq!(metadata["solutionTrait"], "RouteSolution");
+
+    let invalid = cli_command()
+        .args([
+            "generate",
+            "variable",
+            "cvrp_visits",
+            "--entity",
+            "Route",
+            "--kind",
+            "list",
+            "--elements",
+            "visits",
+            "--domain",
+            "cvrp",
+            "--route-hooks",
+            "custom_hooks",
+        ])
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run invalid CVRP command");
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr)
+        .contains("--domain cvrp already provides route_hooks"));
 }
 
 #[test]

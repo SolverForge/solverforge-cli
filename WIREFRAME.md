@@ -14,14 +14,14 @@ scaffolding. Shell choice is a delivery surface, not a model family. The
 current shell set is exactly `web`, `api`, and `cli`; Tauri is deferred and has
 no public scaffold selector in this release line.
 
-Current CLI package version: `2.2.2`.
+Current CLI package version: `2.2.3`.
 
 Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.15.2`
-- `solverforge-ui 0.6.5` for the web shell
+- `solverforge 0.19.0`
+- `solverforge-ui 0.7.0` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
 
 The CLI version is separate from those targets and must remain visible in
@@ -31,8 +31,9 @@ version output and generated README content.
 
 Planning variable kinds are:
 
-- `scalar`: one assigned value from a fact collection, configured with
-  `--range <FACT_COLLECTION>`
+- `scalar`: one assigned value from either a fact collection, configured with
+  `--range <FACT_COLLECTION>`, or a non-negative half-open integer domain,
+  configured with `--countable-range <FROM..TO>`
 - `list`: an ordered sequence of values from a fact collection, configured with
   `--elements <FACT_COLLECTION>`
 
@@ -51,6 +52,27 @@ These flags are metadata-only. The CLI emits the planning-variable attribute,
 syncs the values through `solverforge.app.toml`, writes them to
 `static/generated/ui-model.json` for web-shell projects, and leaves the Rust hook
 function bodies under domain ownership.
+
+Countable ranges are validated before mutation, emitted as
+`countable_range = "from..to"`, synchronized through the app spec, and projected
+as structured `from`/`to` bounds for numeric-lane rendering in the web shell.
+Fact ranges and countable ranges are mutually exclusive.
+
+List variable generation accepts the complete current list metadata surface:
+
+- `--domain cvrp`
+- `--distance-meter` and `--intra-distance-meter`
+- `--route-hooks`, `--savings-hooks`, and `--savings-metric-class-fn`
+- `--element-owner-fn`
+- `--construction-element-order-key`
+- `--precedence-duration-fn` and `--precedence-successors-fn`
+- `--solution-trait`
+
+The values are emitted into `#[planning_list_variable(...)]`, synchronized to
+the app spec, and projected to the web UI model. The `cvrp` profile supplies
+its stock distance meters, route/savings hooks, metric class, and solution
+trait as one coherent runtime profile; explicit overrides of those fields are
+rejected when the profile is selected.
 
 Scalar groups and conflict repairs are exact-ID resources. Scalar groups are
 named by the user-provided group ID; conflict repairs are named by the
@@ -74,9 +96,10 @@ The web shell generates:
 - `src/domain/` with a neutral `Plan` solution and managed domain exports
 - `src/constraints/` with an empty managed constraint set
 - `src/api/` exposing the retained `/jobs` REST/SSE contract expected by
-  `solverforge-ui`
-- `src/solver/` tracking best solution, status telemetry, lifecycle events, and
-  snapshot-bound analysis
+  `solverforge-ui`, plus qualified-run and detailed telemetry routes
+- `src/solver/` tracking best solution, complete compact status telemetry,
+  lifecycle events, snapshot-bound analysis, and separately retained bounded
+  candidate-pull detail
 - `src/data/mod.rs` as the stable data import wrapper
 - `src/data/data_seed.rs` as compiler-owned generated sample data
 - `static/index.html` loading `/sf/sf.css` and `/sf/sf.js`
@@ -134,6 +157,8 @@ projections. It tracks:
 - fact collections
 - planning entity collections
 - `scalar` and `list` variable declarations
+- scalar fact/countable value-source metadata, scalar hooks, and list
+  domain/hook metadata
 - constraint modules
 - scalar groups and conflict repairs by exact ID
 
@@ -165,6 +190,14 @@ Generated apps should behave like production references:
 
 - status endpoints expose `currentScore`, `bestScore`, solver status, and latest
   snapshot revision
+- status, snapshot, and SSE payloads expose every compact SolverForge telemetry
+  aggregate and phase/selector/move/applied-move breakdown
+- `GET /jobs/{id}/telemetry` exposes the atomically paired retained status and
+  opt-in bounded candidate-pull trace; candidate pulls never ride normal SSE,
+  status, or snapshot traffic
+- `POST /jobs/qualified` accepts externally attested schema, instance,
+  initial-state, core-tree, and build SHA-256 digests and starts the same
+  retained lifecycle with qualified trace provenance
 - SSE messages carry typed lifecycle metadata including `eventType`,
   `eventSequence`, `lifecycleState`, and `snapshotRevision`
 - retained lifecycle events include `progress`, `best_solution`,
@@ -206,6 +239,13 @@ any project file is written. `solverforge-cli` must not link to
 `solverforge-config` for this; the graph scan is CLI-private TOML-structure
 validation.
 
+Bounded candidate diagnostics are enabled through
+`candidate_trace.max_entries`, including
+`solverforge config set candidate_trace.max_entries <N>`. The CLI rejects a
+missing, zero, non-integer, or out-of-range capacity. The neutral template
+documents this setting but leaves it disabled by default because trace detail
+can be large.
+
 `.solverforgerc` is loaded from the project root first, then from
 `~/.solverforgerc`. It is intentionally narrow and only carries local CLI
 preferences:
@@ -228,11 +268,16 @@ projects:
 Current scenario policy:
 
 - neutral shell: bootable empty app
-- mixed app: generated scalar-plus-list shape and browser/runtime surface
+- mixed app: seeded scalar-plus-list solve through the runtime and browser,
+  including required scalar assignment, complete list placement, cancel, and
+  terminal cleanup
 - scalar-only app: seeded solve flow through typed SSE, status, analysis, and
-  delete flow
+  delete flow, including full aggregate telemetry, bounded candidate detail,
+  and qualified trace provenance
 
-Do not claim mixed seeded solving until the runtime supports that combination.
+SolverForge `0.19.0` uses list variables for ordered sequences and routes. Both
+generated-app end-to-end suites start and observe the real mixed scalar/list
+path.
 
 ## Non-Goals
 
@@ -241,6 +286,7 @@ Do not reintroduce:
 - public scaffold-family flags
 - public Tauri shell selection before a real Tauri scaffold exists
 - hidden `standard` variable-kind aliases
+- scalar predecessor topology; ordered sequences belong to list variables
 - hidden console/scaffold aliases
 - compatibility migrations for unmanaged legacy generated files
 - raw score-only SSE payloads

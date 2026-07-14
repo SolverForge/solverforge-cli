@@ -6,6 +6,7 @@ use crate::app_spec;
 use crate::commands::generate_constraint::validate_name;
 use crate::commands::generate_constraint::{domain::DomainModel, parse_domain};
 use crate::error::{CliError, CliResult};
+use crate::list_variable_metadata::ListVariableMetadata;
 use crate::output;
 use crate::scalar_variable_hooks::ScalarVariableHooks;
 
@@ -13,7 +14,7 @@ use super::generators::{generate_entity, generate_fact, generate_solution};
 use super::utils::{ensure_domain_dir, find_file_for_type, snake_to_pascal, validate_score_type};
 use super::wiring::{
     inject_list_variable, inject_scalar_variable, remove_variable_field, replace_score_type,
-    rewrite_domain_mod_source, wire_solution_collection_source,
+    rewrite_domain_mod_source, wire_solution_collection_source, ScalarVariableWiring,
 };
 
 const NEUTRAL_SOLUTION_SENTINEL: &str = "// @solverforge:neutral-solution";
@@ -34,6 +35,18 @@ struct NeutralReplacementPlan {
     neutral_plan_path: PathBuf,
     rewritten_constraints_mod: Option<String>,
     contract_rewrites: Vec<(PathBuf, String)>,
+}
+
+pub(crate) struct VariableRequest {
+    pub field: String,
+    pub entity: String,
+    pub kind: String,
+    pub range: Option<String>,
+    pub countable_range: Option<String>,
+    pub elements: Option<String>,
+    pub allows_unassigned: bool,
+    pub scalar_hooks: ScalarVariableHooks,
+    pub list_metadata: ListVariableMetadata,
 }
 
 pub fn run_entity(
@@ -314,18 +327,24 @@ pub fn run_solution(name: &str, score: &str) -> CliResult {
     Ok(())
 }
 
-pub fn run_variable(
-    field: &str,
-    entity: &str,
-    kind: &str,
-    range: Option<&str>,
-    elements: Option<&str>,
-    allows_unassigned: bool,
-    scalar_hooks: &ScalarVariableHooks,
-) -> CliResult {
-    validate_name(field)?;
+pub(crate) fn run_variable(request: VariableRequest) -> CliResult {
+    let VariableRequest {
+        field,
+        entity,
+        kind,
+        range,
+        countable_range,
+        elements,
+        allows_unassigned,
+        scalar_hooks,
+        list_metadata,
+    } = request;
+    validate_name(&field)?;
     scalar_hooks.validate_paths().map_err(CliError::general)?;
-
+    list_metadata.validate().map_err(CliError::general)?;
+    if let Some(range) = countable_range.as_deref() {
+        crate::countable_range::CountableRange::parse(range).map_err(CliError::general)?;
+    }
     let domain_dir = Path::new("src/domain");
     if !domain_dir.exists() {
         return Err(CliError::NotInProject {
@@ -333,28 +352,48 @@ pub fn run_variable(
         });
     }
 
-    let entity_file = find_file_for_type(domain_dir, entity)?;
+    let entity_file = find_file_for_type(domain_dir, &entity)?;
 
     let src = fs::read_to_string(&entity_file).map_err(|e| CliError::IoError {
         context: format!("failed to read {}", entity_file.display()),
         source: e,
     })?;
 
-    let new_src = match kind {
+    let new_src = match kind.as_str() {
         "scalar" => {
-            let range = range.ok_or_else(|| {
-                CliError::general("scalar variables require --range <fact_collection>")
-            })?;
-            inject_scalar_variable(&src, entity, field, range, allows_unassigned, scalar_hooks)?
+            if !list_metadata.is_empty() {
+                return Err(CliError::general("list metadata flags require --kind list"));
+            }
+            if range.is_none() && countable_range.is_none() {
+                return Err(CliError::general(
+                    "scalar variables require --range <fact_collection> or --countable-range <from..to>",
+                ));
+            }
+            inject_scalar_variable(
+                &src,
+                &entity,
+                &field,
+                ScalarVariableWiring {
+                    range: range.as_deref().unwrap_or_default(),
+                    countable_range: countable_range.as_deref(),
+                    allows_unassigned,
+                    hooks: &scalar_hooks,
+                },
+            )?
         }
         "list" => {
             if !scalar_hooks.is_empty() {
                 return Err(CliError::general("scalar hook flags require --kind scalar"));
             }
+            if countable_range.is_some() {
+                return Err(CliError::general(
+                    "--countable-range requires --kind scalar",
+                ));
+            }
             let elements = elements.ok_or_else(|| {
                 CliError::general("list variables require --elements <fact_collection>")
             })?;
-            inject_list_variable(&src, entity, field, elements)?
+            inject_list_variable(&src, &entity, &field, &elements, &list_metadata)?
         }
         _ => return Err(CliError::general("unsupported variable kind")),
     };

@@ -364,13 +364,13 @@ fn api_cargo_toml(project_name: &str, crate_name: &str) -> String {
         r#"{base}
 # HTTP API server
 axum = "0.8.9"
-tokio = {{ version = "1.52.2", features = ["full"] }}
+tokio = {{ version = "1.52.3", features = ["full"] }}
 tokio-stream = {{ version = "0.1.18", features = ["sync"] }}
-tower-http = {{ version = "0.6.8", features = ["cors"] }}
+tower-http = {{ version = "0.6.11", features = ["cors"] }}
 
 # Serialization
 serde = {{ version = "1.0.228", features = ["derive"] }}
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 
 # Utilities
 parking_lot = "0.12.5"
@@ -384,11 +384,11 @@ fn cli_cargo_toml(project_name: &str, crate_name: &str) -> String {
         r#"{base}
 # Command-line shell
 clap = {{ version = "4.6.1", features = ["derive"] }}
-tokio = {{ version = "1.52.2", features = ["full"] }}
+tokio = {{ version = "1.52.3", features = ["full"] }}
 
 # Serialization
 serde = {{ version = "1.0.228", features = ["derive"] }}
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 
 # Utilities
 parking_lot = "0.12.5"
@@ -437,8 +437,10 @@ async fn main() {{
 
 fn cli_api_mod_rs() -> &'static str {
     r#"mod dto;
+mod telemetry;
 
 pub use dto::PlanDto;
+pub use telemetry::{CandidateTraceDto, TelemetryDto};
 "#
 }
 
@@ -573,10 +575,12 @@ fn print_template_guidance(project_name: &str, shell: ScaffoldShell) {
             );
             println!("    - Retained job lifecycle with pause, resume, cancel, and delete");
             println!("    - Typed SSE lifecycle events and snapshot-bound score analysis");
+            println!("    - Full compact telemetry plus opt-in candidate-trace diagnostics");
         }
         ScaffoldShell::Api => {
             println!("    - HTTP JSON and SSE endpoints without frontend assets");
             println!("    - Retained job lifecycle with pause, resume, cancel, and delete");
+            println!("    - Full compact telemetry plus opt-in candidate-trace diagnostics");
         }
         ScaffoldShell::Cli => {
             println!("    - A Clap command-line entry point without Axum or frontend assets");
@@ -588,6 +592,8 @@ fn print_template_guidance(project_name: &str, shell: ScaffoldShell) {
     println!("    solverforge generate entity task");
     println!("    solverforge generate fact resource");
     println!("    solverforge generate variable resource_idx --entity Task --kind scalar --range resources --allows-unassigned");
+    println!("    solverforge generate variable visit_order --entity Route --kind list --elements visits");
+    println!("    # Or use --countable-range 0..24 for an integer-valued scalar domain");
 
     println!();
 }
@@ -693,8 +699,14 @@ fn generate_readme(project_name: &str, _crate_name: &str, shell: ScaffoldShell) 
         .push_str("solverforge generate entity task --field label:String --field priority:i32\n\n");
     readme.push_str("# Add a scalar planning variable\n");
     readme.push_str("solverforge generate variable resource_idx --entity Task --kind scalar --range resources --allows-unassigned\n\n");
+    readme.push_str("# Or add a scalar over a non-negative half-open integer range\n");
+    readme.push_str("# solverforge generate variable hour --entity Task --kind scalar --countable-range 0..24\n\n");
     readme.push_str("# Or add scalar hook metadata when your domain owns the hook functions\n");
     readme.push_str("# solverforge generate variable resource_idx --entity Task --kind scalar --range resources --candidate-values resource_candidates\n\n");
+    readme.push_str("# Add an ordered list variable with optional current SolverForge metadata\n");
+    readme.push_str("# solverforge generate variable visit_order --entity Route --kind list --elements visits --domain cvrp\n\n");
+    readme.push_str("# Enable bounded candidate-pull diagnostics when needed\n");
+    readme.push_str("# solverforge config set candidate_trace.max_entries 100000\n\n");
     readme.push_str("# Remove a resource\n");
     readme.push_str("solverforge destroy constraint my_rule\n");
     readme.push_str("```\n\n");
@@ -715,6 +727,10 @@ fn generate_readme(project_name: &str, _crate_name: &str, shell: ScaffoldShell) 
     readme.push_str("| `src/data/` | Data loading and generation |\n");
     readme.push_str("| `solverforge.app.toml` | Scaffolded app/domain contract |\n");
     readme.push_str("| `solver.toml` | Solver configuration (termination, phases) |\n");
+    if matches!(shell, ScaffoldShell::Web | ScaffoldShell::Api) {
+        readme.push_str("\n## Runtime Diagnostics\n\n");
+        readme.push_str("Status, snapshot, and SSE payloads expose the complete compact SolverForge telemetry surface. Candidate pulls remain separate from ordinary control-plane traffic. After enabling `candidate_trace.max_entries`, use `GET /jobs/{id}/telemetry` for the atomically retained bounded trace and `POST /jobs/qualified` for externally attested qualified trace jobs.\n");
+    }
     readme
 }
 

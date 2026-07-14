@@ -75,6 +75,52 @@ test.describe('Mixed Pipeline', () => {
       expect(appSource).not.toContain('sseSnapshot');
     });
 
+    await test.step('Solve the seeded mixed model through the generated UI', async () => {
+      const solveButton = page.getByRole('button', { name: 'Solve' });
+      const stopButton = page.getByRole('button', { name: 'Stop' });
+
+      await solveButton.click();
+      await expect(stopButton).toBeVisible();
+      await page.waitForFunction(() => {
+        const app = document.getElementById('sf-app');
+        const score = document.getElementById('sfScoreDisplay');
+        return !!app
+          && !!app.dataset.jobId
+          && !!app.dataset.snapshotRevision
+          && !!score
+          && score.textContent.trim() !== '—';
+      });
+
+      const solved = await page.evaluate(async () => {
+        const app = document.getElementById('sf-app');
+        const jobId = app.dataset.jobId;
+        const snapshot = await fetch(`/jobs/${jobId}/snapshot`).then((response) => response.json());
+        const solution = snapshot.solution;
+        return {
+          jobId,
+          scalarAssignments: solution.tasks.filter((task) => Number.isInteger(task.resource_idx)).length,
+          assignedItems: solution.containers.reduce(
+            (total, container) => total + container.item_order.length,
+            0
+          ),
+          itemCount: solution.items.length,
+        };
+      });
+
+      expect(solved.scalarAssignments).toBeGreaterThan(0);
+      expect(solved.assignedItems).toBe(solved.itemCount);
+
+      await stopButton.click();
+      await page.waitForFunction(() => {
+        const app = document.getElementById('sf-app');
+        return !!app && app.dataset.lifecycleState === 'CANCELLED';
+      });
+      const deleteStatus = await page.evaluate(async (jobId) => {
+        return fetch(`/jobs/${jobId}`, { method: 'DELETE' }).then((response) => response.status);
+      }, solved.jobId);
+      expect(deleteStatus).toBe(204);
+    });
+
     await test.step('Reload page and verify generated views survive reconnect', async () => {
       await page.reload();
       await page.waitForSelector('#sf-app');

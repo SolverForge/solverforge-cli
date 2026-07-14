@@ -206,6 +206,9 @@ pub fn run() -> CliResult {
         if let Err(err) = solver_config::validate_managed_blocks(&src) {
             errors.push(err.to_string());
         }
+        if let Err(err) = solver_config::validate_current_settings(&src) {
+            errors.push(err.to_string());
+        }
     }
 
     println!();
