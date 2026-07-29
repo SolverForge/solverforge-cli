@@ -20,7 +20,7 @@ Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.19.0`
+- `solverforge 0.19.3`
 - `solverforge-ui 0.7.0` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
 
@@ -275,7 +275,7 @@ Current scenario policy:
   delete flow, including full aggregate telemetry, bounded candidate detail,
   and qualified trace provenance
 
-SolverForge `0.19.0` uses list variables for ordered sequences and routes. Both
+SolverForge `0.19.3` uses list variables for ordered sequences and routes. Both
 generated-app end-to-end suites start and observe the real mixed scalar/list
 path.
 

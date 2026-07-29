@@ -12,7 +12,7 @@ Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.19.0`
+- `solverforge 0.19.3`
 - `solverforge-ui 0.7.0` for the default web shell
 - `solverforge-maps 2.1.4` for the default web shell
 
@@ -259,7 +259,7 @@ Current scenario coverage:
   user-facing Stop as runtime cancel, terminal-only Delete, and status/snapshot
   reconnect bootstrap; the runtime pipeline also verifies full aggregate
   telemetry, bounded candidate detail, and qualified trace provenance
-SolverForge `0.19.0` supports mixed scalar/list construction, canonical mixed
+SolverForge `0.19.3` supports mixed scalar/list construction, canonical mixed
 local-search defaults, and list-based sequence modeling. The CLI suite proves
 the mixed path in both runtime and browser pipelines; the scalar-only scenario keeps the deeper
 pause/resume, analysis, reconnect, and qualified-trace checks.
