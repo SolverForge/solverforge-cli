@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.19.3](///compare/v2.2.2...v0.19.3) (2026-07-30)
+
+
+### Features
+
+* **scaffold:** target SolverForge 0.19 6612e9d
+
 ## [2.2.3](///compare/v2.2.2...v2.2.3) (2026-07-14)
 
 ### Features
