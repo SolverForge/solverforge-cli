@@ -14,7 +14,7 @@ scaffolding. Shell choice is a delivery surface, not a model family. The
 current shell set is exactly `web`, `api`, and `cli`; Tauri is deferred and has
 no public scaffold selector in this release line.
 
-Current CLI package version: `2.2.3`.
+Current CLI package version: `2.2.4`.
 
 Required Rust version: `1.95` or later.
 
@@ -271,9 +271,10 @@ Current scenario policy:
 - mixed app: seeded scalar-plus-list solve through the runtime and browser,
   including required scalar assignment, complete list placement, cancel, and
   terminal cleanup
-- scalar-only app: seeded solve flow through typed SSE, status, analysis, and
-  delete flow, including full aggregate telemetry, bounded candidate detail,
-  and qualified trace provenance
+- scalar-only app: seeded solve flow through typed SSE, status, snapshot-bound
+  analysis, checkpointed pause/resume, cancel, terminal-only delete, and
+  reconnect bootstrap, including full aggregate telemetry, bounded candidate
+  detail, and qualified trace provenance
 
 SolverForge `0.19.4` uses list variables for ordered sequences and routes. Both
 generated-app end-to-end suites start and observe the real mixed scalar/list

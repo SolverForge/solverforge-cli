@@ -1,13 +1,13 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in files like `src/app_spec.rs`, `src/countable_range.rs`, `src/error.rs`, `src/list_variable_metadata.rs`, `src/managed_block.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, and `src/template.rs`. Integration tests live in `tests/`, and scaffold/template assets live in `templates/`.
+`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in `src/app_spec.rs`, `src/countable_range.rs`, `src/error.rs`, `src/list_variable_metadata.rs`, `src/managed_block.rs`, `src/model_contract.rs`, `src/model_id.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, `src/scalar_variable_hooks.rs`, `src/solver_config.rs`, and `src/template.rs`. Integration tests live in `tests/`; their reusable generated-app harness lives in `tests/support/`, browser scenarios live in `tests/e2e/`, and scaffold/template assets live in `templates/`.
 
 ## Current Product Direction
 `solverforge-cli` is the default entry point for new SolverForge applications. Treat the CLI as its own versioned product, distinct from the runtime crates and UI assets that generated projects target.
 
 Current scaffold policy:
-- current CLI package version is `2.2.3`
+- current CLI package version is `2.2.4`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
 - generated projects currently target `solverforge 0.19.4`; the default web shell additionally targets `solverforge-ui 0.7.0` and `solverforge-maps 2.1.4`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
