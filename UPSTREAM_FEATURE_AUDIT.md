@@ -1,11 +1,11 @@
 # SolverForge Upstream Feature Audit
 
-Audit date: 2026-07-29
+Audit date: 2026-08-13
 
 This audit compares the current `solverforge-cli` scaffold surface against the
 live SolverForge upstream checkout at `/srv/lab/dev/solverforge/solverforge`
 and the crates.io release state. Generated projects now target the published
-SolverForge `0.19.3` release. Registry-only generated-app validation is the
+SolverForge `0.19.4` release. Registry-only generated-app validation is the
 release gate; `SF_USE_LOCAL_PATCHES=1` remains reserved for explicit future
 prerelease checks against sibling checkouts.
 
@@ -15,13 +15,19 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Source Evidence
 
-- Published gate: `cargo info solverforge@0.19.3` resolves the published crate
-  on 2026-07-29, with Rust `1.95` and the scaffolded `serde`,
+- Published gate: `cargo info solverforge@0.19.4` resolves the published crate
+  on 2026-08-13, with Rust `1.95` and the scaffolded `serde`,
   `console`, and `verbose-logging` feature set still available.
 - Upstream local checkout: the workspace and inter-crate dependency baseline is
-  `0.19.3`, with `v0.19.3` at the checked-out release commit. The `0.19.0`
+  `0.19.4`, with `v0.19.4` at the checked-out release commit. The `0.19.0`
   release made list variables the sole sequence and route model; the published
-  `0.19.1` through `0.19.3` patch line carries the subsequent solver fixes.
+  `0.19.1` through `0.19.4` patch line carries the subsequent solver fixes.
+- Upstream `0.19.4` assignment defaults: omitted-phase assignment-backed scalar
+  groups commit the hard-first required batch with grouped `FirstFit`, defer
+  bounded augmenting rematches to the following required cursor, and keep
+  grouped `CheapestInsertion` for optional assignments. Explicit CLI-generated
+  scalar-group phases already select `first_fit`, so this remains a
+  runtime-owned improvement rather than a new scaffold policy.
 - Previous upstream releases: `solverforge/CHANGELOG.md` lists `0.17.2`
   dynamic construction primitives and required-assignment streaming, `0.17.0`
   CVRP list-domain profile support, and `0.16.0` split route/savings hooks.
@@ -72,7 +78,7 @@ without turning the neutral scaffold into a domain-specific demo.
   `scalar_groups`, `ScalarGroup::assignment`, grouped scalar construction with
   `group_name`, `construction_obligation = "assign_when_candidate_exists"`, and
   `grouped_scalar_move_selector`.
-- CLI coverage today: the scaffold targets `solverforge 0.19.3` and includes
+- CLI coverage today: the scaffold targets `solverforge 0.19.4` and includes
   the retained `SolverManager` lifecycle, typed SSE, snapshots, analysis,
   pause/resume/cancel/delete, generated `solverforge.app.toml`, scalar/list
   variable generation, complete executable scalar/list metadata projection,
@@ -99,10 +105,11 @@ without turning the neutral scaffold into a domain-specific demo.
 | Scalar `candidate_values` hook | Implemented in this worktree: `generate variable --kind scalar` accepts `--candidate-values`, renders it into `#[planning_variable(...)]`, parses handwritten attributes, persists it in `solverforge.app.toml`, and projects it into `static/generated/ui-model.json`. | Covered. This is a generic scalar modeling capability and remains starter-safe as metadata only. | No further scaffold change. Keep hook bodies domain-owned and keep tests proving generated apps compile when the user provides the hook. | Existing parser/generator/app-spec/scaffold tests. |
 | Scalar nearby hooks and distance meters | Implemented in this worktree for `--nearby-value-candidates`, `--nearby-entity-candidates`, `--nearby-value-distance-meter`, and `--nearby-entity-distance-meter`. | Covered. Nearby selectors remain opt-in because the model must bound candidate discovery explicitly. | No further scaffold change. Do not alter `solver.toml` defaults when these flags are present. | Existing parser/projection/generation/scaffold tests; keep coverage that no nearby selector is emitted by default. |
 | Scalar construction order hooks | Implemented in this worktree for `--construction-entity-order-key` and `--construction-value-order-key`. | Covered. Required by scalar-only order-sensitive construction heuristics, but metadata alone should not switch solver policy. | No further scaffold change. A future config preset can validate that required hooks exist before selecting order-sensitive construction. | Existing parser/projection/generated-attribute tests. |
-| Countable scalar value ranges | Implemented as mutually exclusive `--countable-range FROM..TO`, with non-negative half-open validation, macro emission, domain parsing, app-spec/UI projection, numeric web rendering, and a fresh generated-app compile check. | Covered. This is a canonical scalar value source and does not require a synthetic fact collection. | Keep the stored macro/app-spec form as `from..to`; keep the UI projection structured as numeric `from`/`to` bounds. | Parser/validation unit tests, projection assertions, and generated-app `cargo check` against 0.19.3. |
+| Countable scalar value ranges | Implemented as mutually exclusive `--countable-range FROM..TO`, with non-negative half-open validation, macro emission, domain parsing, app-spec/UI projection, numeric web rendering, and a fresh generated-app compile check. | Covered. This is a canonical scalar value source and does not require a synthetic fact collection. | Keep the stored macro/app-spec form as `from..to`; keep the UI projection structured as numeric `from`/`to` bounds. | Parser/validation unit tests, projection assertions, and generated-app `cargo check` against 0.19.4. |
 | Sequence and route modeling | Implemented only through `--kind list --elements <collection>` and current list metadata. | Included. One list representation owns assignment and order and is the canonical sequence architecture. | Keep the public CLI, app spec, parser, generated data, UI projection, and runtime gates scalar/list-only. | List generator/parser/projection tests, mixed generated-app compile and runtime gates, and route-profile coverage. |
+| `0.19.4` assignment-backed omitted-phase defaults | Generated projects consume the runtime compiler through the umbrella `solverforge` crate; CLI-managed scalar-group phases already use explicit grouped `first_fit`. | Covered by the runtime target upgrade. The hard-first required batch and deferred rematch policy are runtime-owned and do not require a new CLI flag or template branch. | Preserve the explicit CLI-managed phase contract and let omitted-phase projects inherit the `0.19.4` runtime defaults. | Scalar-group config assertions, registry-only generated-app compilation, and upstream required-assignment runtime tests. |
 | Current construction heuristic catalog | CLI ships conservative scalar/list template defaults and generic `config set`. | Do not mirror every variant in scaffold defaults. | Document which upstream heuristics need opt-in model hooks; keep `first_fit` and `list_cheapest_insertion` templates stable until a command explicitly owns a configured preset. | Docs/audit assertions only unless a preset command is added. |
-| Immutable runtime compilation and resolved selector policy | Generated planning macros and `solver.toml` enter the canonical 0.19.3 runtime compiler; the templates do not assemble phases directly. | Covered by the runtime dependency upgrade. This is runtime-owned architecture, not a new scaffold family or compatibility path. | Keep the generated model and config contracts unchanged and validate every shell plus scalar, list, and mixed runtime pipelines against 0.19.3. | Registry-only scaffold checks, seeded scalar/mixed generated solves, and browser lifecycle tests. |
+| Immutable runtime compilation and resolved selector policy | Generated planning macros and `solver.toml` enter the canonical 0.19.4 runtime compiler; the templates do not assemble phases directly. | Covered by the runtime dependency upgrade. This is runtime-owned architecture, not a new scaffold family or compatibility path. | Keep the generated model and config contracts unchanged and validate every shell plus scalar, list, and mixed runtime pipelines against 0.19.4. | Registry-only scaffold checks, seeded scalar/mixed generated solves, and browser lifecycle tests. |
 | Qualified candidate execution traces | Implemented as an opt-in config setting, complete typed diagnostic DTO, `GET /jobs/{id}/telemetry`, and additive `POST /jobs/qualified` entry point carrying all required external digests and producer attestation. Candidate pulls remain absent from ordinary SSE/status/snapshot payloads. | Included but disabled by default. This preserves the runtime's compact control plane while exposing the complete diagnostic and qualification surface. | Keep the commented `[candidate_trace]` example, positive-capacity validation, separate detail route, and qualified provenance request aligned with the runtime types. | Unit config validation, scaffold source assertions, fresh generated-app compile checks, and a runtime pipeline that proves normal and qualified retained traces. |
 | CVRP list profile and split route/savings hooks | Implemented through `generate variable --kind list`: `--domain cvrp` plus all generic distance, route/savings, metric-class, ownership, construction-order, precedence, and solution-trait metadata. Domain parsing, app spec, and web UI projection preserve the exact values. | Included as opt-in metadata; the neutral scaffold remains domain-free. The CLI rejects profile-owned overrides alongside `--domain cvrp`. | Keep hook bodies and CVRP trait implementation domain-owned. Do not inject fake route logic or a domain-specific default model. | Generator/parser tests, app-spec/UI projection coverage, CVRP conflict validation, upstream macro tests, and generated-app checks for the neutral/list templates. |
 | Canonical local-search defaults | CLI templates still specify explicit late-acceptance plus accepted-count local search. | No immediate change. Explicit scaffold defaults are stable and compile; upstream omitted-selector defaults are runtime-owned. | Leave current `solver.toml` templates alone. Consider a later docs note that deleting `move_selector` lets runtime choose canonical defaults. | Existing scaffold/runtime tests. |
@@ -113,7 +120,7 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Recommended Follow-Up Implementation Slice
 
-The current starter-safe 0.19.3 surface is implemented. The next high-value slice
+The current starter-safe 0.19.4 surface is implemented. The next high-value slice
 is domain-specific documentation and executable examples, not more neutral
 scaffold defaults.
 
@@ -126,13 +133,17 @@ scaffold defaults.
 
 ## Implementation Status
 
-- Release state: `solverforge 0.19.3` is published on crates.io and matches both
+- Release state: `solverforge 0.19.4` is published on crates.io and matches both
   the live upstream release checkout and this generated target. Registry-only
   validation is therefore authoritative. `SF_USE_LOCAL_PATCHES=1` is only for
   an explicit future coordinated prerelease check. The audit uses the current
   `scalar_groups` / `ScalarGroup::assignment` vocabulary instead of the
   superseded coverage-group vocabulary from the earlier 0.12.0 candidate
   surface.
+- Aligned: the `0.19.4` hard-first required-assignment batching and deferred
+  rematch search remain runtime-owned. The CLI continues to emit its existing
+  explicit grouped `first_fit` phase when it owns scalar-group solver config;
+  it does not duplicate the runtime compiler's omitted-phase policy.
 - Implemented: scalar fact-collection and countable value sources plus
   `candidate_values`, nearby candidate hooks, nearby distance meters, and
   construction order keys are accepted by
@@ -219,7 +230,7 @@ Any implementation from this audit should pass:
 - focused parser/generator/app-spec tests for the new metadata;
 - scaffold contract tests proving fresh generated projects include only the
   opt-in scalar-group surface requested by the user;
-- generated app `cargo check` against the published `0.19.3` registry target;
+- generated app `cargo check` against the published `0.19.4` registry target;
 - runtime pipeline coverage only if the new command claims actual solving
   behavior;
 - `SF_USE_LOCAL_PATCHES=1` only for an explicit future sibling-checkout
