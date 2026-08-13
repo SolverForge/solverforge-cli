@@ -16,11 +16,11 @@ use dependency_overrides::{
 };
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
-const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.19.3";
+const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.19.4";
 const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.7.0";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.4";
 const SOLVERFORGE_DEP_SPEC: &str =
-    r#"{ version = "0.19.3", features = ["serde", "console", "verbose-logging"] }"#;
+    r#"{ version = "0.19.4", features = ["serde", "console", "verbose-logging"] }"#;
 const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.7.0" }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.4" }"#;
 const GENERATED_RUST_VERSION_SPEC: &str = r#"rust-version = "1.95""#;
@@ -273,7 +273,7 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
     assert!(
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
-            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.19.3")
+            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.19.4")
             && stdout.contains("Scaffold UI target: solverforge-ui 0.7.0")
             && stdout.contains("Scaffold maps target: solverforge-maps 2.1.4")
             && stdout.contains(RUNTIME_DEP_LABEL)
@@ -408,8 +408,8 @@ fn test_new_creates_neutral_project_files() {
     assert!(
         app_spec.contains("starter = \"neutral-shell\"")
             && app_spec.contains("shell = \"web\"")
-            && app_spec.contains("target = \"solverforge 0.19.3\"")
-            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.3\"")
+            && app_spec.contains("target = \"solverforge 0.19.4\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.4\"")
             && app_spec.contains("[demo]")
             && app_spec.contains("default_size = \"standard\"")
             && app_spec.contains("available_sizes = [\"small\", \"standard\", \"large\"]")
@@ -459,7 +459,7 @@ fn test_new_creates_neutral_project_files() {
     );
     assert!(
         cargo_toml.contains(
-            "solverforge = { version = \"0.19.3\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+            "solverforge = { version = \"0.19.4\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
         ) && cargo_toml.contains("solverforge-ui = { version = \"0.7.0\" }")
             && cargo_toml.contains("solverforge-maps = { version = \"2.1.4\" }")
             && cargo_toml.contains(GENERATED_RUST_VERSION_SPEC)
@@ -649,7 +649,7 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
         readme.contains(&format!(
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
-        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.19.3`")
+        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.19.4`")
             && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.7.0`")
             && readme
                 .contains("SolverForge maps target for this scaffold: `solverforge-maps 2.1.4`")
@@ -719,8 +719,8 @@ fn test_new_api_shell_excludes_frontend_assets() {
 
     assert!(
         app_spec.contains("shell = \"api\"")
-            && app_spec.contains("target = \"solverforge 0.19.3\"")
-            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.3\"")
+            && app_spec.contains("target = \"solverforge 0.19.4\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.4\"")
             && !app_spec.contains("ui_source"),
         "api shell should be recorded in solverforge.app.toml: {app_spec}"
     );
@@ -755,9 +755,9 @@ fn test_new_api_shell_excludes_frontend_assets() {
         std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     assert!(
         app_spec_after_generate.contains("shell = \"api\"")
-            && app_spec_after_generate.contains("target = \"solverforge 0.19.3\"")
+            && app_spec_after_generate.contains("target = \"solverforge 0.19.4\"")
             && app_spec_after_generate
-                .contains("runtime_source = \"crates.io: solverforge 0.19.3\"")
+                .contains("runtime_source = \"crates.io: solverforge 0.19.4\"")
             && !app_spec_after_generate.contains("ui_source"),
         "api shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
@@ -806,8 +806,8 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
 
     assert!(
         app_spec.contains("shell = \"cli\"")
-            && app_spec.contains("target = \"solverforge 0.19.3\"")
-            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.3\"")
+            && app_spec.contains("target = \"solverforge 0.19.4\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.4\"")
             && !app_spec.contains("ui_source"),
         "cli shell should be recorded in solverforge.app.toml: {app_spec}"
     );
@@ -861,9 +861,9 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     assert!(
         app_spec_after_generate.contains("shell = \"cli\"")
-            && app_spec_after_generate.contains("target = \"solverforge 0.19.3\"")
+            && app_spec_after_generate.contains("target = \"solverforge 0.19.4\"")
             && app_spec_after_generate
-                .contains("runtime_source = \"crates.io: solverforge 0.19.3\"")
+                .contains("runtime_source = \"crates.io: solverforge 0.19.4\"")
             && !app_spec_after_generate.contains("ui_source"),
         "cli shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
