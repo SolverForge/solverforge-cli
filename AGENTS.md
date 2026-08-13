@@ -9,7 +9,7 @@
 Current scaffold policy:
 - current CLI package version is `2.2.3`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
-- generated projects currently target `solverforge 0.19.3`; the default web shell additionally targets `solverforge-ui 0.7.0` and `solverforge-maps 2.1.4`
+- generated projects currently target `solverforge 0.19.4`; the default web shell additionally targets `solverforge-ui 0.7.0` and `solverforge-maps 2.1.4`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
 - `--shell web|api|cli` is the current public shell selector; `web` is the default, `api` omits frontend assets, and `cli` omits Axum/SSE routes and frontend assets
 - API/CLI app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
@@ -66,7 +66,7 @@ Current end-to-end scenario policy:
 - the scalar-only scenario covers the full pause/resume/cancel/delete lifecycle
 - the scalar-only runtime scenario covers full compact telemetry, bounded candidate detail, and qualified trace provenance
 
-SolverForge `0.19.3` uses list variables as the sequence and route model. The
+SolverForge `0.19.4` uses list variables as the sequence and route model. The
 generated-app runtime and browser scenarios must continue to start and observe
 a real mixed scalar/list solve.
 
