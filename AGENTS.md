@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in `src/app_spec.rs`, `src/countable_range.rs`, `src/error.rs`, `src/list_variable_metadata.rs`, `src/managed_block.rs`, `src/model_contract.rs`, `src/model_id.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, `src/scalar_variable_hooks.rs`, `src/solver_config.rs`, and `src/template.rs`. Integration tests live in `tests/`; their reusable generated-app harness lives in `tests/support/`, browser scenarios live in `tests/e2e/`, and scaffold/template assets live in `templates/`.
+`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in `src/app_spec.rs`, `src/countable_range.rs`, `src/error.rs`, `src/list_variable_metadata.rs`, `src/managed_block.rs`, `src/model_contract.rs`, `src/model_id.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, `src/scalar_variable_hooks.rs`, `src/solver_config.rs`, and `src/template.rs`. Integration tests live in `tests/`; their reusable generated-app harness lives in `tests/support/`, browser scenarios live in `tests/e2e/`, and scaffold/template assets live in `templates/`. The portable agent skill lives in `skills/` and is installed by `scripts/install-skill`; `.versionrc.js` configures `commit-and-tag-version` for releases.
 
 ## Current Product Direction
 `solverforge-cli` is the default entry point for new SolverForge applications. Treat the CLI as its own versioned product, distinct from the runtime crates and UI assets that generated projects target.
@@ -24,6 +24,7 @@ Current scaffold policy:
 - `standard` is a demo size label only; do not reintroduce it as a variable kind or scaffold family
 - `templates/scalar/generic` is the embedded neutral scaffold used by `solverforge new`; `templates/list/generic` is not a public `new` selector
 - generated `Cargo.toml` files must carry `rust-version = "1.95"` plus the current explicit dependency baselines for the selected shell from the template/materialization code
+- the repository ships a portable agent skill at `skills/solverforge-modeling/` with an installer at `scripts/install-skill`; keep its documented shell set, scaffold targets, and command surface aligned with the live CLI
 
 When changing templates or scaffold behavior, follow the current repo reality over older starter-template assumptions. Do not add legacy aliases, compatibility shims, migration fallbacks, or automatic rewrites for unmanaged pre-refactor file shapes unless that is explicitly requested.
 
@@ -40,6 +41,7 @@ When changing templates or scaffold behavior, follow the current repo reality ov
 - `cargo fmt --all`: apply Rust formatting.
 - `cargo clippy --all-targets -- -D warnings`: enforce lint-clean code.
 - `pre-commit run --all-files`: run the repository hooks, including YAML checks, `gitleaks`, `fmt`, and `clippy`.
+- `./scripts/install-skill` (or `make install-skill`): install the bundled agent skill into harness skill directories.
 
 ## Coding Style & Naming Conventions
 Use standard Rust style with 4-space indentation and `rustfmt` output as the source of truth. Prefer `snake_case` for modules, files, functions, and test names; use `PascalCase` for types and enums. Keep CLI flags, generated file names, and module names descriptive and consistent with existing commands such as `generate_constraint` and `sf_config`.
@@ -92,8 +94,38 @@ For scaffold changes, prefer assertions that check the generated contract direct
 ## Commit & Pull Request Guidelines
 Follow the commit style already used in history: `fix: ...`, `refactor: ...`, `style: ...`, `chore: ...`. Keep commits scoped to one behavior change. PRs should explain user-visible CLI impact, list verification commands run, and link the relevant issue. Include concrete examples when flags, generated files, or template output change.
 
+## Releases
+
+Releases are cut with `commit-and-tag-version`, configured by the checked-in
+`.versionrc.js`. Never hand-edit `CHANGELOG.md` or a version surface the config
+owns (`Cargo.toml`, `Cargo.lock`, `package.json`, `package-lock.json`) or the
+prose version lines in `README.md`, `AGENTS.md`, `WIREFRAME.md`, and
+`skills/solverforge-modeling/SKILL.md`. Run
+`commit-and-tag-version --release-as vX.Y.Z` (or let conventional commits pick
+the bump) instead of bumping by hand; the tool owns the release commit, the tag,
+and the changelog.
+
 ## Security & Configuration Tips
 Do not commit generated projects, secrets, or credentials. The pre-commit config runs `gitleaks`; keep it enabled. When tests or generated scaffolds touch published SolverForge crate versions, verify `Cargo.toml` template changes and corresponding integration tests together.
+
+## Agent Skill Package
+
+`skills/solverforge-modeling/` is a portable Agent Skill (`SKILL.md` plus
+`references/` and `scripts/`) that teaches an agent to model planning problems
+with this CLI. Keep it aligned with the live CLI surface:
+
+- `SKILL.md` frontmatter `name`/`description` drive discovery; keep the shell
+  set, scaffold targets, and command surface documented in the body current.
+- `scripts/install-skill` copies the skill into each selected harness's own
+  skills directory (opencode, Claude Code, the cross-harness Agent Skills
+  standard), at user or project scope. It never symlinks or shares a location,
+  and it records ownership with `skills/solverforge-modeling/.solverforge-skill`
+  so `--list` and `--uninstall` never touch an entry it did not install.
+- `skills/solverforge-modeling/scripts/solve-smoke-test.sh` verifies a generated
+  app per shell; update it when a shell's runtime surface changes.
+- `make install-skill` wraps the installer.
+
+Keep `SKILL.md` harness-agnostic; do not encode assumptions about one client.
 
 ## Scaffold Contract Notes
 Generated apps should behave like production references, not toy demos.
