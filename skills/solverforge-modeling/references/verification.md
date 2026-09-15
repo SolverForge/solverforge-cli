@@ -40,8 +40,11 @@ The helper under this loaded skill directory automates the web/API/MCP flow:
 For web/API it builds and boots the app, starts a job from generated demo data,
 requires `COMPLETED` plus non-null current/best scores, and fails on timeout,
 cancel, `FAILED`, or a constraint panic. For MCP it boots the HTTP transport
-(`--http`), requires a healthy, panic-free server, and reports transport-only
-success; drive the MCP tools with a real client for protocol-level proof. For
+(`--http`) and requires a healthy, panic-free server; protocol-level proof comes
+from calling the tools through the harness the server is registered in (register
+with `solverforge connect --write <harness>`, reload, then call `solve`,
+`get_status`, and `get_best_solution`). The CLI's own pipeline tests drive the
+same server with `rmcp` over stdio and Streamable HTTP. For
 CLI it validates compilation and the banner-prefixed demo-data JSON only; the
 generated CLI has no solve command. It cleans up the server and temporary files.
 Requires `python3` for JSON parsing, plus `curl` for web/API/MCP, and a few

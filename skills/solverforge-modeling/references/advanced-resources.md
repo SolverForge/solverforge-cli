@@ -54,7 +54,8 @@ The full flag set is in `cli-workflow.md`. These name user-owned Rust
 implementations for cross/intra distance, route and Clarke-Wright savings hooks,
 savings metric class, element ownership, construction ordering, precedence, and
 any additional solution trait. The stock `cvrp` profile owns its meters/hooks/
-metric/trait and cannot be combined with them.
+metric/trait and cannot be combined with them. For road-network costs and route
+geometry, see `routing-and-maps.md`.
 
 ## Scalar groups (coupled construction / grouped moves)
 

@@ -1,69 +1,71 @@
 #!/usr/bin/env sh
 set -eu
 
-# Install the bundled solverforge-modeling agent skill by copying it into skill
-# directories. There is no symlink and no shared/central location: each harness
-# reads its own skills directory, and this script writes an independent copy into
-# each one you select. The default target is the cross-harness Agent Skills
-# directory; select a harness-specific directory explicitly when needed.
+# Agent-centric installer for the SolverForge agent skills.
+#
+# The user chooses the agent harnesses they use; the installer resolves each
+# harness's own skills directory, writes the skill trees there, and avoids
+# creating duplicate discovery. Nothing is installed into a directory the user
+# did not ask for, and `.agents` is never an implicit default.
+#
+# Default layout is one direct copy per selected harness ("each harness its
+# own"). Two opt-ins are available: `--layout covering` computes a
+# duplicate-free placement shared by the selected harnesses, and `--link`
+# symlinks each destination to the bundled skill instead of copying it.
+#
+# Usage: scripts/install-skill [OPTIONS]
+#
+#   --agent <harness>   Harness to install for (repeatable): opencode, claude,
+#                       codex. When omitted on a TTY the installer prompts.
+#   --skill <name>      Skill to install (repeatable). Default: every skill
+#                       under skills/.
+#   --project <dir>     Install into a project instead of user scope.
+#   --dir <path>        Explicit skills directory (repeatable); bypasses the
+#                       harness matrix.
+#   --link              Symlink each destination to the bundled skill instead
+#                       of copying it.
+#   --layout <mode>     covering (duplicate-free, may pick a shared directory)
+#                       or per-harness (default: a copy in each harness dir).
+#   --force             Proceed even when the layout would create duplicates.
+#   --list              Show install state and exit.
+#   --uninstall         Remove installs created by this installer.
+#   --help              Show this help.
 
 usage() {
-	cat <<'EOF'
-Usage: scripts/install-skill [--only <harness>]... [--project <dir>]
-                             [--dir <skills-dir>]... [--uninstall] [--list] [--help]
-
-Copy skills/solverforge-modeling into the skill directories agents scan.
-Nothing is symlinked; every destination receives its own copy.
-
-  --only <harness>  restrict to a harness (repeatable): opencode, claude, agents
-  --project <dir>   install into a project instead of user scope; each selected
-                    harness gets its own project directory:
-                      opencode -> <dir>/.opencode/skills
-                      claude   -> <dir>/.claude/skills
-                      agents   -> <dir>/.agents/skills
-  --dir <path>      copy into an explicit skills directory (repeatable); when
-                    given, --only and --project are ignored
-  --uninstall       remove previously installed copies
-  --list            show destination directories and their install state
-  --help            show this help
-
-Default: ~/.agents/skills (Agent Skills standard; discovered by opencode and Codex)
-
-Available harness-specific user-scope directories:
-  opencode  ~/.config/opencode/skills   (opencode)
-  claude    ~/.claude/skills            (Claude Code)
-  agents    ~/.agents/skills            (Agent Skills standard; opencode, Codex)
-EOF
+	sed -n '4,33p' "$0" | sed 's/^# \{0,1\}//'
 }
 
-skill_name=solverforge-modeling
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
-skill_src="$repo_root/skills/$skill_name"
-
-[ -f "$skill_src/SKILL.md" ] || {
-	echo "error: skill source not found at $skill_src/SKILL.md" >&2
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+skills_root="$repo_root/skills"
+[ -d "$skills_root" ] || {
+	echo "error: skills directory not found at $skills_root" >&2
 	exit 1
 }
 
 action=install
-only=""
+layout=per-harness
+link_mode=0
+force=0
 project=""
+agents=""
+skills=""
 explicit_dirs=""
 
-harness_global_dir() {
-	case "$1" in
+agent_dir() {
+	harness=$1
+	if [ -n "$project" ]; then
+		case "$harness" in
+		opencode) printf '%s' "$project/.opencode/skills" ;;
+		claude) printf '%s' "$project/.claude/skills" ;;
+		codex) printf '%s' "$project/.agents/skills" ;;
+		esac
+		return
+	fi
+	case "$harness" in
 	opencode) printf '%s' "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills" ;;
 	claude) printf '%s' "$HOME/.claude/skills" ;;
-	agents) printf '%s' "$HOME/.agents/skills" ;;
-	esac
-}
-
-harness_project_dir() {
-	case "$1" in
-	opencode) printf '%s' "$project/.opencode/skills" ;;
-	claude) printf '%s' "$project/.claude/skills" ;;
-	agents) printf '%s' "$project/.agents/skills" ;;
+	codex) printf '%s' "$HOME/.agents/skills" ;;
 	esac
 }
 
@@ -71,6 +73,8 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 	--uninstall) action=uninstall ;;
 	--list) action=list ;;
+	--force) force=1 ;;
+	--link) link_mode=1 ;;
 	--project)
 		shift
 		[ -n "${1:-}" ] || { echo "error: --project expects a directory" >&2; exit 1; }
@@ -83,17 +87,35 @@ while [ $# -gt 0 ]; do
 		explicit_dirs="$explicit_dirs
 $1"
 		;;
-	--only)
+	--agent)
 		shift
 		case "${1:-}" in
-		opencode | claude | agents) only="$only $1" ;;
+		opencode | claude | codex) agents="$agents $1" ;;
 		*)
-			echo "error: --only expects opencode, claude, or agents" >&2
+			echo "error: --agent expects opencode, claude, or codex" >&2
 			exit 1
 			;;
 		esac
 		;;
-	--help | -h) usage; exit 0 ;;
+	--skill)
+		shift
+		[ -n "${1:-}" ] || { echo "error: --skill expects a name" >&2; exit 1; }
+		skills="$skills $1"
+		;;
+	--layout)
+		shift
+		case "${1:-}" in
+		covering | per-harness) layout=$1 ;;
+		*)
+			echo "error: --layout expects covering or per-harness" >&2
+			exit 1
+			;;
+		esac
+		;;
+	--help | -h)
+		usage
+		exit 0
+		;;
 	*)
 		echo "error: unknown option '$1'" >&2
 		usage >&2
@@ -103,100 +125,209 @@ $1"
 	shift
 done
 
-selected() {
-	if [ -n "$only" ]; then
-		case " $only " in
-		*" $1 "*) return 0 ;;
-		*) return 1 ;;
-		esac
-	fi
-	[ "$1" = "agents" ]
+selected_agent() {
+	case " $agents " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
 
-same_content() {
-	[ -d "$1" ] && diff -r "$skill_src" "$1" >/dev/null 2>&1
+select_agents_interactively() {
+	[ -t 0 ] && [ -t 1 ] || {
+		echo "error: no --agent given and no interactive terminal; pass --agent opencode|claude|codex" >&2
+		exit 1
+	}
+	printf 'Select agent harnesses (comma separated) [opencode,claude,codex]: '
+	read -r picked
+	old_ifs=$IFS
+	IFS=', '
+	for entry in $picked; do
+		[ -n "$entry" ] || continue
+		case "$entry" in
+		opencode | claude | codex) agents="$agents $entry" ;;
+		*) echo "error: unknown harness '$entry'" >&2; exit 1 ;;
+		esac
+	done
+	IFS=$old_ifs
+	[ -n "$agents" ] || { echo "error: no harness selected" >&2; exit 1; }
 }
+
+all_skills() {
+	for dir in "$skills_root"/*/; do
+		[ -f "$dir/SKILL.md" ] || continue
+		basename "$dir"
+	done
+}
+
+selected_skills() {
+	if [ -n "${skills# }" ]; then
+		printf '%s\n' ${skills# }
+		return
+	fi
+	all_skills
+}
+
+# Destination list: "label<TAB>dir" lines.
+destinations() {
+	if [ -n "$explicit_dirs" ]; then
+		index=0
+		printf '%s\n' "$explicit_dirs" | while IFS= read -r dir; do
+			[ -n "$dir" ] || continue
+			index=$((index + 1))
+			printf 'custom-%s\t%s\n' "$index" "$dir"
+		done
+		return
+	fi
+
+	has_oc=0
+	has_cl=0
+	has_cx=0
+	if selected_agent opencode; then has_oc=1; fi
+	if selected_agent claude; then has_cl=1; fi
+	if selected_agent codex; then has_cx=1; fi
+
+	# A harness that scans more than one selected destination discovers the
+	# same skill twice. `covering` picks a shared directory where one exists;
+	# `per-harness` is refused unless forced.
+	if [ "$layout" = "covering" ]; then
+		if [ "$has_oc" = 1 ] && [ "$has_cl" = 1 ] && [ "$has_cx" = 1 ]; then
+			echo "error: opencode scans the claude and codex skill directories, so {opencode,claude,codex} has no duplicate-free placement; select two harnesses or use --force" >&2
+			exit 1
+		fi
+		if [ "$has_oc" = 1 ] && [ "$has_cl" = 1 ]; then
+			printf 'shared\t%s\n' "$(agent_dir claude)"
+			return
+		fi
+		if [ "$has_oc" = 1 ] && [ "$has_cx" = 1 ]; then
+			printf 'shared\t%s\n' "$(agent_dir codex)"
+			return
+		fi
+	fi
+
+	if [ "$layout" = "per-harness" ] && [ "$has_oc" = 1 ] && { [ "$has_cl" = 1 ] || [ "$has_cx" = 1 ]; }; then
+		if [ "$force" != 1 ]; then
+			echo "error: a per-harness copy for opencode plus claude/codex makes opencode discover the same skill twice; pass --layout covering or --force" >&2
+			exit 1
+		fi
+		echo "warning: opencode scans the claude and codex directories; per-harness copies will duplicate discovery" >&2
+	fi
+
+	if [ "$has_oc" = 1 ]; then printf 'opencode\t%s\n' "$(agent_dir opencode)"; fi
+	if [ "$has_cl" = 1 ]; then printf 'claude\t%s\n' "$(agent_dir claude)"; fi
+	if [ "$has_cx" = 1 ]; then printf 'codex\t%s\n' "$(agent_dir codex)"; fi
+}
+
+receipt_name=.solverforge-skill
+link_receipt_prefix=.solverforge-skill-link-
 
 managed_copy() {
-	[ -f "$1/.solverforge-skill" ] &&
-		[ "$(cat "$1/.solverforge-skill")" = "$skill_name" ]
+	[ -f "$1/$receipt_name" ] || return 1
+	[ "$(cat "$1/$receipt_name" 2>/dev/null)" = "$2" ]
 }
 
-install_into() {
-	label=$1
+link_receipt_path() {
+	printf '%s/%s%s' "$1" "$link_receipt_prefix" "$2"
+}
+
+managed_link() {
+	receipt=$(link_receipt_path "$1" "$2")
+	[ -f "$receipt" ] && [ -L "$1/$2" ] && [ "$(sed -n 's/^skill=//p' "$receipt" | head -n1)" = "$2" ]
+}
+
+install_one() {
+	skill=$1
 	dir=$2
-	dest="$dir/$skill_name"
+	src="$skills_root/$skill"
+	dest="$dir/$skill"
 
 	if [ "$action" = list ]; then
-		if same_content "$dest"; then
-			state="copy present (current)"
-		elif managed_copy "$dest"; then
-			state="copy present (differs)"
-		elif [ -L "$dest" ] || [ -e "$dest" ]; then
-			state="foreign entry present (left untouched)"
+		if managed_link "$dir" "$skill"; then
+			printf 'link       %-12s %s -> %s\n' "$skill" "$dest" "$(readlink "$dest")"
+		elif managed_copy "$dest" "$skill"; then
+			if diff -r "$src" "$dest" >/dev/null 2>&1; then
+				printf 'current    %-12s %s\n' "$skill" "$dest"
+			else
+				printf 'outdated   %-12s %s\n' "$skill" "$dest"
+			fi
+		elif [ -e "$dest" ] || [ -L "$dest" ]; then
+			printf 'foreign    %-12s %s (left untouched)\n' "$skill" "$dest"
 		else
-			state="not installed"
+			printf 'absent     %-12s %s\n' "$skill" "$dest"
 		fi
-		printf '%-9s %s  %s\n' "$label" "$dir" "$state"
-		return 0
+		return
 	fi
 
 	if [ "$action" = uninstall ]; then
-		if managed_copy "$dest"; then
-			rm -rf "$dest" && printf 'removed    %-9s %s\n' "$label" "$dest"
-		elif [ -L "$dest" ] || [ -e "$dest" ]; then
-			printf 'untouched  %-9s %s (not installed by this script)\n' "$label" "$dest"
+		if managed_link "$dir" "$skill"; then
+			rm -f "$dest" "$(link_receipt_path "$dir" "$skill")"
+			printf 'removed    %-12s %s\n' "$skill" "$dest"
+		elif managed_copy "$dest" "$skill"; then
+			rm -rf "$dest"
+			printf 'removed    %-12s %s\n' "$skill" "$dest"
+		elif [ -e "$dest" ] || [ -L "$dest" ]; then
+			printf 'untouched  %-12s %s (not installed by this installer)\n' "$skill" "$dest"
 		fi
-		return 0
+		return
 	fi
 
-	if [ -e "$dest" ] || [ -L "$dest" ]; then
-		if managed_copy "$dest"; then
-			if same_content "$dest"; then
-				printf 'up-to-date %-9s %s\n' "$label" "$dest"
-				return 0
-			fi
-			rm -rf "$dest"
+	# install
+	if [ -L "$dest" ]; then
+		if managed_link "$dir" "$skill"; then
+			rm -f "$dest" "$(link_receipt_path "$dir" "$skill")"
 		else
-			echo "error: $dest exists and was not installed by this script; remove it first" >&2
+			echo "error: $dest is a symlink not managed by this installer" >&2
 			exit 1
 		fi
+	elif [ -e "$dest" ] && ! managed_copy "$dest" "$skill"; then
+		echo "error: $dest exists and was not installed by this installer" >&2
+		exit 1
 	fi
 
 	mkdir -p "$dir"
-	cp -R "$skill_src" "$dest"
-	printf 'copied     %-9s %s\n' "$label" "$dest"
+
+	if [ "$link_mode" = 1 ]; then
+		rm -rf "$dest"
+		ln -s "$src" "$dest"
+		{
+			printf 'format=1\n'
+			printf 'skill=%s\n' "$skill"
+			printf 'mode=link\n'
+			printf 'target=%s\n' "$src"
+		} > "$(link_receipt_path "$dir" "$skill")"
+		printf 'linked     %-12s %s -> %s\n' "$skill" "$dest" "$src"
+		return
+	fi
+
+	if [ -d "$dest" ] && managed_copy "$dest" "$skill" && diff -r "$src" "$dest" >/dev/null 2>&1; then
+		printf 'current    %-12s %s\n' "$skill" "$dest"
+		return
+	fi
+
+	rm -rf "$dest"
+	cp -R "$src" "$dest"
+	# Preserve executable bits on bundled tooling regardless of the copy tool.
+	find "$dest" -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod +x {} + 2>/dev/null || true
+	printf 'copied     %-12s %s\n' "$skill" "$dest"
 }
 
-# Build the destination list in a temp file so the install loop runs in the
-# current shell (an exit inside a pipeline would not stop the script).
+if [ -z "${agents# }" ] && [ -z "$explicit_dirs" ] && [ "$action" = install ]; then
+	select_agents_interactively
+fi
+
 dest_file=$(mktemp)
 trap 'rm -f "$dest_file"' EXIT HUP INT TERM
+destinations > "$dest_file"
 
-if [ -n "$explicit_dirs" ]; then
-	index=0
-	printf '%s\n' "$explicit_dirs" | while IFS= read -r dir; do
-		[ -n "$dir" ] || continue
-		index=$((index + 1))
-		printf 'custom-%s\t%s\n' "$index" "$dir"
-	done > "$dest_file"
-else
-	for harness in opencode claude agents; do
-		selected "$harness" || continue
-		if [ -n "$project" ]; then
-			dir=$(harness_project_dir "$harness")
-		else
-			dir=$(harness_global_dir "$harness")
-		fi
-		printf '%s\t%s\n' "$harness" "$dir" >> "$dest_file"
-	done
+if [ ! -s "$dest_file" ]; then
+	echo "error: nothing to install; pass --agent or --dir" >&2
+	exit 1
 fi
 
 while IFS="$(printf '\t')" read -r label dir; do
 	[ -n "$label" ] || continue
-	install_into "$label" "$dir"
+	[ -n "$dir" ] || continue
+	for skill in $(selected_skills); do
+		install_one "$skill" "$dir"
+	done
 done < "$dest_file"
 
 if [ "$action" = install ]; then
-	echo "done. restart your agent so it rescans skills."
+	echo "done. restart your agent so it rescans skill directories."
 fi

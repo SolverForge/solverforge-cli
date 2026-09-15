@@ -262,23 +262,33 @@ solve subcommand backed by `src/solver/service.rs` (or a library integration
 test that drives it) and verify a terminal score; otherwise report this
 limitation explicitly.
 
-For `mcp`, the generated binary is itself the MCP server. Boot the transport and
-confirm it stays panic-free:
+For `mcp`, the generated binary is itself the MCP server, and the agent's own
+harness is the client. Boot it, register it, and verify by calling a tool:
 
 ```bash
 cargo run --release -- --http    # Streamable HTTP at http://127.0.0.1:7860/mcp
 solverforge server               # equivalent; selects --http for mcp shells
+
+# Register the server in the harness you are running in, then reload so the
+# harness rescans its MCP config. `connect` writes an in-project config:
+solverforge connect --write opencode   # opencode.json
+solverforge connect --write claude     # .mcp.json
+solverforge connect --write cursor     # .cursor/mcp.json
+solverforge connect --write vscode     # .vscode/mcp.json
 ```
 
-`solverforge connect` prints ready-to-paste client configuration (Claude Code,
-Claude Desktop, Cursor, VS Code); `solverforge connect --write vscode` merges
-`.vscode/mcp.json`. The server exposes `list_demo_data`, `get_demo_data`,
-`solve`, `get_status`, `get_best_solution`, `analyze_solution`, `get_telemetry`,
-`get_candidate_trace`, `pause`, `resume`, `cancel`, and `delete`. `solve` is
-task-backed for task-capable clients (retained `jobId` in result metadata) and
-returns an immediate summary to others. The bundled smoke helper checks the HTTP
-transport is up and panic-free; full protocol verification requires a real MCP
-client (the CLI repo drives the generated server with `rmcp`).
+The server exposes `list_demo_data`, `get_demo_data`, `solve`, `get_status`,
+`get_best_solution`, `analyze_solution`, `get_telemetry`, `get_candidate_trace`,
+`pause`, `resume`, `cancel`, and `delete`. `solve` is task-backed for
+task-capable clients (retained `jobId` in result metadata) and returns an
+immediate summary to others.
+
+Verify through the harness's own MCP client, not a separate binary: after
+reloading, call `list_demo_data`, then `solve` and poll `get_status` until the
+job reaches a terminal state, and read `get_best_solution` for a scored
+snapshot. The CLI's own pipeline tests drive the generated server with `rmcp`
+over stdio and Streamable HTTP, which is the protocol-level reference if a
+harness integration misbehaves.
 
 ## Step 8 — Report
 
@@ -299,8 +309,9 @@ small conventional commits if the user asks for commits.
   compiler-owned; `solverforge.app.toml`, `solver.toml`, and the managed blocks
   are the CLI's surfaces.
 - Ordered sequences are list variables; do not use scalar predecessor fields.
-- Finish web/API only after a real solve completes. For MCP, verify the
-  transport boots and, for a full claim, drive the tools with a real MCP client.
+- Finish web/API only after a real solve completes. For MCP, register the server
+  in the running harness and verify by calling `solve`/`get_status`/
+  `get_best_solution` through that harness's own client.
   For CLI, either implement and verify a solve entry point or explicitly report
   that the generated shell only proves data serialization.
 
@@ -315,3 +326,4 @@ small conventional commits if the user asks for commits.
 | `references/verification.md` | `check` vs compile vs real solve; the API smoke flow and helper script. |
 | `references/gotchas.md` | Managed blocks, compiler-owned files, ordering traps, score-type limits. |
 | `references/advanced-resources.md` | Countable ranges, scalar hooks, list metadata, scalar groups, conflict repair, candidate traces. |
+| `references/routing-and-maps.md` | When and how to use `solverforge-maps` for road-network travel times, matrices, and route geometry. |

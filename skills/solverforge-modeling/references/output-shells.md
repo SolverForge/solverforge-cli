@@ -86,7 +86,9 @@ solverforge connect              # ready-to-paste client configs
   `cargo run --release` default is stdio. `solverforge routes`/`/health`/`/jobs`
   do not exist here.
 - HTTP binds loopback unless `--host` selects a concrete IP; wildcard binds are
-  rejected. `solverforge connect [--write vscode]` prints or merges client config.
+  rejected. `solverforge connect` prints client config and
+  `--write opencode|claude|cursor|vscode` merges the in-project config for that
+  harness.
 - The runtime `console` feature stays off because the banner would corrupt the
   stdio channel; diagnostics go to stderr.
 

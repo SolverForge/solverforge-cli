@@ -147,8 +147,11 @@ file is compiler-owned; later domain-shape mutations regenerate it.
 solverforge info                 # solution, entities, facts, constraints
 solverforge check                # structure, managed blocks, model resources, solver.toml
 solverforge routes               # web/api only (not cli or mcp)
-solverforge connect              # mcp only: print MCP client configs
-solverforge connect --write vscode   # mcp only: merge .vscode/mcp.json
+solverforge connect                    # mcp only: print MCP client configs
+solverforge connect --write opencode   # opencode.json
+solverforge connect --write claude     # .mcp.json
+solverforge connect --write cursor     # .cursor/mcp.json
+solverforge connect --write vscode     # .vscode/mcp.json
 solverforge config show
 solverforge config set termination.seconds_spent_limit 60
 solverforge config set candidate_trace.max_entries 100000
@@ -158,8 +161,9 @@ solverforge completions <shell>
 
 `check` never compiles or runs the model. Pair it with `cargo check` and a real
 solve for web/API. The generated CLI only serializes demo data; extend it before
-claiming that a terminal solve works. For mcp, verify the transport boots and
-drive the tools with a real MCP client for a full claim.
+claiming that a terminal solve works. For mcp, register the server in the running
+harness (`solverforge connect --write <harness>`), reload, and verify by calling
+`solve`, `get_status`, and `get_best_solution` with that harness's own client.
 
 ## Run
 

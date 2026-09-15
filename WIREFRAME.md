@@ -22,35 +22,38 @@ Required Rust version: `1.95` or later.
 Current generated projects target:
 
 - `solverforge 0.19.4`
-- `solverforge-ui 0.7.0` for the web shell
+- `solverforge-ui 0.9.0` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
-- `rmcp 3.3.0` for the MCP shell
+- `rmcp 3.4.0` for the MCP shell
 
 The CLI version is separate from those targets and must remain visible in
 version output and generated README content.
 
 ## Agent Skill Surface
 
-`skills/solverforge-modeling/` is a portable, harness-agnostic Agent Skill that
-teaches a coding agent to model a planning problem with this CLI. It is an
-in-repo product artifact, not generated code: a `SKILL.md` entry point with
-`references/` and `scripts/`, discovered by opencode, Claude Code, and the
-cross-harness Agent Skills standard.
+`skills/` bundles two portable, harness-agnostic Agent Skills: `solverforge-modeling/`
+(turn a planning problem into an app with this CLI) and `solverforge-ui/` (extend
+a generated web shell with the shipped components). They are in-repo product
+artifacts, not generated code: a `SKILL.md` entry point with `references/` and any
+`scripts/`, discovered by opencode, Claude Code, Codex, and the cross-harness
+Agent Skills standard.
 
-`scripts/install-skill` installs it by copying into each selected harness's own
-skills directory at user or project scope. It never symlinks and never shares a
-single location; every destination receives an independent copy. Ownership is
-recorded by the skill's marker file, so the installer refuses to overwrite or
-remove an entry it did not install, and `--list`/`--uninstall` are idempotent
-against that marker. The default target is the cross-harness `~/.agents/skills`
-directory, which avoids duplicate definitions in harnesses that scan more than
-one skills directory. `make install-skill` wraps the script.
+`scripts/install-skill` is agent-centric: the user names the harnesses they use
+and the installer resolves each harness's own skills directory. It never installs
+into an unrequested directory, never assumes `~/.agents`, and refuses duplicate
+discovery. The default is one direct copy per selected harness; `--layout covering`
+computes a duplicate-free shared placement for overlapping selections, and
+`--link` symlinks instead of copying. The `{opencode, claude, codex}` combination
+has no duplicate-free placement and is reported rather than silently duplicated.
+Ownership is recorded by each skill's `.solverforge-skill` marker (and a sidecar
+receipt for symlinks), so the installer refuses to overwrite or remove an entry it
+did not install. `make install-skill` wraps the script.
 
-The skill bundles `scripts/solve-smoke-test.sh`, a per-shell development aid: it
+The skills bundle `scripts/solve-smoke-test.sh`, a per-shell development aid: it
 builds a generated app and drives it (web/API require a clean `COMPLETED` solve
-with published scores; MCP requires a healthy, panic-free HTTP transport; CLI
-validates `demo-data` serialization). It complements, and does not replace, the
-repository's generated-app suites.
+with published scores; MCP boots a healthy HTTP transport and is verified through
+the registered harness's own MCP client; CLI validates `demo-data` serialization).
+It complements, and does not replace, the repository's generated-app suites.
 
 ## Canonical Modeling Terms
 

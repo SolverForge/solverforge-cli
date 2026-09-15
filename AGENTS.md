@@ -9,12 +9,12 @@
 Current scaffold policy:
 - current CLI package version is `3.0.0`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
-- generated projects currently target `solverforge 0.19.4`; the default web shell additionally targets `solverforge-ui 0.7.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.3.0`
+- generated projects currently target `solverforge 0.19.4`; the default web shell additionally targets `solverforge-ui 0.9.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.4.0`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
 - `--shell web|api|cli|mcp` is the current public shell selector; `web` is the default, `api` omits frontend assets, `cli` omits Axum/SSE routes and frontend assets, and `mcp` delivers the solver as an MCP server over stdio and stateless Streamable HTTP
 - API/CLI/MCP app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
 - the MCP shell keeps the shared core (`domain/`, `constraints/`, `solver/`, `data/`, DTOs) and adds `src/mcp/`; `solve` is task-backed with retained `jobId` metadata for task-capable clients, tasks have no TTL and remain for the server process lifetime, failed/cancelled solves map to corresponding MCP task states, stdio is the default transport, concrete `--host` IPs preserve rmcp Host validation, and the runtime `console` feature stays off so the banner never corrupts the stdio channel
-- `solverforge connect` prints MCP client configuration and writes only in-project config (`--write vscode` merges `.vscode/mcp.json` instead of clobbering it)
+- `solverforge connect` prints MCP client configuration and writes in-project config for the harness target (`--write opencode|claude|cursor|vscode`; each merges instead of clobbering)
 - Tauri scaffolding is deferred; do not document or implement a public Tauri shell unless that work is explicitly reopened
 - users shape the app afterward through facts, entities, solution/score metadata, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
@@ -24,7 +24,7 @@ Current scaffold policy:
 - `standard` is a demo size label only; do not reintroduce it as a variable kind or scaffold family
 - `templates/scalar/generic` is the embedded neutral scaffold used by `solverforge new`; `templates/list/generic` is not a public `new` selector
 - generated `Cargo.toml` files must carry `rust-version = "1.95"` plus the current explicit dependency baselines for the selected shell from the template/materialization code
-- the repository ships a portable agent skill at `skills/solverforge-modeling/` with an installer at `scripts/install-skill`; keep its documented shell set, scaffold targets, and command surface aligned with the live CLI
+- the repository ships portable agent skills at `skills/solverforge-modeling/` and `skills/solverforge-ui/` with an agent-centric installer at `scripts/install-skill`; keep their documented shell set, scaffold targets, and command surface aligned with the live CLI
 
 When changing templates or scaffold behavior, follow the current repo reality over older starter-template assumptions. Do not add legacy aliases, compatibility shims, migration fallbacks, or automatic rewrites for unmanaged pre-refactor file shapes unless that is explicitly requested.
 
@@ -41,7 +41,7 @@ When changing templates or scaffold behavior, follow the current repo reality ov
 - `cargo fmt --all`: apply Rust formatting.
 - `cargo clippy --all-targets -- -D warnings`: enforce lint-clean code.
 - `pre-commit run --all-files`: run the repository hooks, including YAML checks, `gitleaks`, `fmt`, and `clippy`.
-- `./scripts/install-skill` (or `make install-skill`): install the bundled agent skill into harness skill directories.
+- `./scripts/install-skill --agent <harness>` (or `make install-skill`): install the bundled agent skills into the selected harness's own skills directory.
 
 ## Coding Style & Naming Conventions
 Use standard Rust style with 4-space indentation and `rustfmt` output as the source of truth. Prefer `snake_case` for modules, files, functions, and test names; use `PascalCase` for types and enums. Keep CLI flags, generated file names, and module names descriptive and consistent with existing commands such as `generate_constraint` and `sf_config`.

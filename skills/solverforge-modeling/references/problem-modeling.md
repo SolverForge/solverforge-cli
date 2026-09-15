@@ -113,6 +113,11 @@ Soft:       distance — minimize total travel
 Output:     api
 ```
 
+List variables model ordered sequences in general — routes, ordered
+assignments, job sequencing, precedence lists. Most never touch geography; use
+`references/routing-and-maps.md` only when the ordering cost is real road
+travel.
+
 ### Time-slot placement
 
 ```

@@ -13,9 +13,9 @@ Required Rust version: `1.95` or later.
 New projects currently target these crate versions:
 
 - `solverforge 0.19.4`
-- `solverforge-ui 0.7.0` for the default web shell
+- `solverforge-ui 0.9.0` for the default web shell
 - `solverforge-maps 2.1.4` for the default web shell
-- `rmcp 3.3.0` for the MCP shell
+- `rmcp 3.4.0` for the MCP shell
 
 ```bash
 cargo install solverforge-cli
@@ -142,7 +142,7 @@ dataset size defaults in `solverforge.app.toml`. `sample` is the default mode;
 rather than domain-specific fake business data.
 
 The default web-shell frontend is intentionally thin. It composes shipped
-`solverforge-ui 0.7.0` primitives such as `SF.createBackend(...)`,
+`solverforge-ui 0.9.0` primitives such as `SF.createBackend(...)`,
 `SF.createSolver(...)`, and `SF.rail.createTimeline(...)` instead of vendoring
 app-specific UI frameworks. Domain-specific examples belong in quickstarts, not
 in the built-in scaffold catalog. API-shell, CLI-shell, and MCP-shell projects
@@ -272,36 +272,40 @@ digests. Existing clients continue to use `POST /jobs`; the qualified route is
 an additive diagnostic entry point. Tracing remains opt-in because candidate
 pull detail can be large.
 
-## Agent Skill
+## Agent Skills
 
-The repository ships a portable agent skill at `skills/solverforge-modeling/`.
-It teaches a coding agent to turn a described planning problem into a runnable
-SolverForge app with this CLI, and it bundles a solve smoke-test helper. The
-skill is harness-agnostic: the same folder is discovered by opencode, Claude
-Code, and other Agent Skills harnesses.
+The repository ships two portable, harness-agnostic Agent Skills:
+`skills/solverforge-modeling/` (turn a described planning problem into a runnable
+SolverForge app with this CLI) and `skills/solverforge-ui/` (extend a generated
+web shell with the shipped `solverforge-ui` components). The same folders are
+discovered by opencode, Claude Code, Codex, and other Agent Skills harnesses.
 
-Install it into a harness's own skills directory with the bundled installer:
+The installer is agent-centric: name the harnesses you use and it resolves each
+harness's own skills directory. It never installs into a directory you did not
+ask for, never assumes `~/.agents`, and refuses duplicate discovery.
 
 ```bash
-./scripts/install-skill                    # ~/.agents/skills (cross-harness)
-./scripts/install-skill --only opencode    # ~/.config/opencode/skills
-./scripts/install-skill --only claude      # ~/.claude/skills
-./scripts/install-skill --project <dir>    # per-harness project scope
-./scripts/install-skill --list
-./scripts/install-skill --uninstall
+./scripts/install-skill --agent opencode                          # one copy, opencode
+./scripts/install-skill --agent opencode --agent claude --layout covering
+./scripts/install-skill --agent opencode --link                   # symlink instead of copy
+./scripts/install-skill --agent opencode --project <dir>          # project scope
+./scripts/install-skill --agent opencode --list
+./scripts/install-skill --agent opencode --uninstall
 ```
 
 From the repository root, `make install-skill` runs the same installer. It
-copies an independent, self-contained skill into each selected directory (no
-symlink, no shared location) and refuses to overwrite or remove an entry it did
-not create.
+updates or removes only copies it owns (tracked by each skill's
+`.solverforge-skill` marker) and leaves foreign entries untouched. Because
+opencode scans the opencode, Claude, and Agent Skills directories,
+`{opencode, claude, codex}` has no duplicate-free placement; the installer
+reports that instead of silently duplicating.
 
-The skill's `scripts/solve-smoke-test.sh <app-dir>` verifies a generated app:
+The bundled `scripts/solve-smoke-test.sh <app-dir>` verifies a generated app:
 for web/API it builds, boots, starts a real solve, and requires a clean
-`COMPLETED` result with published scores; for MCP it boots the HTTP transport
-and requires a healthy, panic-free server; for CLI it validates `demo-data`
-serialization. It is a development aid, not a replacement for the generated-app
-suites below.
+`COMPLETED` result with published scores; for MCP it boots a healthy HTTP
+transport (verified through the registered harness's own client); for CLI it
+validates `demo-data` serialization. It is a development aid, not a replacement
+for the generated-app suites below.
 
 ## Validation Flow
 
