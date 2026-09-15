@@ -25,7 +25,7 @@ RUST_VERSION := 1.95+
 # ============== Phony Targets ==============
 .PHONY: banner help build build-release run install test test-quick test-scaffold test-runtime \
         test-e2e install-e2e test-full test-ignored test-unit test-one lint fmt fmt-check clippy \
-        pre-commit ci-local pre-release publish-dry-run clean version
+        pre-commit ci-local pre-release publish-dry-run clean version install-skill
 
 # ============== Default Target ==============
 .DEFAULT_GOAL := help
@@ -63,6 +63,12 @@ install:
 	@cargo install --path . && \
 		printf -- "$(GREEN)$(CHECK) Installed$(RESET)\n" || \
 		(printf -- "$(RED)$(CROSS) Install failed$(RESET)\n" && exit 1)
+
+install-skill:
+	@printf -- "$(PROGRESS) Installing the solverforge-modeling agent skill...\n"
+	@./scripts/install-skill && \
+		printf -- "$(GREEN)$(CHECK) Agent skill installed$(RESET)\n" || \
+		(printf -- "$(RED)$(CROSS) Agent skill install failed$(RESET)\n" && exit 1)
 
 # ============== Test Targets ==============
 test: banner
@@ -243,5 +249,6 @@ help: banner
 	@printf -- "  $(GREEN)make pre-release$(RESET)      Run release validation checks\n"
 	@printf -- "  $(GREEN)make publish-dry-run$(RESET)  Run cargo publish --dry-run\n"
 	@printf -- "  $(GREEN)make version$(RESET)          Print the current package version\n"
-	@printf -- "  $(GREEN)make clean$(RESET)            Remove Cargo build artifacts\n\n"
+	@printf -- "  $(GREEN)make clean$(RESET)            Remove Cargo build artifacts\n"
+	@printf -- "  $(GREEN)make install-skill$(RESET)    Install the solverforge-modeling agent skill\n\n"
 	@printf -- "$(GRAY)Rust $(RUST_VERSION) required. Browser tests require Playwright Chromium.$(RESET)\n"
