@@ -88,6 +88,7 @@ test-runtime: banner
 	@printf -- "$(CYAN)$(BOLD)==== Runtime Pipeline ================================$(RESET)\n\n"
 	@printf -- "$(ARROW) Running generated-app runtime pipeline tests...\n"
 	@cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1 && \
+		cargo test --test runtime_mcp_pipeline_test -- --nocapture --test-threads=1 && \
 		printf -- "\n$(GREEN)$(CHECK) Runtime pipeline tests passed$(RESET)\n\n" || \
 		(printf -- "\n$(RED)$(CROSS) Runtime pipeline tests failed$(RESET)\n\n" && exit 1)
 
@@ -112,6 +113,7 @@ test-full: banner
 	@cargo test --test scaffold_test -- --nocapture --test-threads=1
 	@printf -- "$(PROGRESS) Phase 3/4: runtime pipeline tests...\n"
 	@cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1
+	@cargo test --test runtime_mcp_pipeline_test -- --nocapture --test-threads=1
 	@printf -- "$(PROGRESS) Phase 4/4: Playwright browser tests...\n"
 	@npm run test:e2e
 	@printf -- "\n$(GREEN)$(CHECK) Full end-to-end validation passed$(RESET)\n\n"
@@ -174,6 +176,7 @@ ci-local: banner
 		printf -- "$(GREEN)$(CHECK) Scaffold tests passed$(RESET)\n"
 	@printf -- "$(PROGRESS) Step 5/5: runtime pipeline tests...\n"
 	@cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1 && \
+		cargo test --test runtime_mcp_pipeline_test -- --nocapture --test-threads=1 && \
 		printf -- "$(GREEN)$(CHECK) Runtime tests passed$(RESET)\n"
 	@printf -- "\n$(GREEN)$(BOLD)$(CHECK) Local CI simulation passed$(RESET)\n\n"
 
@@ -187,6 +190,7 @@ pre-release: banner
 		printf -- "$(GREEN)$(CHECK) Scaffold tests passed$(RESET)\n"
 	@printf -- "$(PROGRESS) Running runtime pipeline tests...\n"
 	@cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1 && \
+		cargo test --test runtime_mcp_pipeline_test -- --nocapture --test-threads=1 && \
 		printf -- "$(GREEN)$(CHECK) Runtime pipeline tests passed$(RESET)\n"
 	@printf -- "$(PROGRESS) Running Playwright browser tests...\n"
 	@npm run test:e2e && \

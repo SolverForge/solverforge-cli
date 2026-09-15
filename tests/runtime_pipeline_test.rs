@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
+use support::app_harness::short_solver_config;
 use support::generated_app::{seeded_mixed_data_module, seeded_scalar_data_module, GeneratedApp};
 
 fn test_lock() -> &'static Mutex<()> {
@@ -145,7 +146,7 @@ fn mixed_runtime_pipeline() {
     );
     app.phase("Seed non-empty mixed demo data");
     app.write_file("src/data/data_seed.rs", seeded_mixed_data_module());
-    app.write_file("solver.toml", short_runtime_solver_config());
+    app.write_file("solver.toml", short_solver_config());
     app.cargo_build("Build generated mixed app");
 
     // PHASE 2: boot the generated server and execute the mixed runtime surface.
@@ -271,7 +272,7 @@ fn scalar_solver_pipeline() {
     );
     app.phase("Seed non-empty scalar demo data");
     app.write_file("src/data/data_seed.rs", seeded_scalar_data_module());
-    app.write_file("solver.toml", short_runtime_solver_config());
+    app.write_file("solver.toml", short_solver_config());
     app.cargo_build("Build generated scalar app");
 
     // PHASE 2: boot the generated server and run real data through the solver.
@@ -661,26 +662,4 @@ fn wait_for_job_state(client: &Client, base_url: &str, id: &str, expected: &str)
         );
         thread::sleep(Duration::from_millis(100));
     }
-}
-
-fn short_runtime_solver_config() -> &'static str {
-    r#"[[phases]]
-type = "construction_heuristic"
-construction_heuristic_type = "first_fit"
-
-[[phases]]
-type = "local_search"
-[phases.acceptor]
-type = "late_acceptance"
-late_acceptance_size = 400
-[phases.forager]
-type = "accepted_count"
-limit = 4
-
-[termination]
-seconds_spent_limit = 5
-
-[candidate_trace]
-max_entries = 128
-"#
 }
