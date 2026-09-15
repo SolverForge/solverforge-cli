@@ -148,6 +148,19 @@ enum Command {
     /// List HTTP routes defined in src/api/
     #[command(after_help = "Examples:\n  solverforge routes")]
     Routes,
+    /// Print MCP client connection configs for this project
+    #[command(
+        after_help = "Examples:\n  solverforge connect\n  solverforge connect --write vscode\n  solverforge connect --port 8080"
+    )]
+    Connect {
+        /// Write the in-project client config for the given target; other clients are printed for copy/paste
+        #[arg(long, value_enum, value_name = "TARGET")]
+        write: Option<crate::commands::connect::ConnectWriteTarget>,
+
+        /// Port used in the printed Streamable HTTP URL; when omitted, use .solverforgerc and then 7860
+        #[arg(long, short)]
+        port: Option<u16>,
+    },
     /// Manage solver configuration (solver.toml)
     #[command(
         after_help = "Examples:\n  solverforge config show\n  solverforge config set termination.seconds_spent_limit 60"
@@ -832,6 +845,9 @@ fn main() {
         Command::Check => commands::check::run(),
         Command::Test { extra_args } => commands::test::run(&extra_args),
         Command::Routes => commands::routes::run(),
+        Command::Connect { write, port } => {
+            commands::connect::run(resolve_server_port(port, rc.port), write)
+        }
         Command::Config {
             subcommand: ConfigSubcommand::Show,
         } => commands::config::run_show(),
