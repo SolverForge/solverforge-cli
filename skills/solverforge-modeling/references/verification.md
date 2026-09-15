@@ -31,7 +31,7 @@ panics is the most common "it looks done but isn't" state.
 
 ### Bundled helper
 
-The helper under this loaded skill directory automates the web/API flow:
+The helper under this loaded skill directory automates the web/API/MCP flow:
 
 ```bash
 <skill-dir>/scripts/solve-smoke-test.sh <app-dir> [port] [demo-size]
@@ -39,12 +39,14 @@ The helper under this loaded skill directory automates the web/API flow:
 
 For web/API it builds and boots the app, starts a job from generated demo data,
 requires `COMPLETED` plus non-null current/best scores, and fails on timeout,
-cancel, `FAILED`, or a constraint panic. For CLI it validates compilation and
-the banner-prefixed demo-data JSON only; the generated CLI has no solve command.
-It cleans up the server and temporary files. Requires `python3` for JSON parsing,
-plus `curl` for web/API, and a few minutes on a cold build. Set
-`SF_SMOKE_TIMEOUT_SECONDS` when the
-configured solver termination needs more or less than the default 120 seconds.
+cancel, `FAILED`, or a constraint panic. For MCP it boots the HTTP transport
+(`--http`), requires a healthy, panic-free server, and reports transport-only
+success; drive the MCP tools with a real client for protocol-level proof. For
+CLI it validates compilation and the banner-prefixed demo-data JSON only; the
+generated CLI has no solve command. It cleans up the server and temporary files.
+Requires `python3` for JSON parsing, plus `curl` for web/API/MCP, and a few
+minutes on a cold build. Set `SF_SMOKE_TIMEOUT_SECONDS` when the configured
+solver termination needs more or less than the default 120 seconds.
 
 ### Manual flow (web / api)
 

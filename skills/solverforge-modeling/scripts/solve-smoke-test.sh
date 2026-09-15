@@ -2,8 +2,10 @@
 # Solve smoke test for a generated SolverForge app.
 #
 # For web/API, boots the app, starts a real solve job, and requires clean
-# completion. For CLI, validates only the generated demo-data command because
-# that shell has no generated solve command.
+# completion. For MCP, boots the HTTP transport and requires a healthy, panic-free
+# server (drive its tools with a real MCP client for protocol-level proof). For
+# CLI, validates only the generated demo-data command because that shell has no
+# generated solve command.
 #
 # Usage: solve-smoke-test.sh <app-dir> [port] [demo-size]
 #   app-dir    directory containing solverforge.app.toml (default: .)
@@ -83,7 +85,7 @@ if [ "$shell" = "cli" ]; then
 fi
 
 command -v curl >/dev/null 2>&1 || {
-	echo "error: curl is required for web/API smoke tests" >&2
+	echo "error: curl is required for web/API/MCP smoke tests" >&2
 	exit 2
 }
 
@@ -92,8 +94,13 @@ if curl -sf "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
 	exit 1
 fi
 
-echo "==> booting server on port $port"
-(cd "$app_dir" && PORT="$port" "$bin_path") >>"$log" 2>&1 &
+if [ "$shell" = "mcp" ]; then
+	echo "==> booting MCP HTTP transport on port $port"
+	(cd "$app_dir" && PORT="$port" "$bin_path" --http) >>"$log" 2>&1 &
+else
+	echo "==> booting server on port $port"
+	(cd "$app_dir" && PORT="$port" "$bin_path") >>"$log" 2>&1 &
+fi
 server_pid=$!
 
 up=0
@@ -113,6 +120,16 @@ while [ "$i" -lt 300 ]; do
 done
 [ "$up" = 1 ] || { echo "FAIL: server did not become healthy in 300s"; cat "$log"; exit 1; }
 kill -0 "$server_pid" 2>/dev/null || { echo "FAIL: launched server exited after health check"; cat "$log"; exit 1; }
+
+if [ "$shell" = "mcp" ]; then
+	if grep -qi panic "$log"; then
+		echo "FAIL: panic during MCP startup"
+		grep -i panic "$log"
+		exit 1
+	fi
+	echo "PASS: MCP HTTP transport healthy on port $port with no panic (transport only; drive its tools with a real MCP client for full verification)"
+	exit 0
+fi
 
 if [ -z "$demo_size" ]; then
 	demo_size=$(curl -sf "http://127.0.0.1:$port/demo-data" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("defaultId","STANDARD"))' 2>/dev/null || echo STANDARD)
