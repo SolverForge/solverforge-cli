@@ -272,6 +272,37 @@ digests. Existing clients continue to use `POST /jobs`; the qualified route is
 an additive diagnostic entry point. Tracing remains opt-in because candidate
 pull detail can be large.
 
+## Agent Skill
+
+The repository ships a portable agent skill at `skills/solverforge-modeling/`.
+It teaches a coding agent to turn a described planning problem into a runnable
+SolverForge app with this CLI, and it bundles a solve smoke-test helper. The
+skill is harness-agnostic: the same folder is discovered by opencode, Claude
+Code, and other Agent Skills harnesses.
+
+Install it into a harness's own skills directory with the bundled installer:
+
+```bash
+./scripts/install-skill                    # ~/.agents/skills (cross-harness)
+./scripts/install-skill --only opencode    # ~/.config/opencode/skills
+./scripts/install-skill --only claude      # ~/.claude/skills
+./scripts/install-skill --project <dir>    # per-harness project scope
+./scripts/install-skill --list
+./scripts/install-skill --uninstall
+```
+
+From the repository root, `make install-skill` runs the same installer. It
+copies an independent, self-contained skill into each selected directory (no
+symlink, no shared location) and refuses to overwrite or remove an entry it did
+not create.
+
+The skill's `scripts/solve-smoke-test.sh <app-dir>` verifies a generated app:
+for web/API it builds, boots, starts a real solve, and requires a clean
+`COMPLETED` result with published scores; for MCP it boots the HTTP transport
+and requires a healthy, panic-free server; for CLI it validates `demo-data`
+serialization. It is a development aid, not a replacement for the generated-app
+suites below.
+
 ## Validation Flow
 
 End-to-end validation is split into explicit phases so the real production
@@ -280,14 +311,14 @@ pipeline stays readable:
 - `cargo test`
   Rust unit tests, scaffold contract tests, and generated-app runtime pipeline tests
 - `make test-runtime`
-  phase-marked runtime pipeline against ephemeral generated apps only
+  phase-marked runtime and MCP pipeline tests against ephemeral generated apps only
 - `make test-e2e`
   Playwright browser tests against ephemeral generated apps only
 - `make install-e2e`
   install Playwright Chromium locally before the first browser run
 - `make test-full`
-  full pipeline: binary/unit tests, scaffold contract tests, runtime pipeline,
-  then Playwright
+  full pipeline: binary/unit tests, scaffold contract tests, runtime and MCP
+  pipelines, then Playwright
 
 The runtime and browser suites both scaffold fresh temp apps, mutate them
 through the real CLI, boot the generated servers on random ports, and clean up
