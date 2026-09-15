@@ -6,16 +6,36 @@ use crate::error::{CliError, CliResult};
 use crate::output;
 
 pub fn run(port: u16, debug: bool) -> CliResult {
-    if is_cli_shell()? {
+    let shell = project_shell()?;
+
+    let mode = if debug { "debug" } else { "release" };
+
+    // MCP-shell projects have no long-lived REST server; `server` boots their
+    // stateless Streamable HTTP MCP transport instead.
+    let mut extra_args: Vec<&str> = Vec::new();
+    if shell.as_deref() == Some("mcp") {
+        extra_args.push("--http");
+    }
+
+    if shell.as_deref() == Some("cli") {
         return Err(CliError::with_hint(
             "`solverforge server` is not available for CLI-shell projects",
             "run the generated command-line app with `cargo run -- demo-data`",
         ));
     }
 
-    let mode = if debug { "debug" } else { "release" };
-
-    output::print_status("start", &format!("SolverForge server ({})", mode));
+    output::print_status(
+        "start",
+        &format!(
+            "SolverForge server ({}){}",
+            mode,
+            if shell.as_deref() == Some("mcp") {
+                " — MCP over Streamable HTTP at /mcp"
+            } else {
+                ""
+            }
+        ),
+    );
 
     if debug {
         output::print_dim("  Compiling in debug mode... (this may take a moment on first run)");
@@ -26,6 +46,10 @@ pub fn run(port: u16, debug: bool) -> CliResult {
     let mut args = vec!["run"];
     if !debug {
         args.push("--release");
+    }
+    if !extra_args.is_empty() {
+        args.push("--");
+        args.extend(extra_args);
     }
 
     // Set PORT env var for the server to pick up
@@ -47,10 +71,10 @@ pub fn run(port: u16, debug: bool) -> CliResult {
     }
 }
 
-fn is_cli_shell() -> CliResult<bool> {
+fn project_shell() -> CliResult<Option<String>> {
     if !Path::new("solverforge.app.toml").exists() {
-        return Ok(false);
+        return Ok(None);
     }
     let spec = app_spec::load()?;
-    Ok(spec.app.shell == "cli")
+    Ok(Some(spec.app.shell))
 }

@@ -7,9 +7,9 @@ use std::process::Command;
 use crate::error::{is_rust_keyword, CliError, CliResult};
 use crate::output;
 use crate::scaffold_target::{
-    MAPS_CRATE_VERSION, MAPS_SOURCE_PATH, MAPS_TARGET_LABEL, RUNTIME_CRATE_VERSION,
-    RUNTIME_SOURCE_PATH, RUNTIME_TARGET_DISPLAY, RUNTIME_TARGET_LABEL, UI_CRATE_VERSION,
-    UI_SOURCE_PATH, UI_TARGET_LABEL,
+    MAPS_CRATE_VERSION, MAPS_SOURCE_PATH, MAPS_TARGET_LABEL, MCP_CRATE_VERSION, MCP_SOURCE_PATH,
+    MCP_TARGET_LABEL, RUNTIME_CRATE_VERSION, RUNTIME_SOURCE_PATH, RUNTIME_TARGET_DISPLAY,
+    RUNTIME_TARGET_LABEL, UI_CRATE_VERSION, UI_SOURCE_PATH, UI_TARGET_LABEL,
 };
 use crate::template;
 
@@ -21,6 +21,7 @@ pub enum ScaffoldShell {
     Web,
     Api,
     Cli,
+    Mcp,
 }
 
 impl ScaffoldShell {
@@ -29,6 +30,7 @@ impl ScaffoldShell {
             Self::Web => "web",
             Self::Api => "api",
             Self::Cli => "cli",
+            Self::Mcp => "mcp",
         }
     }
 
@@ -37,6 +39,7 @@ impl ScaffoldShell {
             Self::Web => "neutral web scaffold",
             Self::Api => "neutral API scaffold",
             Self::Cli => "neutral CLI scaffold",
+            Self::Mcp => "neutral MCP scaffold",
         }
     }
 }
@@ -226,9 +229,13 @@ fn materialize_shell(
     shell: ScaffoldShell,
 ) -> CliResult {
     match shell {
-        ScaffoldShell::Web => Ok(()),
+        ScaffoldShell::Web => {
+            remove_dir_if_exists(&dest.join("src/mcp"))?;
+            Ok(())
+        }
         ScaffoldShell::Api => {
             remove_dir_if_exists(&dest.join("static"))?;
+            remove_dir_if_exists(&dest.join("src/mcp"))?;
             write_generated(
                 dest.join("solverforge.app.toml"),
                 &app_spec_toml(project_name, shell),
@@ -245,6 +252,7 @@ fn materialize_shell(
         }
         ScaffoldShell::Cli => {
             remove_dir_if_exists(&dest.join("static"))?;
+            remove_dir_if_exists(&dest.join("src/mcp"))?;
             remove_file_if_exists(&dest.join("src/api/routes.rs"))?;
             remove_file_if_exists(&dest.join("src/api/sse.rs"))?;
             write_generated(
@@ -260,6 +268,26 @@ fn materialize_shell(
             write_generated(
                 dest.join("src/main.rs"),
                 &cli_main_rs(project_name, crate_name),
+            )?;
+            Ok(())
+        }
+        ScaffoldShell::Mcp => {
+            remove_dir_if_exists(&dest.join("static"))?;
+            remove_file_if_exists(&dest.join("src/api/routes.rs"))?;
+            remove_file_if_exists(&dest.join("src/api/sse.rs"))?;
+            write_generated(
+                dest.join("solverforge.app.toml"),
+                &app_spec_toml(project_name, shell),
+            )?;
+            write_generated(
+                dest.join("Cargo.toml"),
+                &mcp_cargo_toml(project_name, crate_name),
+            )?;
+            write_generated(dest.join("src/api/mod.rs"), mcp_api_mod_rs())?;
+            write_generated(dest.join("src/lib.rs"), &mcp_lib_rs(project_name))?;
+            write_generated(
+                dest.join("src/main.rs"),
+                &mcp_main_rs(project_name, crate_name),
             )?;
             Ok(())
         }
@@ -523,6 +551,194 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
     )
 }
 
+fn mcp_cargo_toml(project_name: &str, crate_name: &str) -> String {
+    format!(
+        r#"[package]
+name = "{project_name}"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+description = "Constraint optimizer MCP server built with SolverForge"
+
+[[bin]]
+name = "{crate_name}"
+path = "src/main.rs"
+
+[dependencies]
+# The console feature stays off: it prints the runtime banner to stdout,
+# which is the stdio MCP transport channel. Diagnostics go to stderr.
+solverforge = {{ version = "{runtime_version}", features = ["serde", "verbose-logging"] }}
+
+# MCP server
+rmcp = {{ version = "{mcp_version}", features = ["server", "macros", "transport-io", "transport-streamable-http-server", "transport-streamable-http-server-session"] }}
+axum = "0.8.9"
+tokio = {{ version = "1.52.3", features = ["full"] }}
+tracing = "0.1"
+tracing-subscriber = {{ version = "0.3", features = ["env-filter"] }}
+
+# Serialization
+serde = {{ version = "1.0.228", features = ["derive"] }}
+serde_json = "1.0.150"
+schemars = {{ version = "1.0", optional = true }}
+
+# Utilities
+parking_lot = "0.12.5"
+
+[features]
+# Typed tool schemas ride the shared DTO contract; enabled for the MCP shell.
+default = ["schema"]
+schema = ["dep:schemars"]
+"#,
+        project_name = project_name,
+        crate_name = crate_name,
+        runtime_version = RUNTIME_CRATE_VERSION,
+        mcp_version = MCP_CRATE_VERSION,
+    )
+}
+
+fn mcp_api_mod_rs() -> &'static str {
+    r#"pub mod dto;
+pub mod telemetry;
+
+pub use dto::{
+    AnalyzeResponse, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, JobTelemetryDetailDto,
+    PlanDto,
+};
+pub use telemetry::{CandidateTraceDto, TelemetryDto};
+"#
+}
+
+fn mcp_lib_rs(project_name: &str) -> String {
+    format!(
+        r#"/* {project_name} — neutral planning application served over MCP, built with SolverForge
+
+Structure:
+  domain/      — Plan (solution) plus CLI-generated entities and facts
+  constraints/ — Scoring rules
+  solver/      — Engine, service, termination config
+  data/        — Demo data / data loading
+  api/         — Shared DTO contract and telemetry projections
+  mcp/         — MCP server surface: tools, task wiring, progress */
+
+pub mod api;
+pub mod constraints;
+pub mod data;
+pub mod domain;
+pub mod mcp;
+pub mod solver;
+"#
+    )
+}
+
+fn mcp_main_rs(project_name: &str, crate_name: &str) -> String {
+    format!(
+        r#"/* {project_name} — SolverForge MCP server
+   stdio (default): register this binary with any MCP client.
+   Streamable HTTP: cargo run -- --http [--host H] [--port N] */
+
+use {crate_name}::mcp::SolverMcp;
+use {crate_name}::solver::SolverService;
+
+use rmcp::task_manager::TaskManager;
+use rmcp::ServiceExt;
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {{
+    // Stdout carries the stdio MCP transport, so every diagnostic goes to
+    // stderr. Override log filtering with RUST_LOG.
+    init_stderr_tracing();
+
+    let mut http = false;
+    let mut host = String::from("127.0.0.1");
+    let mut port: Option<u16> = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(argument) = args.next() {{
+        match argument.as_str() {{
+            "--http" => http = true,
+            "--host" => {{
+                host = args
+                    .next()
+                    .ok_or("--host requires a value")?
+                    .parse()
+                    .map_err(|_| "--host must be an IP address")?;
+            }}
+            "--port" => {{
+                port = Some(
+                    args.next()
+                        .ok_or("--port requires a value")?
+                        .parse()
+                        .map_err(|_| "--port must be a u16")?,
+                );
+            }}
+            other => {{
+                return Err(format!(
+                    "unknown argument: {{other}} (use --http, --host, --port)"
+                )
+                .into());
+            }}
+        }}
+    }}
+    let port = port
+        .or_else(|| std::env::var("PORT").ok().and_then(|value| value.parse().ok()))
+        .unwrap_or(7860);
+
+    // One retained solver store and one task store are shared by every
+    // request, including each stateless HTTP negotiation.
+    let solver = Arc::new(SolverService::new());
+    let tasks = TaskManager::new();
+
+    if !http {{
+        let service = SolverMcp::new(Arc::clone(&solver), tasks.clone())
+            .serve(rmcp::transport::stdio())
+            .await?;
+        eprintln!("▸ {project_name} MCP server ready on stdio");
+        service.waiting().await?;
+        return Ok(());
+    }}
+
+    let config = rmcp::transport::streamable_http_server::StreamableHttpServerConfig::default()
+        .with_legacy_session_mode(false);
+    let stateless = Arc::new(
+        rmcp::transport::streamable_http_server::session::never::NeverSessionManager::default(),
+    );
+    let service_factory = {{
+        let solver = Arc::clone(&solver);
+        let tasks = tasks.clone();
+        move || Ok(SolverMcp::new(Arc::clone(&solver), tasks.clone()))
+    }};
+    let http_service = rmcp::transport::streamable_http_server::StreamableHttpService::new(
+        service_factory,
+        stateless,
+        config,
+    );
+
+    let app = axum::Router::new()
+        .route("/health", axum::routing::get(|| async {{ "UP" }}))
+        .nest_service("/mcp", http_service);
+
+    let addr = SocketAddr::from((host.parse::<std::net::IpAddr>()?, port));
+    eprintln!("▸ {project_name} MCP server listening on http://{{addr}}/mcp");
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}}
+
+fn init_stderr_tracing() {{
+    use tracing_subscriber::EnvFilter;
+    use tracing_subscriber::fmt;
+
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let _ = fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .try_init();
+}}
+"#
+    )
+}
+
 fn run_cargo_check_prompt(dest: &Path) -> CliResult {
     use dialoguer::Confirm;
 
@@ -569,6 +785,10 @@ fn print_template_guidance(project_name: &str, shell: ScaffoldShell) {
     match shell {
         ScaffoldShell::Web | ScaffoldShell::Api => println!("    solverforge server"),
         ScaffoldShell::Cli => println!("    cargo run -- demo-data"),
+        ScaffoldShell::Mcp => {
+            println!("    cargo run                # MCP over stdio; register the binary with your MCP client");
+            println!("    cargo run -- --http      # MCP over Streamable HTTP (loopback, /mcp)");
+        }
     }
     println!();
     println!("  This scaffold includes:");
@@ -593,6 +813,14 @@ fn print_template_guidance(project_name: &str, shell: ScaffoldShell) {
         ScaffoldShell::Cli => {
             println!("    - A Clap command-line entry point without Axum or frontend assets");
             println!("    - Demo-data JSON output backed by the same domain contract");
+        }
+        ScaffoldShell::Mcp => {
+            println!(
+                "    - An MCP server exposing the solver lifecycle as agent tools (rmcp {})",
+                MCP_CRATE_VERSION
+            );
+            println!("    - Task-backed solve with typed tool schemas and lifecycle polling tools");
+            println!("    - stdio transport by default; --http serves stateless Streamable HTTP on loopback");
         }
     }
     println!("    - solverforge.app.toml for the scaffolded domain contract");
@@ -674,6 +902,16 @@ fn generate_readme(project_name: &str, _crate_name: &str, shell: ScaffoldShell) 
             MAPS_SOURCE_PATH
         ));
     }
+    if shell == ScaffoldShell::Mcp {
+        readme.push_str(&format!(
+            "- MCP server target for this scaffold: `{}`\n",
+            MCP_TARGET_LABEL
+        ));
+        readme.push_str(&format!(
+            "- MCP server dependency currently wired into `Cargo.toml`: `{}`\n",
+            MCP_SOURCE_PATH
+        ));
+    }
     readme.push_str(&format!("- Scaffold shell: `{}`\n\n", shell.as_str()));
     readme.push_str(&format!(
         "This project was scaffolded by `solverforge-cli`, and it currently targets `{}` through the configured crate dependency targets.\n\n",
@@ -691,6 +929,15 @@ fn generate_readme(project_name: &str, _crate_name: &str, shell: ScaffoldShell) 
         ScaffoldShell::Cli => {
             readme.push_str("# Print generated demo data\n");
             readme.push_str("cargo run -- demo-data\n");
+        }
+        ScaffoldShell::Mcp => {
+            readme.push_str(
+                "# Serve MCP over stdio (the default; register the binary with your MCP client)\n",
+            );
+            readme.push_str("cargo run --release\n\n");
+            readme
+                .push_str("# Serve MCP over stateless Streamable HTTP on the loopback interface\n");
+            readme.push_str("cargo run --release -- --http\n");
         }
     }
     readme.push_str("```\n\n");
@@ -730,6 +977,10 @@ fn generate_readme(project_name: &str, _crate_name: &str, shell: ScaffoldShell) 
         }
         ScaffoldShell::Cli => {
             readme.push_str("| `src/api/dto.rs` | Shared JSON DTOs used by the CLI shell |\n");
+        }
+        ScaffoldShell::Mcp => {
+            readme.push_str("| `src/api/` | Shared DTO contract and telemetry projections |\n");
+            readme.push_str("| `src/mcp/` | MCP server surface: tools, task wiring, progress |\n");
         }
     }
     readme.push_str("| `src/data/` | Data loading and generation |\n");

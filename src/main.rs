@@ -39,6 +39,7 @@ fn parse_variable_kind(value: &str) -> Result<String, String> {
 const EXAMPLES: &str = "\x1b[1mExamples:\x1b[0m
   solverforge new my-optimizer
   solverforge new batch-optimizer --shell cli
+  solverforge new agent-optimizer --shell mcp
   solverforge generate entity shift --planning-variable employee_idx
   solverforge generate constraint no_overlap --pair --hard
   solverforge server
@@ -78,13 +79,13 @@ struct Cli {
 enum Command {
     /// Scaffold a new SolverForge project
     #[command(
-        after_help = "Examples:\n  solverforge new my-optimizer\n  solverforge new batch-optimizer --shell cli\n  solverforge new api-optimizer --shell api"
+        after_help = "Examples:\n  solverforge new my-optimizer\n  solverforge new batch-optimizer --shell cli\n  solverforge new api-optimizer --shell api\n  solverforge new agent-optimizer --shell mcp"
     )]
     New {
         /// Project name (directory that will be created)
         name: String,
 
-        /// Generated shell: web, api, or cli
+        /// Generated shell: web, api, cli, or mcp
         #[arg(long, value_enum, default_value_t = ScaffoldShell::Web)]
         shell: ScaffoldShell,
 

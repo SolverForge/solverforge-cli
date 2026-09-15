@@ -15,6 +15,12 @@ pub fn run() -> CliResult {
                 "CLI-shell projects do not generate Axum routes",
             ));
         }
+        if spec.app.shell == "mcp" {
+            return Err(CliError::with_hint(
+                "`solverforge routes` is not available for MCP-shell projects",
+                "MCP-shell projects expose solver tools over MCP, not Axum REST routes",
+            ));
+        }
     }
 
     let candidates = ["src/api/routes.rs", "src/api/mod.rs", "src/api.rs"];
