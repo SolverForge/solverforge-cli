@@ -64,8 +64,7 @@ fn merge_creates_the_document_when_absent() {
 #[test]
 fn merge_refuses_invalid_existing_json_instead_of_clobbering() {
     let error = merge_vscode_config(Some("not json"), "app", "/bin/app")
-        .err()
-        .expect("invalid JSON must be rejected");
+        .expect_err("invalid JSON must be rejected");
     assert!(
         error.to_string().contains("not valid JSON"),
         "unexpected error: {error}"
@@ -75,8 +74,7 @@ fn merge_refuses_invalid_existing_json_instead_of_clobbering() {
 #[test]
 fn merge_refuses_non_object_servers_entry() {
     let error = merge_vscode_config(Some(r#"{"servers": "nope"}"#), "app", "/bin/app")
-        .err()
-        .expect("non-object servers must be rejected");
+        .expect_err("non-object servers must be rejected");
     assert!(
         error.to_string().contains("non-object `servers`"),
         "unexpected error: {error}"
