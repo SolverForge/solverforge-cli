@@ -2,10 +2,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rmcp::model::Task;
-use rmcp::model::{CallToolResult, ContentBlock, ProgressNotificationParam, ProgressToken};
+use rmcp::model::{CallToolResult, ProgressNotificationParam, ProgressToken};
 use rmcp::service::Peer;
 use rmcp::task_manager::{TaskExit, TaskManager, TaskOptions};
-use rmcp::RoleServer;
+use rmcp::{ErrorData, RoleServer};
 use serde_json::json;
 
 use crate::api::dto::{lifecycle_state_label, JobSnapshotDto};
@@ -14,13 +14,12 @@ use crate::solver::SolverService;
 /// How often the solve watcher samples the retained job status.
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-/// How long completed task state stays addressable through `tasks/get`.
-const TASK_TTL: Duration = Duration::from_secs(3_600);
-
 /// Spawns the MCP task that watches a retained solver job until it reaches a
 /// terminal lifecycle state. Progress rides the request progress token while
 /// the caller is attached; detached clients observe the task through
 /// `tasks/get`, whose terminal payload carries the best-solution snapshot.
+/// Active tasks have no TTL because SolverForge jobs have no maximum run time;
+/// task records remain available for the lifetime of this server process.
 pub fn spawn_solve_task(
     tasks: &TaskManager,
     solver: Arc<SolverService>,
@@ -31,7 +30,7 @@ pub fn spawn_solve_task(
     tasks.spawn(
         TaskOptions::new()
             .with_poll_interval_ms(STATUS_POLL_INTERVAL.as_millis() as u64)
-            .with_ttl_ms(TASK_TTL.as_millis() as u64)
+            .with_ttl_ms(None)
             .with_status_message("solving"),
         move |ctx| {
             Box::pin(async move {
@@ -48,11 +47,12 @@ pub fn spawn_solve_task(
                                 Err(_) => {
                                     // The job was deleted while the task was
                                     // still watching it.
-                                    return Ok(CallToolResult::error(vec![
-                                        ContentBlock::text(format!(
+                                    return Err(TaskExit::Error(ErrorData::internal_error(
+                                        format!(
                                             "job {job_id} was deleted before reaching a terminal state"
-                                        )),
-                                    ]));
+                                        ),
+                                        None,
+                                    )));
                                 }
                                 Ok(status) => {
                                     if let Some(token) = &progress_token {
@@ -77,14 +77,21 @@ pub fn spawn_solve_task(
                                         solverforge::SolverLifecycleState::Paused => {
                                             ctx.set_status_message("paused");
                                         }
-                                        solverforge::SolverLifecycleState::Completed
-                                        | solverforge::SolverLifecycleState::Cancelled
-                                        | solverforge::SolverLifecycleState::Failed => {
+                                        solverforge::SolverLifecycleState::Completed => {
                                             return Ok(terminal_result(
                                                 &solver,
                                                 &job_id,
                                                 status.latest_snapshot_revision,
                                             ));
+                                        }
+                                        solverforge::SolverLifecycleState::Cancelled => {
+                                            return Err(TaskExit::Cancelled);
+                                        }
+                                        solverforge::SolverLifecycleState::Failed => {
+                                            return Err(TaskExit::Error(ErrorData::internal_error(
+                                                format!("solver job {job_id} failed"),
+                                                None,
+                                            )));
                                         }
                                     }
                                 }

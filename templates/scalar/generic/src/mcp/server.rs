@@ -4,7 +4,7 @@ use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CancelTaskParams, CreateTaskResult, GetTaskParams,
-    GetTaskResult, Implementation, ServerCapabilities, ServerInfo, UpdateTaskParams,
+    GetTaskResult, Implementation, MetaObject, ServerCapabilities, ServerInfo, UpdateTaskParams,
 };
 use rmcp::service::RequestContext;
 use rmcp::task_manager::TaskManager;
@@ -410,6 +410,11 @@ impl ServerHandler for SolverMcp {
                 },
             };
             let job_id = self.start_from_request(solve_request)?;
+            let mut task_meta = serde_json::Map::new();
+            task_meta.insert(
+                "jobId".to_string(),
+                serde_json::Value::String(job_id.clone()),
+            );
             let task = tasks::spawn_solve_task(
                 &self.tasks,
                 Arc::clone(&self.solver),
@@ -417,7 +422,9 @@ impl ServerHandler for SolverMcp {
                 context.meta.get_progress_token(),
                 job_id,
             );
-            return Ok(CallToolResponse::Task(CreateTaskResult::new(task)));
+            return Ok(CallToolResponse::Task(
+                CreateTaskResult::new(task).with_meta(MetaObject(task_meta)),
+            ));
         }
 
         let tool_context =

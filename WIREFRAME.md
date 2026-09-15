@@ -123,12 +123,17 @@ surface, but omits REST route files, SSE files, frontend assets,
 `solverforge-ui`, and `solverforge-maps`. It adds `src/mcp/`, an MCP server
 built on `rmcp 3.3.0` that projects the retained solver job lifecycle onto
 twelve annotated tools with typed schemas. `solve` returns an MCP task handle
-to task-capable clients (MCP 2026-07-28) and an immediate job summary to other
-clients. stdio is the default transport; `--http` serves stateless Streamable
-HTTP at `/mcp` on the loopback interface unless `--host` overrides it. One
-solver service and one task store are shared across every stateless HTTP
-negotiation. The MCP shell keeps the runtime `console` feature off because the
-runtime banner writes to stdout, which is the stdio MCP transport channel;
+with the retained `jobId` in result metadata to task-capable clients (MCP
+2026-07-28) and an immediate job summary to other clients. Each task has no
+TTL, so expiry cannot orphan an active solve; task records remain for the
+server process lifetime. Failed or cancelled solves terminate with the
+corresponding MCP task state. stdio is the default transport;
+`--http` serves stateless Streamable HTTP at `/mcp` on the loopback interface
+unless `--host` selects a concrete IP. Wildcard binds are rejected so rmcp Host
+validation remains active. One solver service and one task store are shared
+across every stateless HTTP negotiation. The MCP shell keeps the runtime
+`console` feature off because the runtime banner writes to stdout, which is the
+stdio MCP transport channel;
 diagnostics go to stderr. Every shell declares `schemars` as an optional
 dependency behind a `schema` feature, and only the MCP shell enables it.
 

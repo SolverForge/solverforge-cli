@@ -32,6 +32,9 @@ pub struct ToolSurface {
 #[derive(Debug)]
 pub struct TaskFlowReport {
     pub surface: ToolSurface,
+    pub job_id: String,
+    pub ttl_ms: Option<u64>,
+    pub initial_lifecycle_state: String,
     pub states: Vec<String>,
     pub terminal: Value,
     pub cancel_acked: bool,
@@ -194,10 +197,24 @@ async fn task_flow(peer: &Peer<RoleClient>, timeout: Duration) -> TaskFlowReport
         .call_tool_once(call("solve", demo_arguments()))
         .await
         .expect("solve tool call failed");
-    let task_id = match response {
-        CallToolResponse::Task(created) => created.task.task_id.to_string(),
+    let (task_id, job_id, ttl_ms) = match response {
+        CallToolResponse::Task(created) => {
+            let job_id = created
+                .meta
+                .as_ref()
+                .and_then(|meta| meta.0.get("jobId"))
+                .and_then(Value::as_str)
+                .expect("task metadata must carry the retained jobId")
+                .to_string();
+            (
+                created.task.task_id.to_string(),
+                job_id,
+                created.task.ttl_ms,
+            )
+        }
         other => panic!("task-capable client must receive a task handle, got {other:?}"),
     };
+    let initial_lifecycle_state = lifecycle_state(peer, &job_id).await;
 
     let mut states = Vec::new();
     let deadline = Instant::now() + timeout;
@@ -227,6 +244,9 @@ async fn task_flow(peer: &Peer<RoleClient>, timeout: Duration) -> TaskFlowReport
 
     TaskFlowReport {
         surface,
+        job_id,
+        ttl_ms,
+        initial_lifecycle_state,
         states,
         terminal,
         cancel_acked,

@@ -12,8 +12,8 @@ Current scaffold policy:
 - generated projects currently target `solverforge 0.19.4`; the default web shell additionally targets `solverforge-ui 0.7.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.3.0`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
 - `--shell web|api|cli|mcp` is the current public shell selector; `web` is the default, `api` omits frontend assets, `cli` omits Axum/SSE routes and frontend assets, and `mcp` delivers the solver as an MCP server over stdio and stateless Streamable HTTP
-- API/CLI app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
-- the MCP shell keeps the shared core (`domain/`, `constraints/`, `solver/`, `data/`, DTOs) and adds `src/mcp/`; `solve` is task-backed for task-capable clients, stdio is the default transport, and the runtime `console` feature stays off so the banner never corrupts the stdio channel
+- API/CLI/MCP app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
+- the MCP shell keeps the shared core (`domain/`, `constraints/`, `solver/`, `data/`, DTOs) and adds `src/mcp/`; `solve` is task-backed with retained `jobId` metadata for task-capable clients, tasks have no TTL and remain for the server process lifetime, failed/cancelled solves map to corresponding MCP task states, stdio is the default transport, concrete `--host` IPs preserve rmcp Host validation, and the runtime `console` feature stays off so the banner never corrupts the stdio channel
 - `solverforge connect` prints MCP client configuration and writes only in-project config (`--write vscode` merges `.vscode/mcp.json` instead of clobbering it)
 - Tauri scaffolding is deferred; do not document or implement a public Tauri shell unless that work is explicitly reopened
 - users shape the app afterward through facts, entities, solution/score metadata, variables, constraints, and generated data

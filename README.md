@@ -223,12 +223,17 @@ tools: `list_demo_data`, `get_demo_data`, `solve`, `get_status`,
 `get_best_solution`, `analyze_solution`, `get_telemetry`, `get_candidate_trace`,
 `pause`, `resume`, `cancel`, and `delete`.
 
-`solve` returns an MCP task handle to task-capable clients (MCP 2026-07-28) and
-an immediate job summary to every other client, which then drives the lifecycle
-through the polling tools. The server speaks stdio by default and serves
-stateless Streamable HTTP at `/mcp` with `--http`; HTTP binds the loopback
-interface unless `--host` overrides it. One solver service and one task store
-are shared by every request so jobs and tasks survive individual negotiations.
+`solve` returns an MCP task handle with the retained `jobId` in result metadata
+to task-capable clients (MCP 2026-07-28), and an immediate job summary to every
+other client. Either client can therefore drive the lifecycle through the
+polling and control tools while the solve runs. MCP tasks have no TTL, so task
+expiry cannot orphan an active solve; task records remain available for the
+server process lifetime. The server speaks stdio by default and serves
+stateless Streamable HTTP at `/mcp` with `--http`; HTTP binds
+the loopback interface unless `--host` selects a concrete IP address. Wildcard
+binds (`0.0.0.0` and `::`) are rejected so rmcp Host validation remains active.
+One solver service and one task store are shared by every request so jobs and
+tasks survive individual negotiations.
 
 ```bash
 solverforge new agent-scheduler --shell mcp

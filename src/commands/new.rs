@@ -651,7 +651,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     init_stderr_tracing();
 
     let mut http = false;
-    let mut host = String::from("127.0.0.1");
+    let mut host = std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
     let mut port: Option<u16> = None;
     let mut args = std::env::args().skip(1);
     while let Some(argument) = args.next() {{
@@ -683,6 +683,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     let port = port
         .or_else(|| std::env::var("PORT").ok().and_then(|value| value.parse().ok()))
         .unwrap_or(7860);
+    if host.is_unspecified() {{
+        return Err("--host must be a concrete IP address, not 0.0.0.0 or ::".into());
+    }}
 
     // One retained solver store and one task store are shared by every
     // request, including each stateless HTTP negotiation.
@@ -699,6 +702,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     }}
 
     let config = rmcp::transport::streamable_http_server::StreamableHttpServerConfig::default()
+        .with_allowed_hosts([
+            "localhost".to_string(),
+            "127.0.0.1".to_string(),
+            "::1".to_string(),
+            host.to_string(),
+        ])
         .with_legacy_session_mode(false);
     let stateless = Arc::new(
         rmcp::transport::streamable_http_server::session::never::NeverSessionManager::default(),
@@ -718,7 +727,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
         .route("/health", axum::routing::get(|| async {{ "UP" }}))
         .nest_service("/mcp", http_service);
 
-    let addr = SocketAddr::from((host.parse::<std::net::IpAddr>()?, port));
+    let addr = SocketAddr::from((host, port));
     eprintln!("▸ {project_name} MCP server listening on http://{{addr}}/mcp");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

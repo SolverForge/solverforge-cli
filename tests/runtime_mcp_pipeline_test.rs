@@ -144,6 +144,25 @@ fn assert_mixed_solution(terminal: &serde_json::Value) {
     );
 }
 
+fn assert_task_job_is_immediately_addressable(report: &mcp_client::TaskFlowReport) {
+    assert!(
+        !report.job_id.is_empty(),
+        "task metadata must carry a job id"
+    );
+    assert_eq!(
+        report.ttl_ms, None,
+        "an MCP task must not expire while its retained solver job can still run"
+    );
+    assert!(
+        matches!(
+            report.initial_lifecycle_state.as_str(),
+            "SOLVING" | "COMPLETED"
+        ),
+        "task clients must be able to inspect the retained job immediately: {:?}",
+        report.initial_lifecycle_state
+    );
+}
+
 fn assert_lifecycle_sequence(report: &mcp_client::LifecycleReport) {
     assert!(
         report.solve_summary["jobId"].is_string(),
@@ -185,6 +204,7 @@ fn mcp_stdio_pipeline() {
     app.phase("Drive task-backed solve over stdio");
     let report = stdio_task_flow(&app.binary_path(), FLOW_TIMEOUT);
     assert_tool_surface(&report.surface);
+    assert_task_job_is_immediately_addressable(&report);
     assert!(
         report
             .states
@@ -237,6 +257,7 @@ fn mcp_http_pipeline() {
     app.phase("Drive task-backed solve over Streamable HTTP");
     let report = http_task_flow(port, FLOW_TIMEOUT);
     assert_tool_surface(&report.surface);
+    assert_task_job_is_immediately_addressable(&report);
     assert!(
         report
             .states
