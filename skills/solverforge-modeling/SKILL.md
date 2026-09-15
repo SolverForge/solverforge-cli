@@ -1,6 +1,6 @@
 ---
 name: solverforge-modeling
-description: Model a planning or optimization problem end-to-end with the `solverforge` CLI and produce a runnable SolverForge app. Use when a user describes a scheduling, assignment, routing, rostering, sequencing, packing, loading, knapsack, or resource-allocation problem and wants it turned into working code, or when they want to scaffold, extend, or fix a SolverForge project (facts, entities, scalar/list planning variables, constraints, score type, demo data, output shell). Covers the CLI scaffold workflow, output-shell choice (web / API / MCP / CLI), constraint authoring against the SolverForge stream API, and behavioral verification on shells that expose solving. Do not use for editing solverforge-cli itself.
+description: Model a planning or optimization problem end-to-end with the `solverforge` CLI and produce a runnable SolverForge app. Use when a user describes a scheduling, assignment, routing, rostering, sequencing, packing, loading, knapsack, or resource-allocation problem and wants it turned into working code, or when they want to scaffold, extend, or fix a SolverForge project or an existing hand-written SolverForge model (facts, entities, scalar/list planning variables, constraints, score type, demo data, output shell). Covers the CLI scaffold workflow, the existing-model path when the generator commands do not apply, output-shell choice (web / API / MCP / CLI), constraint authoring against the SolverForge stream API, and behavioral verification on shells that expose solving. Do not use for editing solverforge-cli itself.
 ---
 
 # Modeling planning problems with solverforge-cli
@@ -26,8 +26,56 @@ required source/collector rules for the grouped patterns.
   `solverforge generate variable --help`.
 
 This skill describes CLI `3.0.0` (scaffold runtime target `solverforge 0.19.4`,
-UI `solverforge-ui 0.7.0`, maps `solverforge-maps 2.1.4`, MCP `rmcp 3.3.0`).
+UI `solverforge-ui 0.9.0`, maps `solverforge-maps 2.1.4`, MCP `rmcp 3.4.0`).
 Re-derive specifics from the CLI if the version differs.
+
+## First: which project are you in?
+
+Decide this before anything else; it changes which parts of this skill apply.
+
+- **Scaffolded project** — produced by `solverforge new`, so the CLI owns the
+  model through `src/domain/mod.rs`, `src/constraints/mod.rs`, managed blocks,
+  `solverforge.app.toml`, and `solver.toml`. Follow Steps 0–8 below.
+- **Existing model** — a hand-written app that already depends on `solverforge`
+  directly (the
+  [`solverforge-usecases`](https://github.com/SolverForge/solverforge-usecases)
+  apps, `solverforge-calendar`, or any library/test that
+  declares `#[planning_solution]` itself). The CLI generator commands
+  (`generate`, `destroy`, `check`, `generate data`) and managed blocks do **not**
+  exist here; model changes are ordinary Rust edits. Read
+  `references/existing-model.md` first, then apply the modeling, constraint, and
+  verification rules in this skill directly to the source.
+
+Do not run `solverforge new` on an app that already has a model, and do not
+hand-wire managed blocks into one.
+
+## Worked references and docs — read these before guessing
+
+When a rule is hard to express, **find a worked app before reading framework
+internals**. These are the primary references (fetch from GitHub if there is no
+local checkout):
+
+- [`solverforge-usecases/uc-lessons`](https://github.com/SolverForge/solverforge-usecases/tree/main/uc-lessons)
+  — time/fact-based scheduling: timeslot facts own their time data, availability
+  lives on the fact that owns it, overlaps are projection + self-join, and
+  assignment is a separate constraint. This is the closest reference for any
+  "assign an entity to a window/slot" problem.
+- [`solverforge-usecases/uc-hospital`](https://github.com/SolverForge/solverforge-usecases/tree/main/uc-hospital)
+  — preference/availability/coverage scheduling with `solver.toml` policy and
+  per-constraint score tests.
+
+Both show the canonical `solver.toml` policy (construction heuristic, acceptor,
+forager) and the per-constraint test idiom `(constraint(),).evaluate_all(&plan)`.
+The published apps are `solverforge-lessons` and `solverforge-hospital`.
+
+For API details, read the crate docs first — constraint streams
+([`solverforge::stream`](https://docs.rs/solverforge/latest/solverforge/stream/index.html)),
+score analysis
+([`ScoreAnalysis`](https://docs.rs/solverforge/latest/solverforge/struct.ScoreAnalysis.html),
+`evaluate_detailed`, `analyze_snapshot`), and solver configuration (`solver.toml`
+/ `SolverConfig`) — then the `solverforge` source. Read `solverforge-macros` /
+`solverforge-solver` internals only as a last resort; the macros are wiring, not
+modeling guidance.
 
 ## Step 0 — Intake: ask the user before you build
 
@@ -235,6 +283,12 @@ cargo check                # the code must actually compile
 never sees placeholder `panic!`s. Run a real solve through web/API or through a
 CLI solve entry point/integration test you add.
 
+Also add one per-constraint test per rule with exact score-delta assertions
+(`(constraint(),).evaluate_all(&plan)`); it is the only fast gate that catches a
+rule modeled as a precomputed flag. See gate 4 in `references/verification.md`.
+An existing hand-written model has no `check` step at all — start at
+`cargo test` (`references/existing-model.md`).
+
 For `web`/`api`:
 
 ```bash
@@ -299,8 +353,26 @@ small conventional commits if the user asks for commits.
 
 ## Hard rules
 
+- Never encode a domain rule as a precomputed per-entity feasibility or cost
+  matrix (`Vec<bool>`, `Vec<i32>`, keyed lookup tables) and feed it to a penalty
+  constraint. State the rule over domain objects inside the constraint. A
+  candidate/value-range provider may compute which values are *available*, but it
+  must not become the scoring input.
+- Never add a construction heuristic, greedy initializer, or post-solve
+  sanitizer/repair pass in application code. Restrict candidates through the
+  variable's candidate/value-range metadata and set search policy in
+  `solver.toml`.
+- Hard constraints are penalties, not filters: a returned solution can still
+  violate one. Keep invalid candidates out of the model's value range, or gate
+  grouped/repair moves with `require_hard_improvement`; never guard the result
+  after solving. See `references/constraint-patterns.md`.
+- Explain a plan with framework analysis (`analyze()`, `analyze_snapshot`,
+  `evaluate_detailed`), not by re-deriving constraint predicates in application
+  code.
 - Never hand-wire managed blocks, `src/constraints/mod.rs`, or the solution's
-  collections. Use the CLI commands.
+  collections. Use the CLI commands. (Scaffolded projects only; an existing
+  hand-written model is edited as ordinary Rust — see
+  `references/existing-model.md`.)
 - MCP-shell projects expose MCP tools, not Axum routes: do not expect `/health`,
   `/jobs`, or `solverforge routes` there.
 - Always pass an explicit constraint pattern flag.
@@ -319,11 +391,12 @@ small conventional commits if the user asks for commits.
 
 | File | Use it for |
 | --- | --- |
-| `references/problem-modeling.md` | Converting a problem statement into facts, entities, variables, and hard/soft constraints; intake template. |
+| `references/problem-modeling.md` | Converting a problem statement into facts, entities, variables, and hard/soft constraints; intake template; why not to precompute rules or model time incorrectly. |
+| `references/existing-model.md` | Non-scaffolded apps: locating and editing an existing `#[planning_solution]` model when the generator commands do not apply. |
 | `references/cli-workflow.md` | Exact command surface, flags, ordering, and shell-specific run steps. |
-| `references/constraint-patterns.md` | Every constraint pattern and its source rules; verified code for unary/reward/pair/join. |
+| `references/constraint-patterns.md` | Every constraint pattern and its source rules; verified code for unary/reward/pair/join; why hard constraints are penalties; the time/window/overlap recipe. |
 | `references/output-shells.md` | `web` vs `api` vs `cli` vs `mcp`, what each generates, and how to run each. |
-| `references/verification.md` | `check` vs compile vs real solve; the API smoke flow and helper script. |
-| `references/gotchas.md` | Managed blocks, compiler-owned files, ordering traps, score-type limits. |
+| `references/verification.md` | `check` vs compile vs real solve vs per-constraint tests; the API smoke flow and helper script; explaining a plan from framework analysis. |
+| `references/gotchas.md` | Managed blocks, compiler-owned files, ordering traps, score-type limits, hard-constraint and precompute traps. |
 | `references/advanced-resources.md` | Countable ranges, scalar hooks, list metadata, scalar groups, conflict repair, candidate traces. |
 | `references/routing-and-maps.md` | When and how to use `solverforge-maps` for road-network travel times, matrices, and route geometry. |

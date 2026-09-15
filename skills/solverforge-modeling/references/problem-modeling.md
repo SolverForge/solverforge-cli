@@ -55,6 +55,47 @@ common failure of building the wrong model and only discovering it at solve time
 Never model an ordered sequence as a scalar predecessor field. That is the most
 common modeling error and it is explicitly not supported.
 
+## Model the rule, don't precompute it
+
+The most damaging shortcut is to decide legality in Rust ahead of the solver.
+Do not build per-entity feasibility or cost matrices (`task.feasible:
+Vec<bool>`, per-slot `allowed: Vec<bool>`, minute-offset tables) and then score
+a penalty against that flag. It compiles, it scores, and it hides the rule from
+score analysis while letting the solver return plans the matrix was supposed to
+forbid.
+
+- State each rule once, over the domain objects, inside a constraint
+  (`constraint-patterns.md`). The constraint reads the entity's assigned value
+  and the fact that owns the relevant data.
+- Keep derived data on the object that owns it as **input** (a fact's
+  availability calendar, a slot's start/end), not as a per-entity verdict.
+- Never add a greedy initializer, construction heuristic, or post-solve
+  sanitizer in application code. Candidates are restricted through the
+  variable's candidate/value-range metadata; search policy lives in
+  `solver.toml`.
+- Explain results with `analyze()` / `evaluate_detailed`, not with a second copy
+  of the rule written as reporting predicates.
+
+## Modeling time and windows
+
+- **Duration belongs to the entity; the window belongs to a fact.** If a task
+  has a duration and a timeslot has a start/end, add a hard constraint that the
+  duration fits the window, or size the slot facts to the entity. Do not
+  precompute "end minute" offsets onto the entity.
+- **"Now" is a horizon boundary, not a penalty.** If the plan must not be
+  scheduled in the past, build the slot/visit facts so periods before `now` are
+  never generated. A past slot left in the candidate range will be chosen unless
+  a constraint catches it, and a hard penalty can lose to a local optimum.
+- **Existing busy intervals are facts, not entities.** Model a pre-existing
+  booking/absence as fact data that a conflict constraint joins against, so
+  overlap is computed from the same stream logic as new assignments.
+- **Overlaps use project-then-self-join**, not dense-slot equality. See the
+  recipe and worked `uc-lessons` links in `constraint-patterns.md`.
+- **Unassigned is a separate concern.** Use a hard `.unassigned()` when
+  assignment is mandatory, or a medium penalty when "schedule as much as
+  possible" is a preference. Do not duplicate the assignment penalty inside
+  overlap/conflict rules.
+
 ## Score type and hardness
 
 - Default `HardSoftScore`: hard = validity, soft = quality. Almost always this.
@@ -130,6 +171,12 @@ Hard:       room_no_overlap — no two meetings share a room and slot
 Soft:       prefer_morning — reward early slots
 Output:     web
 ```
+
+This dense countable-range form is fine only when every slot is legal and
+interchangeable. When slots have real times, per-teacher/room availability, or a
+"now" horizon, model slots as **facts** that own `day`/`start`/`end` and let the
+hard constraints read them, generating only legal periods. See the
+`uc-lessons`-derived time/window/overlap recipe in `constraint-patterns.md`.
 
 ## Constraint inventory checklist
 

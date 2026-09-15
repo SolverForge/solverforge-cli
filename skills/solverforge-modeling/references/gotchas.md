@@ -47,6 +47,26 @@ that is not on any hot path may even let a solve complete with a wrong score.
 Replace every placeholder and verify a real solve through web/API or a solve
 entry point/integration test you add.
 
+## Hard constraints are penalties, not filters
+
+A hard constraint **penalizes** an invalid candidate; it does not remove it from
+search. A solve can terminate with a nonzero hard score and return a plan that
+violates a rule if construction started invalid and local search could not
+repair it. Do not add a post-solve sanitizer or a re-checked guard. Keep invalid
+values out of the variable's candidate/value range, or set
+`require_hard_improvement = true` on the grouped/repair selector (the CLI writes
+this for `generate scalar-group` and conflict repair). See
+`constraint-patterns.md`.
+
+## Model the rule, don't precompute it
+
+Do not encode a domain rule as a per-entity feasibility/cost matrix scored by a
+penalty, and do not add greedy initializers or construction heuristics in app
+code. State the rule over domain objects in a constraint; restrict candidates
+through value-range/candidate metadata; put search policy in `solver.toml`.
+Explain results with `analyze()`/`evaluate_detailed`, not a duplicated predicate.
+See `problem-modeling.md`.
+
 ## The localizing-source trap
 
 The single most common runtime failure. Hand-written

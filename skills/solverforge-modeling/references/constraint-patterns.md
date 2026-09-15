@@ -47,6 +47,38 @@ The model contract requires `constraint module '<id>'` to declare
 `.named("<id>")`. If you rename a constraint, rename both the file and the
 `.named` string, or `solverforge check` fails. Keep the CLI-assigned name.
 
+## Hard constraints are penalties, not filters
+
+A hard constraint **penalizes** an invalid candidate; it does not remove that
+candidate from search. Construction can start from a hard-violating plan, and
+local search is allowed to return one if it cannot improve the hard score. A
+converged solve with a nonzero hard score means invalid candidates are
+reachable — it does not mean the constraint is wrong.
+
+Do not "fix" a returned plan with a post-solve sanitizer or by re-checking rules
+in app code. Use one of:
+
+1. **Keep invalid values out of the model's value range.** Restrict what the
+   variable can take so a violating assignment is never generated. On a
+   scaffolded project, use the scalar/list candidate metadata
+   (`--candidate-values`, list metadata) or `generate scalar-group`; on an
+   existing model, use a `value_range_provider`/candidate provider. A provider
+   may compute availability, but the rule itself must still be stated as a
+   constraint over domain objects (for example, availability on a fact read by a
+   join), not as a precomputed penalty matrix.
+2. **Gate grouped/repair moves on hard improvement.** For scalar groups and
+   conflict repair, `require_hard_improvement = true` makes each emitted
+   compound move carry a hard-improvement gate. The CLI writes this into the
+   `grouped_scalar_move_selector` and compound conflict-repair phases it
+   generates; set it manually for hand-written `solver.toml`.
+3. **Model "must be assigned" explicitly.** Use `.unassigned()` (hard) when
+   assignment is mandatory, or a separate medium constraint when it is a
+   preference. Do not duplicate the assignment penalty inside overlap rules.
+
+Never encode the rule as a per-entity `Vec<bool>`/`Vec<i32>` matrix scored by a
+constraint: it hides the rule from score analysis and is the classic way an
+invalid plan is returned with a clean-looking constraint module.
+
 ## Weight vocabulary
 
 ```rust
@@ -237,6 +269,87 @@ Each generated file compiles but every collector closure is a `panic!`
 placeholder. Implement each closure with real indexing logic and use
 `Plan::<collection>()` for all sources. Verify with a real solve: collector
 semantics (ordering, index ranges, empty groups) are easy to get subtly wrong.
+
+## Time, windows, and overlaps
+
+Derived from
+[`uc-lessons`](https://github.com/SolverForge/solverforge-usecases/tree/main/uc-lessons),
+the canonical reference for slot/window scheduling. Read that app before
+inventing time arithmetic; the worked pieces are
+[`src/domain/timeslot.rs`](https://github.com/SolverForge/solverforge-usecases/blob/main/uc-lessons/src/domain/timeslot.rs),
+[`src/constraints/teacher_availability.rs`](https://github.com/SolverForge/solverforge-usecases/blob/main/uc-lessons/src/constraints/teacher_availability.rs),
+[`src/constraints/no_teacher_conflict.rs`](https://github.com/SolverForge/solverforge-usecases/blob/main/uc-lessons/src/constraints/no_teacher_conflict.rs),
+and
+[`src/data/data_seed/timeslots.rs`](https://github.com/SolverForge/solverforge-usecases/blob/main/uc-lessons/src/data/data_seed/timeslots.rs).
+
+- **Facts own the time data.** A `Timeslot`/`Slot` fact holds `day`, `start`,
+  `end`, and a dense `index` join key. The entity's `#[planning_variable]` stores
+  the slot index. Never store precomputed per-slot durations, minute offsets, or
+  "allowed" booleans on the entity.
+- **Generate only legal periods.** Build the slot fact list so it already fits
+  the window: skip lunch breaks, stop at the day end, and — when the plan must
+  not be scheduled in the past — start the horizon at "now". An illegal period
+  that is never a candidate cannot be chosen. A past slot left in range will be
+  chosen unless a constraint penalizes it, and a penalty can lose to a local
+  optimum.
+- **Fit duration to the window.** Either make slots the size the entity needs, or
+  add a hard join constraint that penalizes an assignment whose duration does
+  not fit the slot (`slot.end - slot.start < entity.duration`). State it, do not
+  precompute it.
+- **Availability lives on the fact that owns it**, as data indexed by slot
+  (`Teacher.availability: Vec<bool>`, `Group.availability: Vec<bool>`). The rule
+  is a join + filter, not a per-entity matrix:
+
+  ```rust
+  ConstraintFactory::<Plan, HardMediumSoftScore>::new()
+      .for_each(Plan::lessons())
+      .join((
+          ConstraintFactory::<Plan, HardMediumSoftScore>::new().for_each(Plan::teachers()),
+          equal_bi(|lesson: &Lesson| lesson.teacher_idx,
+                   |teacher: &Teacher| Some(teacher.index)),
+      ))
+      .filter(|lesson: &Lesson, teacher: &Teacher| {
+          lesson.timeslot_idx.is_some_and(|slot| {
+              !teacher.availability.get(slot).copied().unwrap_or(false)
+          })
+      })
+      .penalize(hard_weight(|_: &Lesson, _: &Teacher| HardMediumSoftScore::of_hard(1)))
+      .named("Teacher Availability")
+  ```
+
+- **Overlaps: project, then self-join.** Join the entity to its slot fact, project
+  only the fields needed to detect a collision, then self-join on the shared
+  resource (teacher, room, group) and filter on real interval overlap. This
+  handles slots and free intervals alike and scores each pair once:
+
+  ```rust
+  .join((slot_stream, equal_bi(|l: &Lesson| l.timeslot_idx,
+                               |t: &Timeslot| Some(t.index))))
+  .project(|lesson: &Lesson, slot: &Timeslot| AssignedSlot {
+      lesson_index: lesson.index,
+      teacher_idx: lesson.teacher_idx.unwrap_or(usize::MAX),
+      day: slot.day_of_week, start: slot.start_time, end: slot.end_time,
+  })
+  .join(equal(|row: &AssignedSlot| row.teacher_idx))
+  .filter(|a: &AssignedSlot, b: &AssignedSlot| {
+      a.lesson_index < b.lesson_index
+          && a.day == b.day
+          && a.start < b.end
+          && b.start < a.end
+  })
+  .penalize(hard_weight(|_: &AssignedSlot, _: &AssignedSlot| HardMediumSoftScore::of_hard(1)))
+  .named("No Teacher Conflict")
+  ```
+
+  `a.lesson_index < b.lesson_index` visits each unordered pair once, and strict
+  `<`/`>` treats a lesson ending at 10:00 as compatible with one starting at
+  10:00.
+
+- **Unassigned is its own constraint.** In `uc-lessons`, "every lesson gets a
+  timeslot" is a **medium** constraint (a preference to schedule as much as
+  possible), while availability and conflicts are hard. Use hard `.unassigned()`
+  only when assignment is mandatory. Do not fold the assignment penalty into the
+  conflict rules.
 
 ## Score-type caveats
 

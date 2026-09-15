@@ -1,6 +1,8 @@
 # Verification
 
-Three independent gates. Pass all three before calling a model done.
+Four gates. Pass all of them before calling a model done. Gate 4 is the fastest
+and the one that catches a mis-modeled rule; the others catch wiring,
+compilation, and real runtime failures.
 
 ## 1. `solverforge check` — structural
 
@@ -99,6 +101,73 @@ generated solve command or job lifecycle. This proves serialization only. To
 claim behavioral completion, add and test a solve subcommand backed by
 `src/solver/service.rs`, or add a library integration test that drives the
 service to a terminal score.
+
+## 4. Per-constraint unit tests — the fast loop
+
+`check`, `cargo check`, and a full solve are all slow. Add one unit test per
+constraint so a wrong rule fails in milliseconds, before any solve. This is the
+only gate that catches "the rule was modeled as a precomputed flag": flip the
+domain input and assert the exact score delta.
+
+The idiom (from
+[`uc-lessons`](https://github.com/SolverForge/solverforge-usecases/blob/main/uc-lessons/src/constraints/teacher_availability.rs)):
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solverforge::ConstraintSet;
+
+    fn score_for(available: bool, assigned: bool) -> HardMediumSoftScore {
+        let teachers = vec![Teacher::new(0, "A", vec![available])];
+        let timeslots = vec![Timeslot::new(0, Weekday::Mon, time(8), time(9))];
+        let mut lessons = vec![Lesson::new(0, "Math".to_string(), 0, None, 60)];
+        if assigned {
+            lessons[0].timeslot_idx = Some(0);
+        }
+        let plan = Plan::new(timeslots, teachers, vec![], lessons, vec![]);
+        (constraint(),).evaluate_all(&plan)   // ONLY this constraint
+    }
+
+    #[test]
+    fn penalizes_assigned_unavailable_teacher() {
+        assert_eq!(score_for(false, true), HardMediumSoftScore::of_hard(-1));
+    }
+
+    #[test]
+    fn ignores_available_or_unassigned() {
+        assert_eq!(score_for(true, true), HardMediumSoftScore::ZERO);
+        assert_eq!(score_for(false, false), HardMediumSoftScore::ZERO);
+    }
+}
+```
+
+- `(constraint(),).evaluate_all(&plan)` isolates one rule; use
+  `create_constraints().evaluate_all(&plan)` for whole-model interaction tests.
+- Assert the **exact** level: `HardMediumSoftScore::of_hard(-1)` /
+  `of_medium(1)` / `of_soft(1)`, or `.hard()` / `.medium()` / `.soft()` on the
+  result.
+- Cover three cases per rule: the violation, the legal case (delta 0), and the
+  unassigned/out-of-scope case (delta 0).
+- Use `evaluate_detailed(&plan)` to find a named analysis and inspect
+  `analysis.matches` / `analysis.score` (see `uc-hospital/tests/constraints.rs`).
+  It is also how you prove a self-join scores each pair exactly once.
+
+Embedded/hand-written models have no other fast gate: `cargo test` with these
+tests is the primary verification loop (`existing-model.md`).
+
+## Explaining a plan
+
+After a solve, derive explanations from framework analysis, not from predicates
+you rewrite by hand:
+
+- `solution.analyze()` returns a `ScoreAnalysis` for the retained solution.
+- `SolverManager::analyze_snapshot(...)` analyzes a retained snapshot; the
+  web/API surface exposes it at `GET /jobs/{id}/analysis` (and
+  `GET /jobs/{id}/snapshot` for the snapshot itself).
+- `evaluate_detailed` gives per-constraint `matches`, so an "unscheduled item
+  because…" explanation comes from the same code the solver scored, not a
+  parallel copy that can drift.
 
 ## What "done" means
 
