@@ -1,6 +1,6 @@
 ---
 name: solverforge-modeling
-description: Model a planning or optimization problem end-to-end with the `solverforge` CLI and produce a runnable SolverForge app. Use when a user describes a scheduling, assignment, routing, rostering, sequencing, packing, loading, knapsack, or resource-allocation problem and wants it turned into working code, or when they want to scaffold, extend, or fix a SolverForge project (facts, entities, scalar/list planning variables, constraints, score type, demo data, output shell). Covers the CLI scaffold workflow, output-shell choice (web / API / CLI), constraint authoring against the SolverForge stream API, and behavioral verification on shells that expose solving. Do not use for editing solverforge-cli itself.
+description: Model a planning or optimization problem end-to-end with the `solverforge` CLI and produce a runnable SolverForge app. Use when a user describes a scheduling, assignment, routing, rostering, sequencing, packing, loading, knapsack, or resource-allocation problem and wants it turned into working code, or when they want to scaffold, extend, or fix a SolverForge project (facts, entities, scalar/list planning variables, constraints, score type, demo data, output shell). Covers the CLI scaffold workflow, output-shell choice (web / API / MCP / CLI), constraint authoring against the SolverForge stream API, and behavioral verification on shells that expose solving. Do not use for editing solverforge-cli itself.
 ---
 
 # Modeling planning problems with solverforge-cli
