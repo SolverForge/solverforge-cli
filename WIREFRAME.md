@@ -7,12 +7,13 @@
 - `solverforge new <name>`
 
 The generated project is a neutral shell. The default shell is `web`; users can
-choose `--shell api` for an HTTP API without frontend assets or `--shell cli`
-for a Clap command-line app without Axum. Users add facts, entities, variables,
+choose `--shell api` for an HTTP API without frontend assets, `--shell cli` for
+a Clap command-line app without Axum, or `--shell mcp` for an MCP server that
+any MCP-capable agent harness can drive. Users add facts, entities, variables,
 solution/score metadata, constraints, solver config, and generated data after
 scaffolding. Shell choice is a delivery surface, not a model family. The
-current shell set is exactly `web`, `api`, and `cli`; Tauri is deferred and has
-no public scaffold selector in this release line.
+current shell set is exactly `web`, `api`, `cli`, and `mcp`; Tauri is deferred
+and has no public scaffold selector in this release line.
 
 Current CLI package version: `2.2.4`.
 
@@ -23,6 +24,7 @@ Current generated projects target:
 - `solverforge 0.19.4`
 - `solverforge-ui 0.7.0` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
+- `rmcp 3.3.0` for the MCP shell
 
 The CLI version is separate from those targets and must remain visible in
 version output and generated README content.
@@ -116,6 +118,27 @@ surface, but omits Axum routes, SSE route files, frontend assets,
 `solverforge-ui`, and `solverforge-maps`. Its binary is a Clap command-line
 entry point.
 
+The MCP shell keeps the domain, constraints, solver, data, and shared DTO
+surface, but omits REST route files, SSE files, frontend assets,
+`solverforge-ui`, and `solverforge-maps`. It adds `src/mcp/`, an MCP server
+built on `rmcp 3.3.0` that projects the retained solver job lifecycle onto
+twelve annotated tools with typed schemas. `solve` returns an MCP task handle
+to task-capable clients (MCP 2026-07-28) and an immediate job summary to other
+clients. stdio is the default transport; `--http` serves stateless Streamable
+HTTP at `/mcp` on the loopback interface unless `--host` overrides it. One
+solver service and one task store are shared across every stateless HTTP
+negotiation. The MCP shell keeps the runtime `console` feature off because the
+runtime banner writes to stdout, which is the stdio MCP transport channel;
+diagnostics go to stderr. Every shell declares `schemars` as an optional
+dependency behind a `schema` feature, and only the MCP shell enables it.
+
+`solverforge connect` prints MCP client configuration derived from the project
+(app name, resolved binary profile, and server port) and writes only in-project
+configuration: `--write vscode` merges the project entry into
+`.vscode/mcp.json` while preserving other servers and refusing to rewrite a
+file that is not valid JSON. Global client configuration files are printed with
+their exact path rather than modified.
+
 `templates/scalar/generic` is the embedded template used by `solverforge new`.
 `templates/list/generic` is not a public scaffold selector.
 
@@ -163,8 +186,8 @@ projections. It tracks:
 - scalar groups and conflict repairs by exact ID
 
 For the web shell, `static/generated/ui-model.json` is derived from the app
-spec and current domain parsing. API and CLI shells do not create frontend
-projection files. Unknown variable kinds are errors, not aliases.
+spec and current domain parsing. API, CLI, and MCP shells do not create
+frontend projection files. Unknown variable kinds are errors, not aliases.
 
 ## Frontend Rule
 
@@ -275,6 +298,11 @@ Current scenario policy:
   analysis, checkpointed pause/resume, cancel, terminal-only delete, and
   reconnect bootstrap, including full aggregate telemetry, bounded candidate
   detail, and qualified trace provenance
+- MCP app: modeled mixed scalar-plus-list app driven through the official
+  `rmcp` client over stdio and stateless Streamable HTTP, covering the
+  annotated tool surface, task-backed solve to a terminal snapshot with scalar
+  assignment and complete list placement, the retained lifecycle through a
+  legacy client, and byte-level stdio stdout purity during a solve
 
 SolverForge `0.19.4` uses list variables for ordered sequences and routes. Both
 generated-app end-to-end suites start and observe the real mixed scalar/list
@@ -286,6 +314,7 @@ Do not reintroduce:
 
 - public scaffold-family flags
 - public Tauri shell selection before a real Tauri scaffold exists
+- MCP or other shell aliases beyond the canonical `web`, `api`, `cli`, and `mcp` selectors
 - hidden `standard` variable-kind aliases
 - scalar predecessor topology; ordered sequences belong to list variables
 - hidden console/scaffold aliases

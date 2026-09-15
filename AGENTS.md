@@ -9,10 +9,12 @@
 Current scaffold policy:
 - current CLI package version is `2.2.4`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
-- generated projects currently target `solverforge 0.19.4`; the default web shell additionally targets `solverforge-ui 0.7.0` and `solverforge-maps 2.1.4`
+- generated projects currently target `solverforge 0.19.4`; the default web shell additionally targets `solverforge-ui 0.7.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.3.0`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
-- `--shell web|api|cli` is the current public shell selector; `web` is the default, `api` omits frontend assets, and `cli` omits Axum/SSE routes and frontend assets
+- `--shell web|api|cli|mcp` is the current public shell selector; `web` is the default, `api` omits frontend assets, `cli` omits Axum/SSE routes and frontend assets, and `mcp` delivers the solver as an MCP server over stdio and stateless Streamable HTTP
 - API/CLI app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
+- the MCP shell keeps the shared core (`domain/`, `constraints/`, `solver/`, `data/`, DTOs) and adds `src/mcp/`; `solve` is task-backed for task-capable clients, stdio is the default transport, and the runtime `console` feature stays off so the banner never corrupts the stdio channel
+- `solverforge connect` prints MCP client configuration and writes only in-project config (`--write vscode` merges `.vscode/mcp.json` instead of clobbering it)
 - Tauri scaffolding is deferred; do not document or implement a public Tauri shell unless that work is explicitly reopened
 - users shape the app afterward through facts, entities, solution/score metadata, variables, constraints, and generated data
 - generated docs and CLI version output must distinguish CLI version from scaffold runtime/UI target
@@ -30,6 +32,7 @@ When changing templates or scaffold behavior, follow the current repo reality ov
 - `cargo run -- --help`: run the CLI locally and inspect commands.
 - `cargo test`: run Rust unit tests, scaffold contract tests, and generated-app runtime pipeline tests.
 - `cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1`: run the phase-marked runtime pipeline suite directly.
+- `cargo test --test runtime_mcp_pipeline_test -- --nocapture --test-threads=1`: run the MCP-shell runtime pipeline suite directly.
 - `make test-runtime`: run only the generated-app runtime pipeline tests.
 - `make install-e2e`: install Playwright Chromium locally.
 - `make test-e2e`: run Playwright browser tests against ephemeral generated apps.
@@ -48,6 +51,7 @@ Prefer a small number of readable, high-signal end-to-end phases over a large nu
 
 - `tests/scaffold_test.rs`: scaffold contract and generated `cargo check`
 - `tests/runtime_pipeline_test.rs`: phase-marked generated-app runtime pipelines
+- `tests/runtime_mcp_pipeline_test.rs`: phase-marked MCP-shell pipelines driven by the real `rmcp` client
 - `tests/e2e/*.spec.js`: Playwright browser pipelines against ephemeral generated apps
 
 Both runtime and browser suites must:
@@ -65,13 +69,14 @@ Current end-to-end scenario policy:
   scenarios, with required scalar assignment and complete list placement
 - the scalar-only scenario covers the full pause/resume/cancel/delete lifecycle
 - the scalar-only runtime scenario covers full compact telemetry, bounded candidate detail, and qualified trace provenance
+- the MCP scenario models a mixed scalar-plus-list problem, generates the sample data, and drives both stdio and stateless Streamable HTTP through the real `rmcp` client: annotated tool surface, task-backed solve to a terminal snapshot with scalar assignment and complete list placement, retained lifecycle via a legacy client, and byte-level stdio stdout purity during a solve
 
 SolverForge `0.19.4` uses list variables as the sequence and route model. The
 generated-app runtime and browser scenarios must continue to start and observe
 a real mixed scalar/list solve.
 
 For scaffold changes, prefer assertions that check the generated contract directly:
-- dependency wiring for the selected shell: `solverforge` everywhere, `solverforge-ui` and `solverforge-maps` only for web-shell projects
+- dependency wiring for the selected shell: `solverforge` everywhere, `solverforge-ui` and `solverforge-maps` only for web-shell projects, `rmcp` only for the mcp shell, and the optional `schemars`/`schema` feature enabled only for the mcp shell
 - CLI version vs runtime target messaging
 - generated README version/runtime source disclosure
 - typed solver SSE payload shape and typed frontend hooks
@@ -119,6 +124,7 @@ Do not reintroduce:
 - `standard` as a planning variable kind
 - scalar predecessor topology; ordered sequences belong to list variables
 - hidden scaffold/template aliases
+- shell selectors beyond the canonical `web`, `api`, `cli`, and `mcp`
 - Tauri or other shell aliases before a real scaffold implementation exists
 - fallback migration code for legacy generated files
 
