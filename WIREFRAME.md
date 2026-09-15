@@ -15,7 +15,7 @@ scaffolding. Shell choice is a delivery surface, not a model family. The
 current shell set is exactly `web`, `api`, `cli`, and `mcp`; Tauri is deferred
 and has no public scaffold selector in this release line.
 
-Current CLI package version: `2.2.4`.
+Current CLI package version: `3.0.0`.
 
 Required Rust version: `1.95` or later.
 

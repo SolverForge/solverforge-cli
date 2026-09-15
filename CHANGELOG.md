@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.0.0](https://github.com/SolverForge/solverforge-cli/compare/v2.2.4...v3.0.0) (2026-09-15)
+
+
+### Features
+
+* add solverforge connect for MCP client setup e17a708
+* add the --shell mcp scaffold b6e3e7f
+* disclose the rmcp scaffold target in version output 779368e
+* expose schema-optional DTOs for MCP tool contracts 6ae5ea4
+* **skills:** add solverforge-modeling agent skill 48c923e
+* **skills:** document the MCP output shell 5723023
+
+
+### Bug Fixes
+
+* **connect:** resolve Windows MCP executables 732681f
+* **mcp:** preserve task and HTTP lifecycle integrity 9f251e5
+
 ## [2.2.4](///compare/v2.2.3...v2.2.4) (2026-08-14)
 
 ## [2.2.3](///compare/v2.2.2...v2.2.3) (2026-07-14)
