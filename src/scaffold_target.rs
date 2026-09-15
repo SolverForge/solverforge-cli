@@ -1,17 +1,17 @@
 pub const RUNTIME_CRATE_VERSION: &str = "0.19.4";
-pub const UI_CRATE_VERSION: &str = "0.7.0";
+pub const UI_CRATE_VERSION: &str = "0.9.0";
 pub const MAPS_CRATE_VERSION: &str = "2.1.4";
-pub const MCP_CRATE_VERSION: &str = "3.3.0";
+pub const MCP_CRATE_VERSION: &str = "3.4.0";
 
 pub const RUNTIME_TARGET_LABEL: &str = "solverforge 0.19.4";
-pub const UI_TARGET_LABEL: &str = "solverforge-ui 0.7.0";
+pub const UI_TARGET_LABEL: &str = "solverforge-ui 0.9.0";
 pub const MAPS_TARGET_LABEL: &str = "solverforge-maps 2.1.4";
 pub const RUNTIME_TARGET_DISPLAY: &str = "SolverForge crate target 0.19.4";
 pub const RUNTIME_SOURCE_PATH: &str = "crates.io: solverforge 0.19.4";
-pub const UI_SOURCE_PATH: &str = "crates.io: solverforge-ui 0.7.0";
+pub const UI_SOURCE_PATH: &str = "crates.io: solverforge-ui 0.9.0";
 pub const MAPS_SOURCE_PATH: &str = "crates.io: solverforge-maps 2.1.4";
-pub const MCP_SOURCE_PATH: &str = "crates.io: rmcp 3.3.0";
-pub const MCP_TARGET_LABEL: &str = "rmcp 3.3.0";
+pub const MCP_SOURCE_PATH: &str = "crates.io: rmcp 3.4.0";
+pub const MCP_TARGET_LABEL: &str = "rmcp 3.4.0";
 
 pub const LONG_VERSION_TEXT: &str = concat!(
     "solverforge-cli ",
@@ -19,15 +19,15 @@ pub const LONG_VERSION_TEXT: &str = concat!(
     "\nCLI version: ",
     env!("CARGO_PKG_VERSION"),
     "\nScaffold runtime target: SolverForge crate target 0.19.4",
-    "\nScaffold UI target: solverforge-ui 0.7.0",
+    "\nScaffold UI target: solverforge-ui 0.9.0",
     "\nScaffold maps target: solverforge-maps 2.1.4",
-    "\nScaffold MCP target: rmcp 3.3.0",
+    "\nScaffold MCP target: rmcp 3.4.0",
     "\nRuntime source: ",
     "crates.io: solverforge 0.19.4",
     "\nUI source: ",
-    "crates.io: solverforge-ui 0.7.0",
+    "crates.io: solverforge-ui 0.9.0",
     "\nMaps source: ",
     "crates.io: solverforge-maps 2.1.4",
     "\nMCP source: ",
-    "crates.io: rmcp 3.3.0",
+    "crates.io: rmcp 3.4.0",
 );
