@@ -22,6 +22,9 @@ const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.4";
 const SOLVERFORGE_DEP_SPEC: &str =
     r#"{ version = "0.19.4", features = ["serde", "console", "verbose-logging"] }"#;
 const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.7.0" }"#;
+const SOLVERFORGE_MCP_DEP_SPEC: &str =
+    r#"{ version = "0.19.4", features = ["serde", "verbose-logging"] }"#;
+const RMCP_DEP_SPEC: &str = r#"{ version = "3.3.0", features = ["server", "macros", "transport-io", "transport-streamable-http-server", "transport-streamable-http-server-session"] }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.4" }"#;
 const GENERATED_RUST_VERSION_SPEC: &str = r#"rust-version = "1.95""#;
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -890,6 +893,203 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         "generated cli shell should print demo data JSON\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_mcp_shell_project";
+
+    let status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--shell",
+            "mcp",
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(status.success(), "mcp shell scaffold failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    let app_spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
+    let main_rs = std::fs::read_to_string(project_dir.join("src/main.rs")).unwrap();
+    let api_mod = std::fs::read_to_string(project_dir.join("src/api/mod.rs")).unwrap();
+    let mcp_server = std::fs::read_to_string(project_dir.join("src/mcp/server.rs")).unwrap();
+    let mcp_tasks = std::fs::read_to_string(project_dir.join("src/mcp/tasks.rs")).unwrap();
+
+    assert!(
+        app_spec.contains("shell = \"mcp\"")
+            && app_spec.contains("target = \"solverforge 0.19.4\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.19.4\"")
+            && !app_spec.contains("ui_source"),
+        "mcp shell should be recorded in solverforge.app.toml: {app_spec}"
+    );
+    assert!(
+        !project_dir.join("static").exists()
+            && !project_dir.join("src/api/routes.rs").exists()
+            && !project_dir.join("src/api/sse.rs").exists()
+            && project_dir.join("src/api/dto.rs").exists()
+            && project_dir.join("src/mcp/mod.rs").exists()
+            && project_dir.join("src/mcp/server.rs").exists()
+            && project_dir.join("src/mcp/tasks.rs").exists(),
+        "mcp shell should keep shared DTOs plus the MCP module and exclude HTTP/frontend assets"
+    );
+    assert!(
+        cargo_toml.contains(&format!("solverforge = {SOLVERFORGE_MCP_DEP_SPEC}"))
+            && cargo_toml.contains(&format!("rmcp = {RMCP_DEP_SPEC}"))
+            && cargo_toml.contains("axum = \"0.8.9\"")
+            && cargo_toml.contains("schemars = { version = \"1.0\", optional = true }")
+            && cargo_toml.contains("default = [\"schema\"]")
+            && !cargo_toml.contains("solverforge-ui")
+            && !cargo_toml.contains("solverforge-maps")
+            && !cargo_toml.contains("\"console\""),
+        "mcp shell Cargo.toml should wire rmcp and the schema feature without the console feature: {cargo_toml}"
+    );
+    assert!(
+        main_rs.contains("rmcp::transport::stdio()")
+            && main_rs.contains("--http")
+            && main_rs.contains("streamable_http_server")
+            && main_rs.contains("TaskManager")
+            && main_rs.contains("with_writer(std::io::stderr)")
+            && !main_rs.contains("solverforge::console::init")
+            && !main_rs.contains("solverforge_ui::routes")
+            && !main_rs.contains("ServeDir"),
+        "mcp shell main.rs should default to stdio, offer --http, and keep diagnostics on stderr: {main_rs}"
+    );
+    assert!(
+        api_mod.contains("pub mod dto;")
+            && api_mod.contains("pub mod telemetry;")
+            && api_mod.contains("PlanDto")
+            && mcp_server.contains(".enable_tasks()")
+            && mcp_server.contains("CallToolResponse::Task")
+            && mcp_server.contains("supports_tasks()")
+            && mcp_tasks.contains("TaskExit::Cancelled"),
+        "mcp shell should expose typed tools with task-backed solve"
+    );
+
+    let routes_error = assert_cli_failure(&project_dir, &["routes"], "routes in mcp shell");
+    assert!(
+        routes_error.contains("not available for MCP-shell projects"),
+        "routes should explain why MCP-shell projects have no Axum routes: {routes_error}"
+    );
+
+    let connect_output = cli_command()
+        .args(["connect", "--port", "7901"])
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run solverforge connect");
+    assert!(
+        connect_output.status.success(),
+        "connect in mcp shell failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&connect_output.stdout),
+        String::from_utf8_lossy(&connect_output.stderr)
+    );
+    let connect_stdout = String::from_utf8_lossy(&connect_output.stdout);
+    assert!(
+        connect_stdout.contains("claude mcp add")
+            && connect_stdout.contains("test_mcp_shell_project")
+            && connect_stdout.contains("http://127.0.0.1:7901/mcp")
+            && connect_stdout
+                .contains("test_mcp_shell_project/target/release/test_mcp_shell_project"),
+        "connect should print the stdio command and the resolved HTTP URL: {connect_stdout}"
+    );
+
+    assert_cli_success(
+        &project_dir,
+        &["connect", "--write", "vscode"],
+        "connect --write vscode in mcp shell",
+    );
+    let vscode_config =
+        std::fs::read_to_string(project_dir.join(".vscode/mcp.json")).expect("mcp.json written");
+    assert!(
+        vscode_config.contains("\"servers\"")
+            && vscode_config.contains("test_mcp_shell_project")
+            && vscode_config
+                .contains("test_mcp_shell_project/target/release/test_mcp_shell_project"),
+        "connect --write vscode should record the project server: {vscode_config}"
+    );
+
+    assert_cli_success(
+        &project_dir,
+        &["generate", "entity", "task", "--field", "label:String"],
+        "generate entity in mcp shell",
+    );
+    assert!(
+        !project_dir.join("static").exists()
+            && !project_dir.join("src/api/routes.rs").exists()
+            && project_dir.join("src/mcp/server.rs").exists(),
+        "mcp-shell domain generation should not recreate HTTP or frontend assets"
+    );
+    let app_spec_after_generate =
+        std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    assert!(
+        app_spec_after_generate.contains("shell = \"mcp\"")
+            && app_spec_after_generate.contains("target = \"solverforge 0.19.4\"")
+            && app_spec_after_generate
+                .contains("runtime_source = \"crates.io: solverforge 0.19.4\"")
+            && !app_spec_after_generate.contains("ui_source"),
+        "mcp shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
+    );
+
+    let output = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run generated mcp shell cargo check");
+    assert!(
+        output.status.success(),
+        "generated mcp shell cargo check failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn test_new_mcp_shell_readme_discloses_rmcp_target() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_mcp_readme_project";
+
+    let status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--shell",
+            "mcp",
+            "--skip-git",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(status.success(), "mcp shell scaffold failed");
+
+    let project_dir = tmp.path().join(project_name);
+    let readme = std::fs::read_to_string(project_dir.join("README.md")).unwrap();
+    let app_spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+
+    assert!(
+        readme.contains("SolverForge runtime target for this scaffold")
+            && readme.contains("MCP server target for this scaffold: `rmcp 3.3.0`")
+            && readme.contains("crates.io: rmcp 3.3.0")
+            && readme.contains("Scaffold shell: `mcp`")
+            && readme.contains("--http")
+            && !readme.contains("solverforge-ui"),
+        "mcp README should disclose the runtime and rmcp targets without UI claims: {readme}"
+    );
+    assert!(
+        app_spec.contains("cli_version = \""),
+        "app spec should keep the CLI version distinct from the scaffold targets: {app_spec}"
     );
 }
 
