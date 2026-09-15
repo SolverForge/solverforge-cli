@@ -1,0 +1,296 @@
+---
+name: solverforge-modeling
+description: Model a planning or optimization problem end-to-end with the `solverforge` CLI and produce a runnable SolverForge app. Use when a user describes a scheduling, assignment, routing, rostering, sequencing, packing, loading, knapsack, or resource-allocation problem and wants it turned into working code, or when they want to scaffold, extend, or fix a SolverForge project (facts, entities, scalar/list planning variables, constraints, score type, demo data, output shell). Covers the CLI scaffold workflow, output-shell choice (web / API / CLI), constraint authoring against the SolverForge stream API, and behavioral verification on shells that expose solving. Do not use for editing solverforge-cli itself.
+---
+
+# Modeling planning problems with solverforge-cli
+
+`solverforge` scaffolds a neutral app shell, then grows it into a model through
+managed commands. Your job: turn a user's problem statement into a **compiling,
+solvable** SolverForge app, not a skeleton. For web/API, a model is finished only
+after a real solve has completed without panicking and produced a score. The
+generated CLI shell exposes demo-data only; add and test a solve command or state
+that behavioral solve verification remains unavailable.
+
+Read this file, then open the reference that matches the step you are on. Keep
+`references/constraint-patterns.md` open while writing constraints: it contains
+verified implementations for the common unary/reward/pair/join patterns and the
+required source/collector rules for the grouped patterns.
+
+## Prerequisites
+
+- `solverforge` on `PATH` (`cargo install solverforge-cli`).
+- Rust `1.95+`.
+- Confirm the live contract before relying on version numbers:
+  `solverforge --version`, `solverforge new --help`,
+  `solverforge generate variable --help`.
+
+This skill describes CLI `2.2.4` (scaffold runtime target `solverforge 0.19.4`,
+UI `solverforge-ui 0.7.0`, maps `solverforge-maps 2.1.4`). Re-derive specifics
+from the CLI if the version differs.
+
+## Step 0 — Intake: ask the user before you build
+
+Do not guess the model. Ask the user, in one message, for:
+
+1. **The problem, in their words.** One paragraph is enough: what is being
+   decided, what makes a plan good, and what makes a plan invalid. Restate it
+   back as `facts / entities / variables / constraints` before scaffolding.
+2. **The output shell** — the "type of output" they want:
+   - `web` — end-to-end: JSON/SSE API **plus** the browser UI (default).
+   - `api` — headless HTTP API only, no frontend assets.
+   - `cli` — a terminal command-line scaffold, no Axum server or frontend. The
+     generated command exposes demo data, not solving, unless you extend it.
+   - MCP — **not available in this release line.** `--shell mcp` is rejected
+     (`possible values: web, api, cli`). It is upcoming on a separate branch.
+     Do not promise it; offer `api` as the current machine-facing option.
+3. **The constraints**, split into:
+   - **Hard** constraints (must hold for a valid plan), and
+   - **Soft** constraints (should be optimized).
+   Ask explicitly; users usually name only a subset. For each, ask what
+   triggers a violation and what data it reads.
+4. **Score type** — default `HardSoftScore`. Only change it if the user needs a
+   medium level (`HardMediumSoftScore`), decimals (`HardSoftDecimalScore`),
+   soft-only (`SoftScore`), or a custom shape (`BendableScore<N, M>`).
+
+Use a structured question with concrete choices for the shell question. Then use
+`references/problem-modeling.md` to convert the answer into a concrete model and
+echo that model back to the user for confirmation.
+
+## Step 1 — Scaffold
+
+```bash
+solverforge new <name> --shell web   # or api / cli
+cd <name>
+```
+
+- `<name>` starts with a letter; letters, digits, `-`, `_` only.
+- `--skip-git` skips `git init`; `--skip-readme` skips the README.
+- The scaffold is the same neutral model for every shell; the shell only changes
+  which adapters (Axum routes, static UI, Clap) are generated.
+
+## Step 2 — Establish the solution identity first
+
+If the user does not want the default `Plan` solution name, rename it **now**,
+before adding any facts or entities:
+
+```bash
+solverforge generate solution schedule --score HardSoftScore
+```
+
+This is the one chance to replace the neutral scaffold automatically. After
+facts/entities exist, `generate solution` refuses; you would have to
+`destroy solution` (which empties the solution's collections and does **not**
+re-wire them). See `references/gotchas.md`.
+
+## Step 3 — Add facts and entities
+
+Facts are immutable inputs; entities are the things the solver assigns.
+
+```bash
+solverforge generate fact resource --field capacity:i32 --field slot:usize
+solverforge generate entity task --field demand:i32 --field ready_at:i64
+```
+
+- Names are `snake_case`; the CLI PascalCases the struct (`task` → `Task`) and
+  naively pluralizes the collection (`task` → `tasks`).
+- `--field name:Type` is repeatable. Every fact/entity gets `id: String` (and
+  facts get `name: String`) automatically; do not declare them yourself.
+- Watch irregular plurals: the collection name is used verbatim by variables
+  (`--range`, `--elements`, data generation), so prefer regular nouns.
+
+## Step 4 — Add planning variables
+
+Scalar = one value per entity. List = an ordered sequence owned by an entity.
+
+```bash
+# scalar over a fact collection (value is an index into that collection)
+solverforge generate variable resource_idx --entity Task --kind scalar \
+  --range resources --allows-unassigned
+
+# scalar over an integer range (value is the integer itself)
+solverforge generate variable start_slot --entity Task --kind scalar --countable-range 0..24
+
+# ordered list over a fact collection
+solverforge generate variable stops --entity Route --kind list --elements visits
+```
+
+- Use `--allows-unassigned` only when `None` is a legal planning state or a
+  specific runtime resource (such as an assignment scalar group) requires it.
+  Scalar values are reusable unless a constraint enforces exclusivity, so entity
+  count alone is not a reason. The field is `Option<usize>` either way.
+- A scalar over a fact collection stores the **index** into that collection, not
+  the fact itself.
+- Ordered sequences and routes are **list** variables. Never model sequence
+  topology as a scalar predecessor field.
+- `--domain cvrp` selects the stock CVRP list profile. It owns its distance
+  meters, route/savings hooks, metric class, and solution trait; those cannot be
+  overridden alongside it, and the solution must satisfy the runtime's CVRP
+  contract. For custom sequences, pass the specific list metadata flags instead
+  (see `references/cli-workflow.md`).
+
+## Step 5 — Author constraints (this is where models fail)
+
+Generate one module per constraint with an **explicit pattern flag**, generate a
+real implementation, and register nothing by hand.
+
+```bash
+solverforge generate constraint capacity --join --hard
+solverforge generate constraint prefer_early --unary --soft
+```
+
+Always pass a pattern flag. Without one the CLI opens an interactive wizard that
+fails in a non-interactive agent shell (`prompt error: IO error: not a
+terminal`).
+
+Patterns: `--unary --pair --join --balance --reward --runs --presence
+--collect-vec --group-complement --projected-group`. `--hard` is the default;
+`--soft` opts into a soft constraint. `--balance` and `--reward` imply soft.
+
+### The localizing-source rule (read this even if you read nothing else)
+
+The generated skeleton is a **compiling stub full of `panic!` placeholders**. Two
+things must change before it is a real constraint:
+
+1. Replace every placeholder function body with real domain logic.
+2. **Use the generated collection accessor as the stream source.**
+
+`#[planning_solution]` generates a public associated accessor for each
+collection: `Plan::tasks()` for `#[planning_entity_collection] pub tasks:
+Vec<Task>`, and `Plan::resources()` for `#[problem_fact_collection]`. These
+carry the change-source metadata the incremental engine needs. The skeleton
+instead defines `fn entity_items(solution: &Plan) -> &[Task]`, whose source is
+`ChangeSource::Unknown`.
+
+- `for_each`-only streams (unary, reward) happen to tolerate `Unknown`.
+- **Joins, self-joins, `group_by`, complement, and projected streams do not.**
+  They panic during the solve with:
+  `constraint <name> received descriptor <n>, but source Unknown cannot localize entity indexes`.
+
+So wire **every** stream through the generated accessor and delete the
+hand-written extractor:
+
+```rust
+use crate::domain::{Plan, Resource, Task};
+use solverforge::prelude::*;
+use solverforge::stream::joiner::equal_bi;
+use solverforge::IncrementalConstraint;
+
+/// HARD: a task's demand must not exceed its assigned resource capacity.
+pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
+    ConstraintFactory::<Plan, HardSoftScore>::new()
+        .for_each(Plan::tasks())              // <- generated accessor, not entity_items
+        .join((
+            Plan::resources(),                // <- generated accessor, not fact_items
+            equal_bi(entity_join_key, fact_join_key),
+        ))
+        .penalize(hard_weight(join_weight))
+        .named("capacity")
+}
+
+fn entity_join_key(task: &Task) -> Option<usize> { task.resource_idx }
+fn fact_join_key(resource: &Resource) -> Option<usize> { resource.slot.checked_sub(1) }
+
+fn join_weight(task: &Task, resource: &Resource) -> HardSoftScore {
+    if task.demand > resource.capacity {
+        <HardSoftScore as Score>::one_hard()
+    } else {
+        <HardSoftScore as Score>::zero()
+    }
+}
+```
+
+Self-joins (entities sharing a key) use `joiner::equal(|e: &Task| key)`.
+Entity↔fact joins use `joiner::equal_bi(entity_key, fact_key)`. Fact rows carry
+no implicit index, so when you need to join to "the Nth fact" add an explicit
+numeric field (`slot`/`index`) to the fact and read it in `fact_join_key`.
+
+`references/constraint-patterns.md` has the full catalog with when-to-use and
+verified implementations, plus the `hard_weight` / `one_hard` / `one_soft` /
+`zero` weight vocabulary and the score-type caveats.
+
+## Step 6 — Generate demo data
+
+```bash
+solverforge generate data --size standard
+```
+
+`src/data/data_seed.rs` is **compiler-owned**: domain-shape commands such as
+`generate fact/entity/variable` re-render it from the current structs and
+`--size` counts. Constraint-only changes do not. Do not hand-edit it; later
+domain-shape changes overwrite it. Generated values
+are structurally useful index-based samples, not realistic domain data. If the
+user needs real data, load it from a new module or the stable `src/data/mod.rs`
+wrapper rather than editing the seed.
+
+## Step 7 — Verify (mandatory, in this order)
+
+```bash
+solverforge check          # structure, managed blocks, model resources, solver.toml
+cargo check                # the code must actually compile
+```
+
+`check` passing does **not** prove the model works: it never runs the solver and
+never sees placeholder `panic!`s. Run a real solve through web/API or through a
+CLI solve entry point/integration test you add.
+
+For `web`/`api`:
+
+```bash
+solverforge server --debug
+# Or locate this loaded skill directory and run:
+<skill-dir>/scripts/solve-smoke-test.sh .
+```
+
+Then drive the documented API (details in `references/verification.md`):
+
+1. `GET /health`
+2. `GET /demo-data` → `defaultId`
+3. `GET /demo-data/<ID>` → the plan JSON
+4. `POST /jobs` with that plan → `{ "id": ... }`
+5. Poll `GET /jobs/<id>/status` until `lifecycleState` settles.
+
+A passing result means: the server booted, the job reached `COMPLETED`, current
+and best scores are non-null, and the log contains **no** constraint panic.
+`SOLVING` after the timeout, `CANCELLED`, `FAILED`, or a panic is failure — fix
+the model (often the localizing-source rule) and re-verify.
+
+For `cli`, there is no generated solve command. Run `cargo run -- demo-data` to
+verify compilation and serialization only. To claim a working optimizer, add a
+solve subcommand backed by `src/solver/service.rs` (or a library integration
+test that drives it) and verify a terminal score; otherwise report this
+limitation explicitly.
+
+## Step 8 — Report
+
+Tell the user: the model you built, the shell, the score type, the constraints
+(hard/soft) and what each does, the exact verification command you ran, the
+observed score, and any remaining limitations. Record repository changes as
+small conventional commits if the user asks for commits.
+
+## Hard rules
+
+- Never hand-wire managed blocks, `src/constraints/mod.rs`, or the solution's
+  collections. Use the CLI commands.
+- Never `--shell mcp` on this release line.
+- Always pass an explicit constraint pattern flag.
+- Rename/replace the solution before adding facts and entities.
+- `src/data/data_seed.rs` and web-shell `static/generated/ui-model.json` are
+  compiler-owned; `solverforge.app.toml`, `solver.toml`, and the managed blocks
+  are the CLI's surfaces.
+- Ordered sequences are list variables; do not use scalar predecessor fields.
+- Finish web/API only after a real solve completes. For CLI, either implement and
+  verify a solve entry point or explicitly report that the generated shell only
+  proves data serialization.
+
+## Reference index
+
+| File | Use it for |
+| --- | --- |
+| `references/problem-modeling.md` | Converting a problem statement into facts, entities, variables, and hard/soft constraints; intake template. |
+| `references/cli-workflow.md` | Exact command surface, flags, ordering, and shell-specific run steps. |
+| `references/constraint-patterns.md` | Every constraint pattern and its source rules; verified code for unary/reward/pair/join. |
+| `references/output-shells.md` | `web` vs `api` vs `cli`, what each generates, and the deferred MCP shell. |
+| `references/verification.md` | `check` vs compile vs real solve; the API smoke flow and helper script. |
+| `references/gotchas.md` | Managed blocks, compiler-owned files, ordering traps, score-type limits. |
+| `references/advanced-resources.md` | Countable ranges, scalar hooks, list metadata, scalar groups, conflict repair, candidate traces. |
