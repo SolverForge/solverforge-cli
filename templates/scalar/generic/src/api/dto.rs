@@ -19,8 +19,30 @@ pub struct PlanDto {
     pub score: Option<String>,
 }
 
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for PlanDto {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Plan".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        // The plan fields are domain-owned and projected through serde
+        // `flatten`, so the schema stays open: any object plus the optional
+        // managed `score` field.
+        serde_json::from_value(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "score": { "type": ["string", "null"] }
+            },
+            "additionalProperties": true
+        }))
+        .expect("plan schema must be a valid JSON Schema object")
+    }
+}
+
 /// Constraint analysis result.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct ConstraintAnalysisDto {
     pub name: String,
@@ -30,6 +52,7 @@ pub struct ConstraintAnalysisDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AnalyzeResponse {
     pub score: String,
@@ -37,6 +60,7 @@ pub struct AnalyzeResponse {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct JobSummaryDto {
     pub id: String,
@@ -52,6 +76,7 @@ pub struct JobSummaryDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct JobSnapshotDto {
     pub id: String,
@@ -66,6 +91,7 @@ pub struct JobSnapshotDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct JobAnalysisDto {
     pub id: String,
@@ -77,6 +103,7 @@ pub struct JobAnalysisDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct JobTelemetryDetailDto {
     pub id: String,
@@ -86,6 +113,7 @@ pub struct JobTelemetryDetailDto {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct QualifiedJobRequestDto {
     pub plan: PlanDto,
@@ -93,6 +121,7 @@ pub struct QualifiedJobRequestDto {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct QualifiedCandidateTraceProvenanceDto {
     pub schema_digest_sha256: String,

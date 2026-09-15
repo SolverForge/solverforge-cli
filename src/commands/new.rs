@@ -371,9 +371,13 @@ tower-http = {{ version = "0.6.11", features = ["cors"] }}
 # Serialization
 serde = {{ version = "1.0.228", features = ["derive"] }}
 serde_json = "1.0.150"
+schemars = {{ version = "1.0", optional = true }}
 
 # Utilities
 parking_lot = "0.12.5"
+
+[features]
+schema = ["dep:schemars"]
 "#,
         base = base_package_toml(project_name, crate_name),
     )
@@ -389,9 +393,13 @@ tokio = {{ version = "1.52.3", features = ["full"] }}
 # Serialization
 serde = {{ version = "1.0.228", features = ["derive"] }}
 serde_json = "1.0.150"
+schemars = {{ version = "1.0", optional = true }}
 
 # Utilities
 parking_lot = "0.12.5"
+
+[features]
+schema = ["dep:schemars"]
 "#,
         base = base_package_toml(project_name, crate_name),
     )

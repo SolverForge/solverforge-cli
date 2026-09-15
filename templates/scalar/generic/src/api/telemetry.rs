@@ -10,6 +10,7 @@ use solverforge::{
 use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct SelectorTelemetryDto {
     pub selector_index: usize,
@@ -35,6 +36,7 @@ pub struct SelectorTelemetryDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct MoveTelemetryDto {
     pub move_label: String,
@@ -54,6 +56,7 @@ pub struct MoveTelemetryDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct PhaseTelemetryDto {
     pub phase_index: usize,
@@ -72,6 +75,7 @@ pub struct PhaseTelemetryDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AppliedMoveTelemetryDto {
     pub step_index: u64,
@@ -91,6 +95,7 @@ pub struct AppliedMoveTelemetryDto {
 /// Compact control-plane telemetry. Candidate pulls are intentionally exposed
 /// only through `CandidateTraceDto` and the dedicated diagnostics endpoint.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct TelemetryDto {
     pub elapsed_ms: u64,
@@ -274,6 +279,7 @@ impl AppliedMoveTelemetryDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTraceDigestDto {
     pub first_hex: String,
@@ -281,6 +287,7 @@ pub struct CandidateTraceDigestDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTracePhaseAttributeDto {
     pub key: String,
@@ -288,6 +295,7 @@ pub struct CandidateTracePhaseAttributeDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTracePhasePlanDto {
     pub kind: String,
@@ -297,6 +305,7 @@ pub struct CandidateTracePhasePlanDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTraceExecutionPolicyDto {
     pub kind: String,
@@ -305,6 +314,7 @@ pub struct CandidateTraceExecutionPolicyDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTraceInputProvenanceDto {
     pub schema_digest_sha256: String,
@@ -316,6 +326,7 @@ pub struct CandidateTraceInputProvenanceDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTraceHeaderDto {
     pub format_version: u32,
@@ -333,6 +344,7 @@ pub struct CandidateTraceHeaderDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTraceProvenanceStatusDto {
     pub execution_policy_complete: bool,
@@ -342,6 +354,7 @@ pub struct CandidateTraceProvenanceStatusDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTraceConstructionTargetDto {
     pub descriptor_index: usize,
@@ -349,6 +362,7 @@ pub struct CandidateTraceConstructionTargetDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(
     tag = "kind",
     rename_all = "snake_case",
@@ -362,6 +376,7 @@ pub enum CandidateTraceCoordinateDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(
     tag = "kind",
     rename_all = "snake_case",
@@ -381,6 +396,7 @@ pub enum CandidateTraceIdentityDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidatePullTelemetryDto {
     pub ordinal: u64,
@@ -396,6 +412,7 @@ pub struct CandidatePullTelemetryDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateTraceDto {
     pub header: CandidateTraceHeaderDto,
