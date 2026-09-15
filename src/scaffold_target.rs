@@ -18,10 +18,13 @@ pub const LONG_VERSION_TEXT: &str = concat!(
     "\nScaffold runtime target: SolverForge crate target 0.19.4",
     "\nScaffold UI target: solverforge-ui 0.7.0",
     "\nScaffold maps target: solverforge-maps 2.1.4",
+    "\nScaffold MCP target: rmcp 3.3.0",
     "\nRuntime source: ",
     "crates.io: solverforge 0.19.4",
     "\nUI source: ",
     "crates.io: solverforge-ui 0.7.0",
     "\nMaps source: ",
     "crates.io: solverforge-maps 2.1.4",
+    "\nMCP source: ",
+    "crates.io: rmcp 3.3.0",
 );
