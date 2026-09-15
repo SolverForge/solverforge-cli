@@ -85,27 +85,31 @@ fn merge_refuses_non_object_servers_entry() {
 fn resolve_binary_prefers_release_and_reports_build_state() {
     let temp = tempfile::tempdir().expect("temp dir");
     let root = temp.path();
+    let executable = format!("agent_optimizer{}", std::env::consts::EXE_SUFFIX);
 
     let (path, built) = resolve_binary(root, "agent_optimizer");
     assert!(!built, "no binary should be found yet");
-    assert!(path.ends_with("target/release/agent_optimizer"));
+    assert!(std::path::Path::new(&path)
+        .ends_with(std::path::Path::new("target/release").join(&executable)));
 
     let release_dir = root.join("target/release");
     std::fs::create_dir_all(&release_dir).expect("create release dir");
-    std::fs::write(release_dir.join("agent_optimizer"), b"bin").expect("write binary");
+    std::fs::write(release_dir.join(&executable), b"bin").expect("write binary");
 
     let (path, built) = resolve_binary(root, "agent_optimizer");
     assert!(built, "release binary must be detected");
-    assert!(path.ends_with("target/release/agent_optimizer"));
+    assert!(std::path::Path::new(&path)
+        .ends_with(std::path::Path::new("target/release").join(&executable)));
 
-    std::fs::remove_file(release_dir.join("agent_optimizer")).expect("remove release binary");
+    std::fs::remove_file(release_dir.join(&executable)).expect("remove release binary");
     let debug_dir = root.join("target/debug");
     std::fs::create_dir_all(&debug_dir).expect("create debug dir");
-    std::fs::write(debug_dir.join("agent_optimizer"), b"bin").expect("write debug binary");
+    std::fs::write(debug_dir.join(&executable), b"bin").expect("write debug binary");
 
     let (path, built) = resolve_binary(root, "agent_optimizer");
     assert!(built, "debug binary must be detected as a fallback");
-    assert!(path.ends_with("target/debug/agent_optimizer"));
+    assert!(std::path::Path::new(&path)
+        .ends_with(std::path::Path::new("target/debug").join(executable)));
 }
 
 #[test]

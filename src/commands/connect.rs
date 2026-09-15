@@ -236,8 +236,9 @@ fn merge_vscode_config(existing: Option<&str>, name: &str, binary: &str) -> CliR
 }
 
 fn resolve_binary(project_root: &Path, crate_name: &str) -> (String, bool) {
+    let executable = format!("{crate_name}{}", std::env::consts::EXE_SUFFIX);
     for profile in ["release", "debug"] {
-        let candidate = project_root.join("target").join(profile).join(crate_name);
+        let candidate = project_root.join("target").join(profile).join(&executable);
         if candidate.exists() {
             return (candidate.display().to_string(), true);
         }
@@ -247,7 +248,7 @@ fn resolve_binary(project_root: &Path, crate_name: &str) -> (String, bool) {
         project_root
             .join("target")
             .join("release")
-            .join(crate_name)
+            .join(executable)
             .display()
             .to_string(),
         false,
