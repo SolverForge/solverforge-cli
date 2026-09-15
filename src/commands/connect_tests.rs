@@ -1,5 +1,6 @@
 use super::{
-    mcp_servers_document, merge_vscode_config, resolve_binary, stdio_server_json, to_crate_name,
+    mcp_servers_document, merge_server_config, merge_vscode_config, opencode_document,
+    opencode_local_server_json, resolve_binary, stdio_server_json, to_crate_name,
     vscode_servers_document,
 };
 use serde_json::{json, Value};
@@ -116,4 +117,67 @@ fn resolve_binary_prefers_release_and_reports_build_state() {
 fn crate_name_matches_generated_binary_naming() {
     assert_eq!(to_crate_name("agent-optimizer"), "agent_optimizer");
     assert_eq!(to_crate_name("My-App"), "my_app");
+}
+
+#[test]
+fn opencode_entry_uses_the_local_mcp_shape() {
+    let entry = opencode_local_server_json("/bin/agent_optimizer");
+    assert_eq!(entry["type"], "local");
+    assert_eq!(entry["command"], json!(["/bin/agent_optimizer"]));
+    assert_eq!(entry["enabled"], json!(true));
+}
+
+#[test]
+fn opencode_document_uses_the_mcp_root_and_schema() {
+    let document = opencode_document("agent-optimizer", "/bin/agent_optimizer");
+    assert_eq!(document["$schema"], "https://opencode.ai/config.json");
+    assert_eq!(document["mcp"]["agent-optimizer"]["type"], "local");
+    assert!(document.get("mcpServers").is_none());
+}
+
+#[test]
+fn merge_supports_the_mcp_servers_root_and_preserves_other_keys() {
+    let existing = r#"{"mcpServers":{"other":{"command":"/bin/other"}},"extra":1}"#;
+    let merged = merge_server_config(
+        Some(existing),
+        "mcpServers",
+        "agent-optimizer",
+        stdio_server_json("/bin/agent_optimizer"),
+        None,
+    )
+    .expect("merge succeeds");
+
+    let parsed: Value = serde_json::from_str(&merged).expect("valid json");
+    assert_eq!(parsed["mcpServers"]["other"]["command"], "/bin/other");
+    assert_eq!(
+        parsed["mcpServers"]["agent-optimizer"]["command"],
+        "/bin/agent_optimizer"
+    );
+    assert_eq!(parsed["extra"], json!(1));
+}
+
+#[test]
+fn merge_adds_schema_for_opencode_and_preserves_an_existing_one() {
+    let created = merge_server_config(
+        None,
+        "mcp",
+        "app",
+        opencode_local_server_json("/bin/app"),
+        Some("https://opencode.ai/config.json"),
+    )
+    .expect("merge succeeds");
+    let parsed: Value = serde_json::from_str(&created).expect("valid json");
+    assert_eq!(parsed["$schema"], "https://opencode.ai/config.json");
+
+    let existing = r#"{"$schema":"https://example.com/schema.json","mcp":{}}"#;
+    let merged = merge_server_config(
+        Some(existing),
+        "mcp",
+        "app",
+        opencode_local_server_json("/bin/app"),
+        Some("https://opencode.ai/config.json"),
+    )
+    .expect("merge succeeds");
+    let parsed: Value = serde_json::from_str(&merged).expect("valid json");
+    assert_eq!(parsed["$schema"], "https://example.com/schema.json");
 }

@@ -150,7 +150,7 @@ enum Command {
     Routes,
     /// Print MCP client connection configs for this project
     #[command(
-        after_help = "Examples:\n  solverforge connect\n  solverforge connect --write vscode\n  solverforge connect --port 8080"
+        after_help = "Examples:\n  solverforge connect\n  solverforge connect --write opencode\n  solverforge connect --write claude\n  solverforge connect --write cursor\n  solverforge connect --write vscode\n  solverforge connect --port 8080"
     )]
     Connect {
         /// Write the in-project client config for the given target; other clients are printed for copy/paste
