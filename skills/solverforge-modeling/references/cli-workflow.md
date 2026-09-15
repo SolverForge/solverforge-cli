@@ -10,11 +10,11 @@ and `src/`).
 solverforge new <name>                         # web shell (default)
 solverforge new <name> --shell api             # headless HTTP API
 solverforge new <name> --shell cli             # terminal app
+solverforge new <name> --shell mcp             # MCP server
 solverforge new <name> --skip-git --skip-readme
 ```
 
-`--shell` accepts exactly `web`, `api`, `cli`. There is no `mcp` value on this
-release line.
+`--shell` accepts `web`, `api`, `cli`, and `mcp`.
 
 ## Order of operations
 
@@ -146,7 +146,9 @@ file is compiler-owned; later domain-shape mutations regenerate it.
 ```bash
 solverforge info                 # solution, entities, facts, constraints
 solverforge check                # structure, managed blocks, model resources, solver.toml
-solverforge routes               # web/api only
+solverforge routes               # web/api only (not cli or mcp)
+solverforge connect              # mcp only: print MCP client configs
+solverforge connect --write vscode   # mcp only: merge .vscode/mcp.json
 solverforge config show
 solverforge config set termination.seconds_spent_limit 60
 solverforge config set candidate_trace.max_entries 100000
@@ -156,7 +158,8 @@ solverforge completions <shell>
 
 `check` never compiles or runs the model. Pair it with `cargo check` and a real
 solve for web/API. The generated CLI only serializes demo data; extend it before
-claiming that a terminal solve works.
+claiming that a terminal solve works. For mcp, verify the transport boots and
+drive the tools with a real MCP client for a full claim.
 
 ## Run
 
@@ -166,13 +169,21 @@ solverforge server                # release
 solverforge server --debug        # faster first compile
 solverforge server --port 8080
 
+# mcp
+cargo run --release               # stdio MCP server (default transport)
+cargo run --release -- --http     # stateless Streamable HTTP at /mcp
+cargo run --release -- --http --host 127.0.0.1
+solverforge server                # equivalent; selects --http for mcp shells
+solverforge connect               # register with Claude Code/Desktop, Cursor, VS Code
+
 # cli
 cargo run -- demo-data
 cargo run -- demo-data --size large
 ```
 
 `solverforge server` is rejected for cli-shell projects with a hint to use
-`cargo run -- demo-data`. That command is a serialization preview, not a solve.
+`cargo run -- demo-data` (a serialization preview, not a solve), and boots the
+HTTP MCP transport for mcp-shell projects.
 
 ## Destroy
 

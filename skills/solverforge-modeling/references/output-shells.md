@@ -3,15 +3,16 @@
 `--shell` is the "type of output" selector. It changes adapters, not the model:
 the neutral scaffold is identical for every shell, and facts/entities/variables/
 constraints behave the same. The current public set is exactly `web`, `api`,
-`cli`.
+`cli`, `mcp`.
 
-| Shell | Frontend assets | HTTP API (Axum/SSE) | Clap CLI | Job lifecycle | Typical use |
+| Shell | Frontend assets | HTTP surface | MCP tools | Job lifecycle | Typical use |
 | --- | --- | --- | --- | --- | --- |
-| `web` (default) | yes (`static/`, `solverforge-ui`) | yes | no | yes | end-to-end demo / UI |
-| `api` | no | yes | no | yes | headless service, other clients |
-| `cli` | no | no | yes | no | demo-data terminal scaffold; add solving yourself |
+| `web` (default) | yes (`static/`, `solverforge-ui`) | Axum JSON/SSE | no | yes | end-to-end demo / UI |
+| `api` | no | Axum JSON/SSE | no | yes | headless service, other clients |
+| `mcp` | no | stateless Streamable HTTP at `/mcp` (with `--http`) | yes | yes | agent/LLM integration |
+| `cli` | no | no | no | no | demo-data terminal scaffold; add solving yourself |
 
-Recorded in `solverforge.app.toml` as `[app].shell`. API and CLI specs omit
+Recorded in `solverforge.app.toml` as `[app].shell`. API, CLI, and MCP specs omit
 `ui_source`, and later mutations preserve that absence.
 
 ## web
@@ -43,8 +44,8 @@ solverforge server
 - Same routes and job lifecycle as web, without `static/`, `solverforge-ui`,
   `solverforge-maps`, or the UI projection.
 - `solverforge routes` works.
-- Best current choice when the user wants a machine-facing service (the MCP
-  shell is not available on this release line).
+- Best choice when the consumer is an application over HTTP rather than an MCP
+  client.
 
 ## cli
 
@@ -62,17 +63,36 @@ cargo run -- demo-data
   a terminal optimizer rather than a data-preview command, add a solve
   subcommand backed by `src/solver/service.rs` and test its terminal score.
 
-## MCP — deferred on this line
+## mcp
 
-`solverforge new --shell mcp` is rejected with
-`possible values: web, api, cli`. MCP support is being developed on a separate
-branch and is not part of this release. Do not document it as available, do not
-pass `--shell mcp`, and do not promise an MCP output. If a user needs a
-programmatic interface today, use `api`.
+```bash
+solverforge new agent-scheduler --shell mcp
+cd agent-scheduler
+cargo run --release              # stdio MCP server (default transport)
+cargo run --release -- --http    # Streamable HTTP at http://127.0.0.1:7860/mcp
+solverforge connect              # ready-to-paste client configs
+```
+
+- Emits `src/mcp/` (tools, task wiring, progress) plus the shared core, and the
+  `rmcp` dependency. No Axum REST routes, no SSE job routes, no `static/`.
+- The solve lifecycle is exposed as schema-typed tools: `list_demo_data`,
+  `get_demo_data`, `solve`, `get_status`, `get_best_solution`,
+  `analyze_solution`, `get_telemetry`, `get_candidate_trace`, `pause`, `resume`,
+  `cancel`, `delete`.
+- `solve` is task-backed for task-capable clients (MCP 2026-07-28), returning the
+  retained `jobId` in result metadata, and an immediate summary to others. Tasks
+  have no TTL and live for the server process lifetime.
+- `solverforge server` boots the mcp project's HTTP transport for you; the raw
+  `cargo run --release` default is stdio. `solverforge routes`/`/health`/`/jobs`
+  do not exist here.
+- HTTP binds loopback unless `--host` selects a concrete IP; wildcard binds are
+  rejected. `solverforge connect [--write vscode]` prints or merges client config.
+- The runtime `console` feature stays off because the banner would corrupt the
+  stdio channel; diagnostics go to stderr.
 
 ## Choosing for the user
 
 - They want to *see* it: `web`.
-- They want to *integrate* it: `api`.
+- They want to *integrate* an HTTP service: `api`.
+- Their consumer is an agent/LLM harness: `mcp`.
 - They want a *command*: `cli`.
-- They asked for MCP: explain it is upcoming, and offer `api` now.

@@ -26,8 +26,8 @@ required source/collector rules for the grouped patterns.
   `solverforge generate variable --help`.
 
 This skill describes CLI `2.2.4` (scaffold runtime target `solverforge 0.19.4`,
-UI `solverforge-ui 0.7.0`, maps `solverforge-maps 2.1.4`). Re-derive specifics
-from the CLI if the version differs.
+UI `solverforge-ui 0.7.0`, maps `solverforge-maps 2.1.4`, MCP `rmcp 3.3.0`).
+Re-derive specifics from the CLI if the version differs.
 
 ## Step 0 — Intake: ask the user before you build
 
@@ -41,9 +41,10 @@ Do not guess the model. Ask the user, in one message, for:
    - `api` — headless HTTP API only, no frontend assets.
    - `cli` — a terminal command-line scaffold, no Axum server or frontend. The
      generated command exposes demo data, not solving, unless you extend it.
-   - MCP — **not available in this release line.** `--shell mcp` is rejected
-     (`possible values: web, api, cli`). It is upcoming on a separate branch.
-     Do not promise it; offer `api` as the current machine-facing option.
+   - `mcp` — an MCP server that exposes the retained solve lifecycle as
+     schema-typed tools to any MCP-capable agent harness. stdio by default,
+     stateless Streamable HTTP at `/mcp` with `--http`. Use it when the consumer
+     is an agent/LLM rather than a browser or a human at a terminal.
 3. **The constraints**, split into:
    - **Hard** constraints (must hold for a valid plan), and
    - **Soft** constraints (should be optimized).
@@ -60,14 +61,14 @@ echo that model back to the user for confirmation.
 ## Step 1 — Scaffold
 
 ```bash
-solverforge new <name> --shell web   # or api / cli
+solverforge new <name> --shell web   # or api / cli / mcp
 cd <name>
 ```
 
 - `<name>` starts with a letter; letters, digits, `-`, `_` only.
 - `--skip-git` skips `git init`; `--skip-readme` skips the README.
 - The scaffold is the same neutral model for every shell; the shell only changes
-  which adapters (Axum routes, static UI, Clap) are generated.
+  which adapters (Axum routes, static UI, Clap, or MCP tools) are generated.
 
 ## Step 2 — Establish the solution identity first
 
@@ -261,6 +262,24 @@ solve subcommand backed by `src/solver/service.rs` (or a library integration
 test that drives it) and verify a terminal score; otherwise report this
 limitation explicitly.
 
+For `mcp`, the generated binary is itself the MCP server. Boot the transport and
+confirm it stays panic-free:
+
+```bash
+cargo run --release -- --http    # Streamable HTTP at http://127.0.0.1:7860/mcp
+solverforge server               # equivalent; selects --http for mcp shells
+```
+
+`solverforge connect` prints ready-to-paste client configuration (Claude Code,
+Claude Desktop, Cursor, VS Code); `solverforge connect --write vscode` merges
+`.vscode/mcp.json`. The server exposes `list_demo_data`, `get_demo_data`,
+`solve`, `get_status`, `get_best_solution`, `analyze_solution`, `get_telemetry`,
+`get_candidate_trace`, `pause`, `resume`, `cancel`, and `delete`. `solve` is
+task-backed for task-capable clients (retained `jobId` in result metadata) and
+returns an immediate summary to others. The bundled smoke helper checks the HTTP
+transport is up and panic-free; full protocol verification requires a real MCP
+client (the CLI repo drives the generated server with `rmcp`).
+
 ## Step 8 — Report
 
 Tell the user: the model you built, the shell, the score type, the constraints
@@ -272,16 +291,18 @@ small conventional commits if the user asks for commits.
 
 - Never hand-wire managed blocks, `src/constraints/mod.rs`, or the solution's
   collections. Use the CLI commands.
-- Never `--shell mcp` on this release line.
+- MCP-shell projects expose MCP tools, not Axum routes: do not expect `/health`,
+  `/jobs`, or `solverforge routes` there.
 - Always pass an explicit constraint pattern flag.
 - Rename/replace the solution before adding facts and entities.
 - `src/data/data_seed.rs` and web-shell `static/generated/ui-model.json` are
   compiler-owned; `solverforge.app.toml`, `solver.toml`, and the managed blocks
   are the CLI's surfaces.
 - Ordered sequences are list variables; do not use scalar predecessor fields.
-- Finish web/API only after a real solve completes. For CLI, either implement and
-  verify a solve entry point or explicitly report that the generated shell only
-  proves data serialization.
+- Finish web/API only after a real solve completes. For MCP, verify the
+  transport boots and, for a full claim, drive the tools with a real MCP client.
+  For CLI, either implement and verify a solve entry point or explicitly report
+  that the generated shell only proves data serialization.
 
 ## Reference index
 
@@ -290,7 +311,7 @@ small conventional commits if the user asks for commits.
 | `references/problem-modeling.md` | Converting a problem statement into facts, entities, variables, and hard/soft constraints; intake template. |
 | `references/cli-workflow.md` | Exact command surface, flags, ordering, and shell-specific run steps. |
 | `references/constraint-patterns.md` | Every constraint pattern and its source rules; verified code for unary/reward/pair/join. |
-| `references/output-shells.md` | `web` vs `api` vs `cli`, what each generates, and the deferred MCP shell. |
+| `references/output-shells.md` | `web` vs `api` vs `cli` vs `mcp`, what each generates, and how to run each. |
 | `references/verification.md` | `check` vs compile vs real solve; the API smoke flow and helper script. |
 | `references/gotchas.md` | Managed blocks, compiler-owned files, ordering traps, score-type limits. |
 | `references/advanced-resources.md` | Countable ranges, scalar hooks, list metadata, scalar groups, conflict repair, candidate traces. |

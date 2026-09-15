@@ -4,9 +4,9 @@
 Skill](https://opencode.ai/docs/skills/) that teaches a coding agent how to turn
 a described planning or optimization problem into a working SolverForge app with
 the `solverforge` CLI: decompose it into facts, entities, and scalar/list
-planning variables; choose the output shell (web / API / CLI); author hard and
-soft constraints against the runtime stream API; generate demo data; and verify
-a real solve end to end on web/API shells.
+planning variables; choose the output shell (web / API / MCP / CLI); author hard
+and soft constraints against the runtime stream API; generate demo data; and
+verify a real solve end to end on web/API shells.
 
 It is harness-agnostic: the same `SKILL.md` folder is discovered by opencode
 (`.opencode/skills`, `~/.config/opencode/skills`), Claude Code (`.claude/skills`,
@@ -64,10 +64,12 @@ repo root, `make install-skill` runs the same script.
 - The constraint catalog, the `panic!`-stub problem, and the generated
   `Plan::<collection>()` localizing-source rule that makes joins, self-joins, and
   grouped streams run instead of panic.
+- Output shells `web`, `api`, `mcp`, and `cli`, with their run and connect
+  surfaces (`solverforge connect` for MCP client configuration).
 - Demo data generation, compiler-owned files, and managed-block boundaries.
 - Hard gate verification: `solverforge check`, `cargo check`, and a real web/API
-  solve with the bundled `scripts/solve-smoke-test.sh`; CLI serialization is
-  identified separately from solve verification.
+  solve with the bundled `scripts/solve-smoke-test.sh`; MCP transport boot and
+  CLI serialization are identified separately from full solve verification.
 - Advanced opt-ins: scalar hooks, list metadata, scalar groups, conflict repair,
   candidate traces.
 

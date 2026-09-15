@@ -62,10 +62,13 @@ fails in a non-interactive agent: `prompt error: IO error: not a terminal`.
 Always pass exactly one pattern flag. `--hard`/`--soft` alone do not select a
 pattern.
 
-## `--shell mcp` does not exist on this line
+## MCP shells have no REST surface
 
-`possible values: web, api, cli`. MCP is on a separate branch. Do not use or
-promise it.
+An mcp-shell project exposes solver tools over MCP, not Axum routes. There is no
+`/health`, `/jobs`, or SSE endpoint, and `solverforge routes` is rejected. The
+binary's default transport is stdio (stdout is the protocol channel, so the
+runtime `console` banner is disabled); use `--http` or `solverforge server` for
+stateless Streamable HTTP at `/mcp`.
 
 ## Naive pluralization
 
