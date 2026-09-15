@@ -10,13 +10,6 @@ pub fn run(port: u16, debug: bool) -> CliResult {
 
     let mode = if debug { "debug" } else { "release" };
 
-    // MCP-shell projects have no long-lived REST server; `server` boots their
-    // stateless Streamable HTTP MCP transport instead.
-    let mut extra_args: Vec<&str> = Vec::new();
-    if shell.as_deref() == Some("mcp") {
-        extra_args.push("--http");
-    }
-
     if shell.as_deref() == Some("cli") {
         return Err(CliError::with_hint(
             "`solverforge server` is not available for CLI-shell projects",
@@ -43,18 +36,9 @@ pub fn run(port: u16, debug: bool) -> CliResult {
         output::print_dim("  Compiling in release mode... (this may take a minute on first run)");
     }
 
-    let mut args = vec!["run"];
-    if !debug {
-        args.push("--release");
-    }
-    if !extra_args.is_empty() {
-        args.push("--");
-        args.extend(extra_args);
-    }
-
     // Set PORT env var for the server to pick up
     let status = Command::new("cargo")
-        .args(&args)
+        .args(server_args(shell.as_deref(), debug))
         .env("PORT", port.to_string())
         .status()
         .map_err(|e| CliError::IoError {
@@ -71,10 +55,48 @@ pub fn run(port: u16, debug: bool) -> CliResult {
     }
 }
 
+/// Builds the `cargo run` argument list for a shell.
+///
+/// MCP-shell binaries serve the MCP transport on stdout by default, so the
+/// server command must select their stateless Streamable HTTP transport
+/// explicitly; every other shell keeps its default entry point.
+fn server_args(shell: Option<&str>, debug: bool) -> Vec<String> {
+    let mut args = vec!["run".to_string()];
+    if !debug {
+        args.push("--release".to_string());
+    }
+    if shell == Some("mcp") {
+        args.push("--".to_string());
+        args.push("--http".to_string());
+    }
+    args
+}
+
 fn project_shell() -> CliResult<Option<String>> {
     if !Path::new("solverforge.app.toml").exists() {
         return Ok(None);
     }
     let spec = app_spec::load()?;
     Ok(Some(spec.app.shell))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::server_args;
+
+    #[test]
+    fn mcp_shell_boots_the_http_transport() {
+        assert_eq!(
+            server_args(Some("mcp"), false),
+            vec!["run", "--release", "--", "--http"]
+        );
+        assert_eq!(server_args(Some("mcp"), true), vec!["run", "--", "--http"]);
+    }
+
+    #[test]
+    fn other_shells_keep_their_default_entry_point() {
+        assert_eq!(server_args(Some("web"), false), vec!["run", "--release"]);
+        assert_eq!(server_args(Some("api"), true), vec!["run"]);
+        assert_eq!(server_args(None, false), vec!["run", "--release"]);
+    }
 }
