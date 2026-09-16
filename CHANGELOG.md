@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.1.0](https://github.com/SolverForge/solverforge-cli/compare/v3.0.0...v3.1.0) (2026-09-16)
+
+### ⚠ BREAKING CHANGES
+
+* **installer:** the skill installer keeps the agent-centric contract only.
+  --only and the implicit ~/.agents/skills default stay removed; pass repeatable
+  --agent opencode|claude|codex selectors (make install-skill ARGS='--agent
+  <harness>'). Released as 3.1.0 because nothing after v3.0.0 was ever published.
+
+### Features
+
+* **cli:** target the latest released scaffold crates 41d642c
+* **connect:** write MCP configs for opencode, Claude Code, and Cursor ad30780
+* **skills:** consolidate skills and document the MCP and maps workflows 5fbe72c
+
+### Bug Fixes
+
+* **connect:** preserve JSONC and replace client configs atomically 1f5f862
+* **installer:** enforce exact link ownership and the explicit layout contract 64df608
+* **mcp:** make solve task results match the advertised output schema 89304a5
+* **test:** make MCP connect assertions platform-portable ce9e9c0
+* validate --skill names in the agent skill installer 7748859
+* write skill ownership receipts at install time 1df9453
+
 ## [3.0.0](https://github.com/SolverForge/solverforge-cli/compare/v2.2.4...v3.0.0) (2026-09-15)
 
 
