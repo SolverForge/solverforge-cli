@@ -144,6 +144,71 @@ fn assert_mixed_solution(terminal: &serde_json::Value) {
     );
 }
 
+/// Proves the terminal task payload conforms to the output schema `solve`
+/// advertises in `tools/list`. The previous terminal payload was a different
+/// shape than the advertised `JobSummaryDto`, which schema-validating clients
+/// could reject.
+fn assert_terminal_matches_solve_schema(surface: &ToolSurface, terminal: &serde_json::Value) {
+    let schema = surface
+        .solve_output_schema
+        .as_ref()
+        .expect("solve must advertise an output schema");
+    let mut properties = Vec::new();
+    let mut required = Vec::new();
+    collect_schema_keys(schema, schema, &mut properties, &mut required);
+
+    let object = terminal
+        .as_object()
+        .unwrap_or_else(|| panic!("terminal payload must be an object: {terminal:?}"));
+    for key in object.keys() {
+        assert!(
+            properties.iter().any(|property| property == key),
+            "terminal payload key '{key}' is absent from the solve output schema: {properties:?}"
+        );
+    }
+    for key in &required {
+        assert!(
+            object.contains_key(key),
+            "terminal payload is missing schema-required key '{key}': {terminal:?}"
+        );
+    }
+}
+
+fn collect_schema_keys(
+    root: &serde_json::Value,
+    node: &serde_json::Value,
+    properties: &mut Vec<String>,
+    required: &mut Vec<String>,
+) {
+    if let Some(reference) = node.get("$ref").and_then(serde_json::Value::as_str) {
+        if let Some(pointer) = reference.strip_prefix('#') {
+            if let Some(target) = root.pointer(pointer) {
+                collect_schema_keys(root, target, properties, required);
+            }
+        }
+    }
+    if let Some(map) = node
+        .get("properties")
+        .and_then(serde_json::Value::as_object)
+    {
+        properties.extend(map.keys().cloned());
+    }
+    if let Some(keys) = node.get("required").and_then(serde_json::Value::as_array) {
+        required.extend(
+            keys.iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_string),
+        );
+    }
+    for combinator in ["allOf", "anyOf", "oneOf"] {
+        if let Some(branches) = node.get(combinator).and_then(serde_json::Value::as_array) {
+            for branch in branches {
+                collect_schema_keys(root, branch, properties, required);
+            }
+        }
+    }
+}
+
 fn assert_task_job_is_immediately_addressable(report: &mcp_client::TaskFlowReport) {
     assert!(
         !report.job_id.is_empty(),
@@ -214,6 +279,7 @@ fn mcp_stdio_pipeline() {
         report.states
     );
     assert_mixed_solution(&report.terminal);
+    assert_terminal_matches_solve_schema(&report.surface, &report.terminal);
     assert!(
         report.cancel_acked,
         "cancelling the terminal task should be acknowledged"
@@ -267,6 +333,7 @@ fn mcp_http_pipeline() {
         report.states
     );
     assert_mixed_solution(&report.terminal);
+    assert_terminal_matches_solve_schema(&report.surface, &report.terminal);
 
     // PHASE 4: legacy client over Streamable HTTP drives the full lifecycle.
     app.phase("Drive retained lifecycle over Streamable HTTP");

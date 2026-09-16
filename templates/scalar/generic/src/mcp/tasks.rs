@@ -6,10 +6,10 @@ use rmcp::model::{CallToolResult, ProgressNotificationParam, ProgressToken};
 use rmcp::service::Peer;
 use rmcp::task_manager::{TaskExit, TaskManager, TaskOptions};
 use rmcp::{ErrorData, RoleServer};
-use serde_json::json;
 
-use crate::api::dto::{lifecycle_state_label, JobSnapshotDto};
+use crate::api::dto::{lifecycle_state_label, JobSnapshotDto, SolveResultDto};
 use crate::solver::SolverService;
+use solverforge::{HardSoftScore, SolverStatus};
 
 /// How often the solve watcher samples the retained job status.
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
@@ -78,11 +78,13 @@ pub fn spawn_solve_task(
                                             ctx.set_status_message("paused");
                                         }
                                         solverforge::SolverLifecycleState::Completed => {
-                                            return Ok(terminal_result(
+                                            return terminal_result(
                                                 &solver,
                                                 &job_id,
+                                                &status,
                                                 status.latest_snapshot_revision,
-                                            ));
+                                            )
+                                            .map_err(TaskExit::Error);
                                         }
                                         solverforge::SolverLifecycleState::Cancelled => {
                                             return Err(TaskExit::Cancelled);
@@ -107,23 +109,24 @@ pub fn spawn_solve_task(
 fn terminal_result(
     solver: &SolverService,
     job_id: &str,
+    status: &SolverStatus<HardSoftScore>,
     snapshot_revision: Option<u64>,
-) -> CallToolResult {
-    let mut payload = json!({
-        "jobId": job_id,
-    });
+) -> Result<CallToolResult, ErrorData> {
+    let numeric_id = job_id.parse::<usize>().map_err(|_| {
+        ErrorData::internal_error(format!("retained job id '{job_id}' is not numeric"), None)
+    })?;
 
+    let mut result = SolveResultDto::from_status(numeric_id, status);
     match solver.get_snapshot(job_id, snapshot_revision) {
-        Ok(snapshot) => {
-            payload["bestScore"] = json!(snapshot.best_score.map(|score| score.to_string()));
-            payload["snapshot"] = json!(JobSnapshotDto::from_snapshot(&snapshot));
-        }
+        Ok(snapshot) => result.snapshot = Some(JobSnapshotDto::from_snapshot(&snapshot)),
         Err(error) => {
             // Cancelled or failed jobs may legitimately have no snapshot; the
             // terminal lifecycle state itself is the result then.
-            payload["snapshotError"] = json!(error.to_string());
+            result.snapshot_error = Some(error.to_string());
         }
     }
 
-    CallToolResult::structured(payload)
+    Ok(CallToolResult::structured(
+        serde_json::to_value(result).expect("solve result serializes to JSON"),
+    ))
 }

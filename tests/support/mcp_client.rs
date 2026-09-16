@@ -27,6 +27,7 @@ pub struct ToolSurface {
     pub names: Vec<String>,
     pub all_annotated: bool,
     pub tools_with_output_schema: usize,
+    pub solve_output_schema: Option<Value>,
 }
 
 #[derive(Debug)]
@@ -313,6 +314,12 @@ async fn tool_surface(peer: &Peer<RoleClient>) -> ToolSurface {
         .list_tools(Default::default())
         .await
         .expect("tools/list failed");
+    let solve_output_schema = tools
+        .tools
+        .iter()
+        .find(|tool| tool.name.as_ref() == "solve")
+        .and_then(|tool| tool.output_schema.as_ref())
+        .map(|schema| Value::Object(schema.as_ref().clone()));
     ToolSurface {
         names: tools
             .tools
@@ -325,6 +332,7 @@ async fn tool_surface(peer: &Peer<RoleClient>) -> ToolSurface {
             .iter()
             .filter(|tool| tool.output_schema.is_some())
             .count(),
+        solve_output_schema,
     }
 }
 

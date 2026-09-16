@@ -972,10 +972,13 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
         api_mod.contains("pub mod dto;")
             && api_mod.contains("pub mod telemetry;")
             && api_mod.contains("PlanDto")
+            && api_mod.contains("SolveResultDto")
             && mcp_server.contains(".enable_tasks()")
             && mcp_server.contains("CallToolResponse::Task")
             && mcp_server.contains("with_meta(MetaObject(task_meta))")
             && mcp_server.contains("supports_tasks()")
+            && mcp_server.contains("Json<SolveResultDto>")
+            && mcp_tasks.contains("SolveResultDto::from_status")
             && mcp_tasks.contains("TaskExit::Cancelled")
             && mcp_tasks.contains("TaskExit::Error")
             && mcp_tasks.contains("with_ttl_ms(None)"),

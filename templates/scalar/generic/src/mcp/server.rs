@@ -15,7 +15,7 @@ use serde::Deserialize;
 
 use crate::api::dto::{
     analysis_response, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, JobTelemetryDetailDto,
-    PlanDto,
+    PlanDto, SolveResultDto,
 };
 use crate::api::telemetry::CandidateTraceDto;
 use crate::data::{generate, DemoData};
@@ -110,6 +110,12 @@ impl SolverMcp {
         let numeric_id = parse_job_id(job_id)?;
         Ok(JobSummaryDto::from_status(numeric_id, &status))
     }
+
+    fn solve_result(&self, job_id: &str) -> Result<SolveResultDto, ErrorData> {
+        let status = self.solver.get_status(job_id).map_err(solver_error)?;
+        let numeric_id = parse_job_id(job_id)?;
+        Ok(SolveResultDto::from_status(numeric_id, &status))
+    }
 }
 
 #[tool_router]
@@ -127,9 +133,9 @@ impl SolverMcp {
     fn solve(
         &self,
         Parameters(request): Parameters<SolveRequest>,
-    ) -> Result<Json<JobSummaryDto>, ErrorData> {
+    ) -> Result<Json<SolveResultDto>, ErrorData> {
         let job_id = self.start_from_request(request)?;
-        Ok(Json(self.job_summary(&job_id)?))
+        Ok(Json(self.solve_result(&job_id)?))
     }
 
     #[tool(
