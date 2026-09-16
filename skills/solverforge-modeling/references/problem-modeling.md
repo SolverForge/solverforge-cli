@@ -15,7 +15,7 @@ Entities:   <Plural> — <what gets a value assigned>
 Variables:  <Entity>.<field> [scalar|list] over <source>
 Hard:       <id> — <what must hold>
 Soft:       <id> — <what should be optimized>
-Output:     <web|api|cli>
+Output:     <web|api|cli|mcp>
 ```
 
 Do not scaffold until the user agrees with this restatement. It prevents the
@@ -58,17 +58,19 @@ common modeling error and it is explicitly not supported.
 ## Model the rule, don't precompute it
 
 The most damaging shortcut is to decide legality in Rust ahead of the solver.
-Do not build per-entity feasibility or cost matrices (`task.feasible:
-Vec<bool>`, per-slot `allowed: Vec<bool>`, minute-offset tables) and then score
-a penalty against that flag. It compiles, it scores, and it hides the rule from
-score analysis while letting the solver return plans the matrix was supposed to
+Do not build entity-owned feasibility verdicts (`task.feasible: Vec<bool>`,
+per-slot `allowed: Vec<bool>`, minute-offset tables) and then score a penalty
+against that flag. It compiles, it scores, and it hides the rule from score
+analysis while letting the solver return plans the matrix was supposed to
 forbid.
 
 - State each rule once, over the domain objects, inside a constraint
   (`constraint-patterns.md`). The constraint reads the entity's assigned value
   and the fact that owns the relevant data.
-- Keep derived data on the object that owns it as **input** (a fact's
-  availability calendar, a slot's start/end), not as a per-entity verdict.
+- Keep derived data on the object that owns it as **input**: a fact's
+  availability calendar, a slot's start/end, or a prepared travel-time matrix.
+  What is forbidden is a per-entity verdict (this task may not use this slot),
+  not the factual data a constraint reads and scores.
 - Never add a greedy initializer, construction heuristic, or post-solve
   sanitizer in application code. Candidates are restricted through the
   variable's candidate/value-range metadata; search policy lives in

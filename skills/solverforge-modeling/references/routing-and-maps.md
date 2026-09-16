@@ -48,6 +48,9 @@ with an async preparation step. The reference implementation is the FSR use case
 
 Keep data preparation out of constraint logic: constraints read the prepared
 matrix through model methods or a distance meter, they do not call the network.
+The matrix is factual input owned by the model, like a fact's availability
+calendar, so it is not the forbidden per-entity feasibility matrix: the
+constraint still states the cost rule over domain objects and scores it there.
 
 ## Wiring road costs into a routing list variable
 

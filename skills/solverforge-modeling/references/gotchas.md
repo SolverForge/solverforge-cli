@@ -60,12 +60,14 @@ this for `generate scalar-group` and conflict repair). See
 
 ## Model the rule, don't precompute it
 
-Do not encode a domain rule as a per-entity feasibility/cost matrix scored by a
+Do not encode a domain rule as a per-entity feasibility verdict scored by a
 penalty, and do not add greedy initializers or construction heuristics in app
 code. State the rule over domain objects in a constraint; restrict candidates
 through value-range/candidate metadata; put search policy in `solver.toml`.
 Explain results with `analyze()`/`evaluate_detailed`, not a duplicated predicate.
-See `problem-modeling.md`.
+Factual input data owned by a fact — an availability calendar, a slot's
+start/end, a prepared travel-time matrix — is allowed and is what constraints
+read. See `problem-modeling.md`.
 
 ## The localizing-source trap
 

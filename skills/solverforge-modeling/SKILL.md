@@ -355,11 +355,15 @@ small conventional commits if the user asks for commits.
 
 ## Hard rules
 
-- Never encode a domain rule as a precomputed per-entity feasibility or cost
-  matrix (`Vec<bool>`, `Vec<i32>`, keyed lookup tables) and feed it to a penalty
-  constraint. State the rule over domain objects inside the constraint. A
-  candidate/value-range provider may compute which values are *available*, but it
-  must not become the scoring input.
+- Never precompute a rule's **verdict per planning entity** (a
+  `Vec<bool>`/`Vec<i32>` "this entity may use this value" flag, or a keyed
+  verdict table) and feed it to a penalty constraint. State the rule over domain
+  objects inside the constraint. A candidate/value-range provider may compute
+  which values are *available*, but it must not become the scoring input.
+- Factual input data owned by a fact is not a verdict: an availability calendar,
+  a slot's start/end, or a prepared travel-time matrix is read by the constraint
+  and scored there. The test is whether the data observes the world or repeats
+  the rule's decision.
 - Never add a construction heuristic, greedy initializer, or post-solve
   sanitizer/repair pass in application code. Restrict candidates through the
   variable's candidate/value-range metadata and set search policy in

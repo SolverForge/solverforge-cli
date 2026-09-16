@@ -75,9 +75,16 @@ in app code. Use one of:
    assignment is mandatory, or a separate medium constraint when it is a
    preference. Do not duplicate the assignment penalty inside overlap rules.
 
-Never encode the rule as a per-entity `Vec<bool>`/`Vec<i32>` matrix scored by a
-constraint: it hides the rule from score analysis and is the classic way an
+Never precompute the rule's **verdict per planning entity** — a
+`Lesson.feasible: Vec<bool>` or per-slot `allowed: Vec<bool>` scored by a
+constraint. It hides the rule from score analysis and is the classic way an
 invalid plan is returned with a clean-looking constraint module.
+
+Factual input data owned by a fact is different and is expected: a teacher's
+availability calendar, a slot's start/end, or a prepared travel-time matrix is
+read by the constraint and scored there (see the availability recipe below and
+`routing-and-maps.md`). The test is whether the data is an observation about the
+world or a copy of the rule's decision.
 
 ## Weight vocabulary
 
@@ -163,7 +170,7 @@ pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
 }
 
 fn pair_weight(left: &Task, right: &Task) -> HardSoftScore {
-    if left.id != right.id && left.priority >= 3 && right.priority >= 3 {
+    if left.priority >= 3 && right.priority >= 3 {
         <HardSoftScore as Score>::one_hard()
     } else {
         <HardSoftScore as Score>::zero()
@@ -171,8 +178,9 @@ fn pair_weight(left: &Task, right: &Task) -> HardSoftScore {
 }
 ```
 
-Self-joins are symmetric: the same unordered pair is visited twice. Weight
-accordingly, and guard against `left.id == right.id`.
+A self-join visits each unordered pair **exactly once** and never pairs an
+entity with itself, so one match is one violation. Do not add a self-pair guard
+and do not halve the weight.
 
 ### join — penalize an entity against a joined fact
 
@@ -341,9 +349,10 @@ and
   .named("No Teacher Conflict")
   ```
 
-  `a.lesson_index < b.lesson_index` visits each unordered pair once, and strict
-  `<`/`>` treats a lesson ending at 10:00 as compatible with one starting at
-  10:00.
+  The self-join already visits each unordered pair exactly once, so the
+  `a.lesson_index < b.lesson_index` term is only an explicit orientation guard;
+  the symmetric strict `<`/`>` comparisons do the work and treat a lesson ending
+  at 10:00 as compatible with one starting at 10:00.
 
 - **Unassigned is its own constraint.** In `uc-lessons`, "every lesson gets a
   timeslot" is a **medium** constraint (a preference to schedule as much as
