@@ -147,7 +147,7 @@ entry point.
 The MCP shell keeps the domain, constraints, solver, data, and shared DTO
 surface, but omits REST route files, SSE files, frontend assets,
 `solverforge-ui`, and `solverforge-maps`. It adds `src/mcp/`, an MCP server
-built on `rmcp 3.3.0` that projects the retained solver job lifecycle onto
+built on `rmcp 3.4.0` that projects the retained solver job lifecycle onto
 twelve annotated tools with typed schemas. `solve` returns an MCP task handle
 with the retained `jobId` in result metadata to task-capable clients (MCP
 2026-07-28) and an immediate job summary to other clients. Each task has no
