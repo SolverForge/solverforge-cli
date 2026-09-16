@@ -21,7 +21,7 @@ Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.19.4`
+- `solverforge 0.19.5`
 - `solverforge-ui 0.9.0` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
 - `rmcp 3.4.0` for the MCP shell
@@ -335,7 +335,7 @@ Current scenario policy:
   assignment and complete list placement, the retained lifecycle through a
   legacy client, and byte-level stdio stdout purity during a solve
 
-SolverForge `0.19.4` uses list variables for ordered sequences and routes. Both
+SolverForge `0.19.5` uses list variables for ordered sequences and routes. Both
 generated-app end-to-end suites start and observe the real mixed scalar/list
 path.
 

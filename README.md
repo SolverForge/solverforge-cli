@@ -12,7 +12,7 @@ Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.19.4`
+- `solverforge 0.19.5`
 - `solverforge-ui 0.9.0` for the default web shell
 - `solverforge-maps 2.1.4` for the default web shell
 - `rmcp 3.4.0` for the MCP shell
@@ -352,7 +352,7 @@ Current scenario coverage:
   surface, task-backed solve to a terminal snapshot with scalar assignment and
   complete list placement, the retained lifecycle through a legacy client, and a
   byte-level stdio check that the transport channel stays pure JSON-RPC
-SolverForge `0.19.4` supports mixed scalar/list construction, canonical mixed
+SolverForge `0.19.5` supports mixed scalar/list construction, canonical mixed
 local-search defaults, and list-based sequence modeling. The CLI suite proves
 the mixed path in both runtime and browser pipelines; the scalar-only scenario keeps the deeper
 pause/resume, analysis, reconnect, and qualified-trace checks.

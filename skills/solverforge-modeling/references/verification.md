@@ -21,7 +21,7 @@ cargo check
 Catches wrong field names, missing imports, wrong score types, and closure
 signature mismatches. It will **not** catch the runtime localizing-source panic
 (that is a runtime assertion, not a compile error). The generated scaffolds
-target `solverforge 0.19.4`; the first build downloads and compiles the runtime
+target `solverforge 0.19.5`; the first build downloads and compiles the runtime
 and web dependencies, which can take a few minutes. `SF_USE_LOCAL_PATCHES=1`
 exists in the CLI's own test harness for prerelease targets — do not set it for
 ordinary app builds.
