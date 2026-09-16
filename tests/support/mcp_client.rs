@@ -12,7 +12,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, CancelTaskParams, ClientCapabilities, ClientInfo,
+    CallToolRequestParams, CallToolResponse, CancelTaskParams, ClientCapabilities, ClientConfig,
     GetTaskParams, Implementation, JsonObject, ProtocolVersion, TaskPayload,
 };
 use rmcp::service::{ClientLifecycleMode, ClientServiceExt, Peer, RoleClient};
@@ -387,15 +387,15 @@ fn job_arguments(job_id: &str) -> JsonObject {
     JsonObject::from_iter([("jobId".to_string(), json!(job_id))])
 }
 
-fn task_client() -> ClientInfo {
-    let mut info = ClientInfo::default();
+fn task_client() -> ClientConfig {
+    let mut info = ClientConfig::default();
     info.capabilities = ClientCapabilities::builder().enable_tasks().build();
     info.client_info = Implementation::new("solverforge-mcp-pipeline", "0.1.0");
     info
 }
 
-fn plain_client() -> ClientInfo {
-    let mut info = ClientInfo::default();
+fn plain_client() -> ClientConfig {
+    let mut info = ClientConfig::default();
     info.client_info = Implementation::new("solverforge-mcp-pipeline-legacy", "0.1.0");
     info
 }
