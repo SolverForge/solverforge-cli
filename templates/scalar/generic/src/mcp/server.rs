@@ -15,12 +15,13 @@ use serde::Deserialize;
 
 use crate::api::dto::{
     analysis_response, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, JobTelemetryDetailDto,
-    PlanDto, SolveResultDto,
+    PlanDto,
 };
 use crate::api::telemetry::CandidateTraceDto;
 use crate::data::{generate, DemoData};
 use crate::solver::SolverService;
 
+use super::dto::SolveResultDto;
 use super::tasks;
 
 /// Input for `solve`: a full plan or a demo data size, never both.

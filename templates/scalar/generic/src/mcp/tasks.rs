@@ -7,9 +7,11 @@ use rmcp::service::Peer;
 use rmcp::task_manager::{TaskExit, TaskManager, TaskOptions};
 use rmcp::{ErrorData, RoleServer};
 
-use crate::api::dto::{lifecycle_state_label, JobSnapshotDto, SolveResultDto};
+use crate::api::dto::{lifecycle_state_label, JobSnapshotDto};
 use crate::solver::SolverService;
 use solverforge::{HardSoftScore, SolverStatus};
+
+use super::dto::SolveResultDto;
 
 /// How often the solve watcher samples the retained job status.
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);

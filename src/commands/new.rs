@@ -602,7 +602,7 @@ pub mod telemetry;
 
 pub use dto::{
     AnalyzeResponse, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, JobTelemetryDetailDto,
-    PlanDto, SolveResultDto,
+    PlanDto,
 };
 pub use telemetry::{CandidateTraceDto, TelemetryDto};
 "#

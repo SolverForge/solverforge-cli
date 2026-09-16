@@ -926,6 +926,7 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
     let api_mod = std::fs::read_to_string(project_dir.join("src/api/mod.rs")).unwrap();
     let mcp_server = std::fs::read_to_string(project_dir.join("src/mcp/server.rs")).unwrap();
     let mcp_tasks = std::fs::read_to_string(project_dir.join("src/mcp/tasks.rs")).unwrap();
+    let mcp_dto = std::fs::read_to_string(project_dir.join("src/mcp/dto.rs")).unwrap();
 
     assert!(
         app_spec.contains("shell = \"mcp\"")
@@ -972,7 +973,7 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
         api_mod.contains("pub mod dto;")
             && api_mod.contains("pub mod telemetry;")
             && api_mod.contains("PlanDto")
-            && api_mod.contains("SolveResultDto")
+            && mcp_dto.contains("pub struct SolveResultDto")
             && mcp_server.contains(".enable_tasks()")
             && mcp_server.contains("CallToolResponse::Task")
             && mcp_server.contains("with_meta(MetaObject(task_meta))")
