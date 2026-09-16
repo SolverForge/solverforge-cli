@@ -158,7 +158,11 @@ corresponding MCP task state. stdio is the default transport;
 `--http` serves stateless Streamable HTTP at `/mcp` on the loopback interface
 unless `--host` selects a concrete IP. Wildcard binds are rejected so rmcp Host
 validation remains active. One solver service and one task store are shared
-across every stateless HTTP negotiation. The MCP shell keeps the runtime
+across every stateless HTTP negotiation, and the transport has no authentication
+or per-caller isolation: a non-loopback `--host` exposes the full job lifecycle
+(start, inspect, cancel, delete) to anyone who can reach the port, and Host
+validation only rejects DNS-rebinding headers. Documented as a known limitation;
+keep the bind on loopback unless the network is trusted. The MCP shell keeps the runtime
 `console` feature off because the runtime banner writes to stdout, which is the
 stdio MCP transport channel;
 diagnostics go to stderr. Every shell declares `schemars` as an optional

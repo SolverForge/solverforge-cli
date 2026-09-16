@@ -235,6 +235,14 @@ binds (`0.0.0.0` and `::`) are rejected so rmcp Host validation remains active.
 One solver service and one task store are shared by every request so jobs and
 tasks survive individual negotiations.
 
+> **The MCP HTTP transport has no authentication and no per-caller isolation.**
+> Every connection shares one solver and task store, so a non-loopback `--host`
+> exposes job start, status, snapshot, analysis, candidate trace, pause, resume,
+> cancel, and delete to anyone who can reach the port. Host validation only
+> rejects DNS-rebinding `Host` headers; it is not access control. Keep the bind
+> on loopback unless the network is trusted, or put an authenticating proxy in
+> front. stdio has no such exposure because the client owns the process.
+
 ```bash
 solverforge new agent-scheduler --shell mcp
 cd agent-scheduler

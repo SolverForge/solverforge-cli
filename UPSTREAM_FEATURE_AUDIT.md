@@ -211,6 +211,12 @@ scaffold defaults.
   opencode, Claude Code, Cursor, and VS Code. The repository ships the portable
   `solverforge-modeling` and `solverforge-ui` agent skills through
   `scripts/install-skill`.
+- Known limitation, accepted: the MCP HTTP transport has no authentication and
+  no per-caller isolation. Every connection shares one solver and task store, so
+  a non-loopback `--host` lets anyone who can reach the port start solves and
+  read, cancel, or delete jobs; rmcp Host validation only rejects DNS-rebinding
+  `Host` headers and is not access control. This is documented on every
+  user-facing surface and left unmitigated by decision, not overlooked.
 - Implemented: `solverforge config set` performs lossless non-phase TOML edits
   such as `termination.seconds_spent_limit`; ordered `phases` are edited
   manually or by future phase-specific commands, not by dotted-key mutation.

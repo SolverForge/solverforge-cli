@@ -322,6 +322,8 @@ harness is the client. Boot it, register it, and verify by calling a tool:
 ```bash
 cargo run --release -- --http    # Streamable HTTP at http://127.0.0.1:7860/mcp
 solverforge server               # equivalent; selects --http for mcp shells
+# The HTTP transport is unauthenticated and shares one job store across all
+# callers: keep it on loopback or put an authenticating proxy in front.
 
 # Register the server in the harness you are running in, then reload so the
 # harness rescans its MCP config. `connect` writes an in-project config:

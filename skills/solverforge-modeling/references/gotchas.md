@@ -90,6 +90,12 @@ binary's default transport is stdio (stdout is the protocol channel, so the
 runtime `console` banner is disabled); use `--http` or `solverforge server` for
 stateless Streamable HTTP at `/mcp`.
 
+The HTTP transport is unauthenticated and has no per-caller isolation: every
+connection shares one solver and task store, so `--host` on a non-loopback
+address lets anyone who can reach the port start solves and inspect, cancel, or
+delete jobs. Host validation only rejects DNS-rebinding headers. Leave `--host`
+on loopback unless the network is trusted; stdio has no such exposure.
+
 ## Naive pluralization
 
 Collections are naively pluralized: `visit` → `visits`, `route` → `routes`, but

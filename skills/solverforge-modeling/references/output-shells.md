@@ -86,9 +86,12 @@ solverforge connect              # ready-to-paste client configs
   `cargo run --release` default is stdio. `solverforge routes`/`/health`/`/jobs`
   do not exist here.
 - HTTP binds loopback unless `--host` selects a concrete IP; wildcard binds are
-  rejected. `solverforge connect` prints client config and
-  `--write opencode|claude|cursor|vscode` merges the in-project config for that
-  harness.
+  rejected. The HTTP transport has **no authentication and no per-caller
+  isolation** — one solver/task store is shared, so a non-loopback `--host`
+  exposes the whole job lifecycle to anyone who can reach the port. Do not bind
+  it off loopback on an untrusted network. `solverforge connect` prints client
+  config and `--write opencode|claude|cursor|vscode` merges the in-project
+  config for that harness.
 - The runtime `console` feature stays off because the banner would corrupt the
   stdio channel; diagnostics go to stderr.
 

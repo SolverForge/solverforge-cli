@@ -177,6 +177,8 @@ solverforge server --port 8080
 cargo run --release               # stdio MCP server (default transport)
 cargo run --release -- --http     # stateless Streamable HTTP at /mcp
 cargo run --release -- --http --host 127.0.0.1
+# --host off loopback is unauthenticated and shares one job store across all
+# callers: only do it on a trusted network or behind an authenticating proxy.
 solverforge server                # equivalent; selects --http for mcp shells
 solverforge connect               # register with Claude Code/Desktop, Cursor, VS Code
 
