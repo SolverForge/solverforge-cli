@@ -91,24 +91,25 @@ test.describe('Mixed Pipeline', () => {
           && score.textContent.trim() !== '—';
       });
 
-      const solved = await page.evaluate(async () => {
-        const app = document.getElementById('sf-app');
-        const jobId = app.dataset.jobId;
-        const snapshot = await fetch(`/jobs/${jobId}/snapshot`).then((response) => response.json());
-        const solution = snapshot.solution;
-        return {
-          jobId,
-          scalarAssignments: solution.tasks.filter((task) => Number.isInteger(task.resource_idx)).length,
-          assignedItems: solution.containers.reduce(
-            (total, container) => total + container.item_order.length,
-            0
-          ),
-          itemCount: solution.items.length,
-        };
-      });
+        const solved = await page.evaluate(async () => {
+          const app = document.getElementById('sf-app');
+          const jobId = app.dataset.jobId;
+          const snapshot = await fetch(`/jobs/${jobId}/snapshot`).then((response) => response.json());
+          const solution = snapshot.solution;
+          const placed = solution.containers
+            .flatMap((container) => container.item_order)
+            .sort((left, right) => left - right);
+          return {
+            jobId,
+            taskCount: solution.tasks.length,
+            scalarAssignments: solution.tasks.filter((task) => Number.isInteger(task.resource_idx)).length,
+            placed,
+            expectedPlacements: solution.items.map((_, index) => index),
+          };
+        });
 
-      expect(solved.scalarAssignments).toBeGreaterThan(0);
-      expect(solved.assignedItems).toBe(solved.itemCount);
+        expect(solved.scalarAssignments).toBe(solved.taskCount);
+        expect(solved.placed).toEqual(solved.expectedPlacements);
 
       await stopButton.click();
       await page.waitForFunction(() => {

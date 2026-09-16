@@ -7,6 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use support::app_harness::short_solver_config;
 use support::generated_app::{seeded_mixed_data_module, seeded_scalar_data_module, GeneratedApp};
+use support::mixed_solution;
 
 fn test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -194,31 +195,7 @@ fn mixed_runtime_pipeline() {
     let solution = &snapshot["solution"];
     assert!(solution["tasks"].is_array());
     assert!(solution["containers"].is_array());
-    assert!(
-        solution["tasks"]
-            .as_array()
-            .is_some_and(|tasks| tasks.iter().any(|task| task["resource_idx"].is_number())),
-        "mixed construction should assign at least one scalar variable: {solution:?}"
-    );
-    let assigned_items = solution["containers"]
-        .as_array()
-        .expect("containers should be an array")
-        .iter()
-        .map(|container| {
-            container["item_order"]
-                .as_array()
-                .expect("item_order should be an array")
-                .len()
-        })
-        .sum::<usize>();
-    assert_eq!(
-        assigned_items,
-        solution["items"]
-            .as_array()
-            .expect("items should be an array")
-            .len(),
-        "mixed construction should place every list element"
-    );
+    mixed_solution::assert_complete_mixed_solution(solution);
 
     assert_eq!(
         client

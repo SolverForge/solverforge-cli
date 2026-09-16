@@ -13,6 +13,8 @@ mod dependency_overrides;
 mod mcp_client;
 #[path = "support/mcp_generated_app.rs"]
 mod mcp_generated_app;
+#[path = "support/mixed_solution.rs"]
+mod mixed_solution;
 
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -114,34 +116,7 @@ fn assert_mixed_solution(terminal: &serde_json::Value) {
         terminal["jobId"].is_string(),
         "terminal payload must carry the job id: {terminal:?}"
     );
-    let solution = &terminal["snapshot"]["solution"];
-    let tasks = solution["tasks"]
-        .as_array()
-        .unwrap_or_else(|| panic!("solution should carry tasks: {solution:?}"));
-    assert!(
-        tasks.iter().any(|task| task["resource_idx"].is_number()),
-        "terminal snapshot should assign at least one scalar variable: {solution:?}"
-    );
-    let containers = solution["containers"]
-        .as_array()
-        .unwrap_or_else(|| panic!("solution should carry containers: {solution:?}"));
-    let assigned_items = containers
-        .iter()
-        .map(|container| {
-            container["item_order"]
-                .as_array()
-                .map(Vec::len)
-                .unwrap_or_default()
-        })
-        .sum::<usize>();
-    let items = solution["items"]
-        .as_array()
-        .unwrap_or_else(|| panic!("solution should carry items: {solution:?}"))
-        .len();
-    assert_eq!(
-        assigned_items, items,
-        "terminal snapshot should place every list element: {solution:?}"
-    );
+    mixed_solution::assert_complete_mixed_solution(&terminal["snapshot"]["solution"]);
 }
 
 /// Proves the terminal task payload conforms to the output schema `solve`
