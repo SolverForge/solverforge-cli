@@ -324,6 +324,8 @@ pipeline stays readable:
 
 - `cargo test`
   Rust unit tests, scaffold contract tests, and generated-app runtime pipeline tests
+- `make test-support`
+  installer behavior and skill reference-integrity tests
 - `make test-runtime`
   phase-marked runtime and MCP pipeline tests against ephemeral generated apps only
 - `make test-e2e`
@@ -331,8 +333,8 @@ pipeline stays readable:
 - `make install-e2e`
   install Playwright Chromium locally before the first browser run
 - `make test-full`
-  full pipeline: binary/unit tests, scaffold contract tests, runtime and MCP
-  pipelines, then Playwright
+  full pipeline: binary/unit tests, installer and skill-integrity tests,
+  scaffold contract tests, runtime and MCP pipelines, then Playwright
 
 The runtime and browser suites both scaffold fresh temp apps, mutate them
 through the real CLI, boot the generated servers on random ports, and clean up

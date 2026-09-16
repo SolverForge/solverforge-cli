@@ -111,16 +111,26 @@ test-e2e: banner
 		printf -- "\n$(GREEN)$(CHECK) Playwright tests passed$(RESET)\n\n" || \
 		(printf -- "\n$(RED)$(CROSS) Playwright tests failed$(RESET)\n\n" && exit 1)
 
+test-support:
+	@printf -- "$(PROGRESS) Running installer and skill-integrity tests...\n"
+	@cargo test --locked --test install_skill_test --quiet && \
+		cargo test --locked --test skill_references_test --quiet && \
+		printf -- "$(GREEN)$(CHECK) Support tests passed$(RESET)\n" || \
+		(printf -- "$(RED)$(CROSS) Support tests failed$(RESET)\n" && exit 1)
+
 test-full: banner
 	@printf -- "$(CYAN)$(BOLD)==== Full Validation =================================$(RESET)\n\n"
-	@printf -- "$(PROGRESS) Phase 1/4: Rust unit and binary tests...\n"
+	@printf -- "$(PROGRESS) Phase 1/5: Rust unit and binary tests...\n"
 	@cargo test --bin $(BIN)
-	@printf -- "$(PROGRESS) Phase 2/4: scaffold contract tests...\n"
+	@printf -- "$(PROGRESS) Phase 2/5: installer and skill-integrity tests...\n"
+	@cargo test --locked --test install_skill_test
+	@cargo test --locked --test skill_references_test
+	@printf -- "$(PROGRESS) Phase 3/5: scaffold contract tests...\n"
 	@cargo test --test scaffold_test -- --nocapture --test-threads=1
-	@printf -- "$(PROGRESS) Phase 3/4: runtime pipeline tests...\n"
+	@printf -- "$(PROGRESS) Phase 4/5: runtime pipeline tests...\n"
 	@cargo test --test runtime_pipeline_test -- --nocapture --test-threads=1
 	@cargo test --test runtime_mcp_pipeline_test -- --nocapture --test-threads=1
-	@printf -- "$(PROGRESS) Phase 4/4: Playwright browser tests...\n"
+	@printf -- "$(PROGRESS) Phase 5/5: Playwright browser tests...\n"
 	@npm run test:e2e
 	@printf -- "\n$(GREEN)$(CHECK) Full end-to-end validation passed$(RESET)\n\n"
 

@@ -40,5 +40,8 @@ jobs:
       - name: Run CLI unit tests
         run: cargo test --locked --bin solverforge
 
+      - name: Run installer and skill-integrity tests
+        run: make test-support
+
       - name: Run scaffold contract tests
         run: cargo test --locked --test scaffold_test -- --nocapture --test-threads=1
