@@ -43,6 +43,12 @@ fn cli_command() -> Command {
     command
 }
 
+/// Normalizes native and JSON-escaped path separators so a `/`-joined suffix
+/// assertion holds on every runner.
+fn normalize_paths(text: &str) -> String {
+    text.replace("\\\\", "/").replace('\\', "/")
+}
+
 fn assert_cli_success(project_dir: &Path, args: &[&str], context: &str) {
     let output = cli_command()
         .args(args)
@@ -1004,11 +1010,12 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
         String::from_utf8_lossy(&connect_output.stderr)
     );
     let connect_stdout = String::from_utf8_lossy(&connect_output.stdout);
+    let connect_paths = normalize_paths(&connect_stdout);
     assert!(
-        connect_stdout.contains("claude mcp add")
-            && connect_stdout.contains("test_mcp_shell_project")
-            && connect_stdout.contains("http://127.0.0.1:7901/mcp")
-            && connect_stdout
+        connect_paths.contains("claude mcp add")
+            && connect_paths.contains("test_mcp_shell_project")
+            && connect_paths.contains("http://127.0.0.1:7901/mcp")
+            && connect_paths
                 .contains("test_mcp_shell_project/target/release/test_mcp_shell_project"),
         "connect should print the stdio command and the resolved HTTP URL: {connect_stdout}"
     );
@@ -1020,10 +1027,11 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
     );
     let vscode_config =
         std::fs::read_to_string(project_dir.join(".vscode/mcp.json")).expect("mcp.json written");
+    let vscode_paths = normalize_paths(&vscode_config);
     assert!(
         vscode_config.contains("\"servers\"")
             && vscode_config.contains("test_mcp_shell_project")
-            && vscode_config
+            && vscode_paths
                 .contains("test_mcp_shell_project/target/release/test_mcp_shell_project"),
         "connect --write vscode should record the project server: {vscode_config}"
     );
@@ -3902,4 +3910,17 @@ pub fn custom_source() -> &'static str {
         check_status.success(),
         "cargo check failed after preserving the custom data wrapper and regenerating the seed"
     );
+}
+
+#[test]
+fn normalize_paths_handles_windows_and_json_escaped_separators() {
+    assert_eq!(
+        normalize_paths(r"C:\Users\runner\test\target\release\test"),
+        "C:/Users/runner/test/target/release/test"
+    );
+    assert_eq!(
+        normalize_paths(r#"{"command":"C:\\Users\\runner\\test.exe"}"#),
+        r#"{"command":"C:/Users/runner/test.exe"}"#
+    );
+    assert_eq!(normalize_paths("/already/posix"), "/already/posix");
 }
