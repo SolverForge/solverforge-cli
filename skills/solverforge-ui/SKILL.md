@@ -3,8 +3,6 @@ name: solverforge-ui
 description: Build, extend, and polish the web UI of a SolverForge constraint-optimization app using the shipped solverforge-ui component library (SF.* vanilla-JS globals) against the app's existing backend. Use when a project scaffolded with solverforge-cli still has the thin neutral shell in static/ and the user wants a domain-faithful interface — solver controls, status bar and score, rail scheduling timeline, Gantt, map routes, tables, modals, toasts, and score analysis. Covers mapping generated entities, facts, scalar/list variables, and constraints onto timeline/Gantt/map/table surfaces in a domain-agnostic way while preserving the generated model and the /sf + /jobs + /demo-data contract. Do not use for editing solverforge-ui's own component internals unless changing the shipped public API.
 license: Apache-2.0
 compatibility: opencode, claude-code, codex, generic Agent Skills harnesses
-metadata:
-  api-reference: README.md
 ---
 
 # Building SolverForge web UIs with solverforge-ui
@@ -32,9 +30,11 @@ for the task:
 | "My problem is X, which surface should I build?" | `references/problem-shapes.md` |
 | Proving the UI works end to end | `references/validation.md` |
 
-The library's `README.md` at the matching `solverforge-ui` version is the
-authoritative API contract; this skill is a playbook over it. Check the version
-the app actually pins in `Cargo.lock` before relying on a detail.
+The `solverforge-ui` crate's `README.md` at the matching version is the
+authoritative API contract. Read it from the crate's docs.rs page or the
+published crate tarball for the version pinned in `Cargo.lock`; this skill is a
+playbook over it, not a copy of it. Check the pinned version before relying on a
+detail.
 
 ## Version compatibility
 
@@ -208,9 +208,10 @@ to your shape and copy its *structure*, not its domain:
 | Vehicle routing with a map | `uc-deliveries/static/app/` | map + timeline + route cards, seconds → minutes, encoded polylines, snapshot-scoped geometry |
 | Field service routes | `uc-fsr/static/` | index-based bitmask domains, replaying routes to build items, backend-supplied route colors |
 
-In-repo runnable fixtures live in `demos/` (`full-surface.html`, `timeline.html`,
-`timeline-dense.html`, `rail.html`) — the fastest way to confirm exact rendering
-and geometry.
+If you have the `solverforge-ui` repository checked out, its `demos/`
+(`full-surface.html`, `timeline.html`, `timeline-dense.html`, `rail.html`) is
+the fastest way to confirm exact rendering and geometry. Those fixtures ship
+with the component library, not with this skill.
 
 ## Top failure modes
 
