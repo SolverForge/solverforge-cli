@@ -44,11 +44,13 @@ into an unrequested directory, never assumes `~/.agents`, and refuses duplicate
 discovery. The default is one direct copy per selected harness; `--layout covering`
 computes a duplicate-free shared placement for overlapping selections, and
 `--link` symlinks instead of copying. The `{opencode, claude, codex}` combination
-has no duplicate-free placement and is reported rather than silently duplicated.
-Ownership is recorded by a `.solverforge-skill` marker written into each
-installed copy (and a sidecar receipt for symlinks), so the installer refuses to
-overwrite or remove an entry it did not install. `make install-skill` wraps the
-script.
+has no duplicate-free placement and is reported rather than silently duplicated;
+`--layout per-harness --force` installs all three copies while accepting the
+duplicate discovery. Ownership is recorded by a `.solverforge-skill` marker
+written into each installed copy (and a sidecar receipt for symlinks whose
+recorded target must still match the link), so the installer refuses to
+overwrite or remove an entry it did not install. `make install-skill
+ARGS='--agent <harness>'` forwards arguments to the script.
 
 The skills bundle `scripts/solve-smoke-test.sh`, a per-shell development aid: it
 builds a generated app and drives it (web/API require a clean `COMPLETED` solve

@@ -41,7 +41,7 @@ When changing templates or scaffold behavior, follow the current repo reality ov
 - `cargo fmt --all`: apply Rust formatting.
 - `cargo clippy --all-targets -- -D warnings`: enforce lint-clean code.
 - `pre-commit run --all-files`: run the repository hooks, including YAML checks, `gitleaks`, `fmt`, and `clippy`.
-- `./scripts/install-skill --agent <harness>` (or `make install-skill`): install the bundled agent skills into the selected harness's own skills directory.
+- `./scripts/install-skill --agent <harness>` (or `make install-skill ARGS='--agent <harness>'`): install the bundled agent skills into the selected harness's own skills directory.
 
 ## Coding Style & Naming Conventions
 Use standard Rust style with 4-space indentation and `rustfmt` output as the source of truth. Prefer `snake_case` for modules, files, functions, and test names; use `PascalCase` for types and enums. Keep CLI flags, generated file names, and module names descriptive and consistent with existing commands such as `generate_constraint` and `sf_config`.
@@ -123,7 +123,7 @@ with this CLI. Keep it aligned with the live CLI surface:
   so `--list` and `--uninstall` never touch an entry it did not install.
 - `skills/solverforge-modeling/scripts/solve-smoke-test.sh` verifies a generated
   app per shell; update it when a shell's runtime surface changes.
-- `make install-skill` wraps the installer.
+- `make install-skill ARGS='--agent <harness>'` wraps the installer.
 
 Keep `SKILL.md` harness-agnostic; do not encode assumptions about one client.
 

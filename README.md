@@ -301,12 +301,14 @@ ask for, never assumes `~/.agents`, and refuses duplicate discovery.
 ./scripts/install-skill --agent opencode --uninstall
 ```
 
-From the repository root, `make install-skill` runs the same installer. It
-updates or removes only copies it owns (tracked by the `.solverforge-skill`
-marker it writes at install time) and leaves foreign entries untouched. Because
-opencode scans the opencode, Claude, and Agent Skills directories,
-`{opencode, claude, codex}` has no duplicate-free placement; the installer
-reports that instead of silently duplicating.
+From the repository root, `make install-skill ARGS='--agent opencode'` runs the
+same installer with the same arguments. It updates or removes only copies it
+owns (tracked by the `.solverforge-skill` marker it writes at install time) and
+leaves foreign entries untouched. Because opencode scans the opencode, Claude,
+and Agent Skills directories, `{opencode, claude, codex}` has no duplicate-free
+placement; the installer reports that instead of silently duplicating, and
+`--layout per-harness --force` installs all three copies while accepting the
+duplicate discovery.
 
 The bundled `scripts/solve-smoke-test.sh <app-dir>` verifies a generated app:
 for web/API it builds, boots, starts a real solve, and requires a clean

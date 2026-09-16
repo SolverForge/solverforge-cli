@@ -26,7 +26,7 @@ set -eu
 #                       of copying it.
 #   --layout <mode>     covering (duplicate-free, may pick a shared directory)
 #                       or per-harness (default: a copy in each harness dir).
-#   --force             Proceed even when the layout would create duplicates.
+#   --force             Allow duplicate discovery with --layout per-harness.
 #   --list              Show install state and exit.
 #   --uninstall         Remove installs created by this installer.
 #   --help              Show this help.
@@ -207,7 +207,7 @@ destinations() {
 	# `per-harness` is refused unless forced.
 	if [ "$layout" = "covering" ]; then
 		if [ "$has_oc" = 1 ] && [ "$has_cl" = 1 ] && [ "$has_cx" = 1 ]; then
-			echo "error: opencode scans the claude and codex skill directories, so {opencode,claude,codex} has no duplicate-free placement; select two harnesses or use --force" >&2
+			echo "error: opencode scans the claude and codex skill directories, so {opencode,claude,codex} has no duplicate-free placement; select two harnesses, or pass --layout per-harness --force to accept duplicate discovery" >&2
 			exit 1
 		fi
 		if [ "$has_oc" = 1 ] && [ "$has_cl" = 1 ]; then
@@ -222,7 +222,7 @@ destinations() {
 
 	if [ "$layout" = "per-harness" ] && [ "$has_oc" = 1 ] && { [ "$has_cl" = 1 ] || [ "$has_cx" = 1 ]; }; then
 		if [ "$force" != 1 ]; then
-			echo "error: a per-harness copy for opencode plus claude/codex makes opencode discover the same skill twice; pass --layout covering or --force" >&2
+			echo "error: a per-harness copy for opencode plus claude/codex makes opencode discover the same skill twice; pass --layout covering, or --force to accept duplicate discovery" >&2
 			exit 1
 		fi
 		echo "warning: opencode scans the claude and codex directories; per-harness copies will duplicate discovery" >&2
@@ -235,9 +235,29 @@ destinations() {
 
 receipt_name=.solverforge-skill
 link_receipt_prefix=.solverforge-skill-link-
+rcpt_tmp=
+
+# Parses a link receipt into rc_format, rc_skill, rc_mode, and rc_target. The
+# receipt must be a regular file; a symlinked receipt is not trusted.
+parse_link_receipt() {
+	rc_format=
+	rc_skill=
+	rc_mode=
+	rc_target=
+	[ -f "$1" ] && [ ! -L "$1" ] || return 1
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in
+		format=*) rc_format=${line#format=} ;;
+		skill=*) rc_skill=${line#skill=} ;;
+		mode=*) rc_mode=${line#mode=} ;;
+		target=*) rc_target=${line#target=} ;;
+		esac
+	done < "$1"
+	[ "$rc_format" = "1" ] && [ "$rc_mode" = "link" ] && [ -n "$rc_skill" ] && [ -n "$rc_target" ]
+}
 
 managed_copy() {
-	[ -f "$1/$receipt_name" ] || return 1
+	[ -f "$1/$receipt_name" ] && [ ! -L "$1/$receipt_name" ] || return 1
 	[ "$(cat "$1/$receipt_name" 2>/dev/null)" = "$2" ]
 }
 
@@ -245,9 +265,46 @@ link_receipt_path() {
 	printf '%s/%s%s' "$1" "$link_receipt_prefix" "$2"
 }
 
+# A link is installer-owned only when the sidecar receipt is intact, describes
+# this exact skill, and the destination symlink still points at the recorded
+# target. A receipt whose link was replaced or deleted describes nothing the
+# installer may treat as its own work.
 managed_link() {
-	receipt=$(link_receipt_path "$1" "$2")
-	[ -f "$receipt" ] && [ -L "$1/$2" ] && [ "$(sed -n 's/^skill=//p' "$receipt" | head -n1)" = "$2" ]
+	parse_link_receipt "$(link_receipt_path "$1" "$2")" || return 1
+	[ "$rc_skill" = "$2" ] || return 1
+	[ -L "$1/$2" ] || return 1
+	[ "$(readlink "$1/$2")" = "$rc_target" ]
+}
+
+has_link_receipt() {
+	[ -e "$(link_receipt_path "$1" "$2")" ]
+}
+
+# Writes `<path>` with one argument per line via a temporary sibling plus
+# rename, so an interrupted write can never leave a truncated receipt.
+write_file_atomically() {
+	target=$1
+	shift
+	rcpt_tmp=$(mktemp "${target}.XXXXXX") || {
+		echo "error: cannot create a temporary file next to $target" >&2
+		exit 1
+	}
+	for line
+	do
+		printf '%s\n' "$line" >> "$rcpt_tmp" || {
+			rm -f "$rcpt_tmp"
+			rcpt_tmp=
+			echo "error: cannot write a temporary file next to $target" >&2
+			exit 1
+		}
+	done
+	mv -f "$rcpt_tmp" "$target" || {
+		rm -f "$rcpt_tmp"
+		rcpt_tmp=
+		echo "error: cannot replace $target" >&2
+		exit 1
+	}
+	rcpt_tmp=
 }
 
 install_one() {
@@ -259,6 +316,8 @@ install_one() {
 	if [ "$action" = list ]; then
 		if managed_link "$dir" "$skill"; then
 			printf 'link       %-12s %s -> %s\n' "$skill" "$dest" "$(readlink "$dest")"
+		elif has_link_receipt "$dir" "$skill"; then
+			printf 'stale-rcpt %-12s %s (receipt without its recorded link)\n' "$skill" "$dest"
 		elif managed_copy "$dest" "$skill"; then
 			if diff -r -x "$receipt_name" "$src" "$dest" >/dev/null 2>&1; then
 				printf 'current    %-12s %s\n' "$skill" "$dest"
@@ -277,6 +336,12 @@ install_one() {
 		if managed_link "$dir" "$skill"; then
 			rm -f "$dest" "$(link_receipt_path "$dir" "$skill")"
 			printf 'removed    %-12s %s\n' "$skill" "$dest"
+		elif has_link_receipt "$dir" "$skill"; then
+			# The receipt no longer describes the destination (the link was
+			# replaced, deleted, or the receipt corrupted); remove only the
+			# installer-owned receipt and leave the destination untouched.
+			rm -f "$(link_receipt_path "$dir" "$skill")"
+			printf 'stale-rcpt %-12s receipt removed; destination left untouched\n' "$skill"
 		elif managed_copy "$dest" "$skill"; then
 			rm -rf "$dest"
 			printf 'removed    %-12s %s\n' "$skill" "$dest"
@@ -304,29 +369,27 @@ install_one() {
 	if [ "$link_mode" = 1 ]; then
 		rm -rf "$dest"
 		ln -s "$src" "$dest"
-		{
-			printf 'format=1\n'
-			printf 'skill=%s\n' "$skill"
-			printf 'mode=link\n'
-			printf 'target=%s\n' "$src"
-		} > "$(link_receipt_path "$dir" "$skill")"
+		write_file_atomically "$(link_receipt_path "$dir" "$skill")" \
+			"format=1" "skill=$skill" "mode=link" "target=$src"
 		printf 'linked     %-12s %s -> %s\n' "$skill" "$dest" "$src"
 		return
 	fi
 
 	if [ -d "$dest" ] && managed_copy "$dest" "$skill" && diff -r -x "$receipt_name" "$src" "$dest" >/dev/null 2>&1; then
+		rm -f "$(link_receipt_path "$dir" "$skill")"
 		printf 'current    %-12s %s\n' "$skill" "$dest"
 		return
 	fi
 
 	rm -rf "$dest"
+	rm -f "$(link_receipt_path "$dir" "$skill")"
 	cp -R "$src" "$dest"
 	# Preserve executable bits on bundled tooling regardless of the copy tool.
 	find "$dest" -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod +x {} + 2>/dev/null || true
 	# Ownership is recorded here, not in the bundle: a skill copied by hand must
 	# never be mistaken for an installer-owned entry.
 	rm -f "$dest/$receipt_name"
-	printf '%s\n' "$skill" > "$dest/$receipt_name"
+	write_file_atomically "$dest/$receipt_name" "$skill"
 	printf 'copied     %-12s %s\n' "$skill" "$dest"
 }
 
@@ -337,7 +400,7 @@ fi
 require_bundled_skills
 
 dest_file=$(mktemp)
-trap 'rm -f "$dest_file"' EXIT HUP INT TERM
+trap 'rm -f "$dest_file" ${rcpt_tmp:+"$rcpt_tmp"}' EXIT HUP INT TERM
 destinations > "$dest_file"
 
 if [ ! -s "$dest_file" ]; then

@@ -56,14 +56,17 @@ Harness directories:
 Because opencode scans all three directories, per-harness copies for
 `{opencode, claude}`, `{opencode, codex}`, or `{opencode, claude, codex}` would
 make opencode discover the same skill more than once. Use `--layout covering`
-for those selections; it places one shared copy where possible. The
+for the two-harness selections; it places one shared copy where possible. The
 `{opencode, claude, codex}` combination has no duplicate-free placement, so the
-installer reports it and asks you to choose two or pass `--force`.
+installer reports it and asks you to choose two, or to pass
+`--layout per-harness --force` and accept duplicate discovery.
 
 Installed copies carry a `.solverforge-skill` marker that the installer writes;
-symlinked installs carry a sidecar receipt. A skill copied by hand has no marker,
-so the installer treats it as foreign: it updates or removes only entries it
-owns, and leaves foreign files, directories, and symlinks untouched.
+symlinked installs carry a sidecar receipt, and the link is treated as
+installer-owned only while it still points at the receipt's recorded target. A
+skill copied by hand has no marker, so the installer treats it as foreign: it
+updates or removes only entries it owns, and leaves foreign files, directories,
+and symlinks untouched.
 
 Restart the agent after installing so it rescans skill directories.
 

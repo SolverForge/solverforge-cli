@@ -65,9 +65,9 @@ install:
 		(printf -- "$(RED)$(CROSS) Install failed$(RESET)\n" && exit 1)
 
 install-skill:
-	@printf -- "$(PROGRESS) Installing the solverforge-modeling agent skill...\n"
-	@./scripts/install-skill && \
-		printf -- "$(GREEN)$(CHECK) Agent skill installed$(RESET)\n" || \
+	@printf -- "$(PROGRESS) Installing the SolverForge agent skills...\n"
+	@./scripts/install-skill $(ARGS) && \
+		printf -- "$(GREEN)$(CHECK) Agent skills installed$(RESET)\n" || \
 		(printf -- "$(RED)$(CROSS) Agent skill install failed$(RESET)\n" && exit 1)
 
 # ============== Test Targets ==============

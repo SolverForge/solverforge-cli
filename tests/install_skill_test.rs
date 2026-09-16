@@ -33,6 +33,20 @@ fn copy_tree(from: &Path, to: &Path) {
     assert!(status.success(), "cp -R {}", from.display());
 }
 
+/// Keeps the symlink-dependent tests typechecking on every platform; they only
+/// execute where the POSIX installer runs.
+fn make_symlink(target: &Path, link: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, link).expect("create symlink");
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(target, link).expect("create symlink");
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (target, link);
+        panic!("symlinks are unsupported on this platform");
+    }
+}
+
 #[test]
 fn default_installs_one_copy_per_selected_harness_and_refuses_duplicates() {
     let tmp = tempfile::tempdir().expect("temp dir");
@@ -264,5 +278,344 @@ fn foreign_entries_are_left_untouched() {
     assert_eq!(
         fs::read_to_string(foreign.join("SKILL.md")).unwrap(),
         "user file"
+    );
+}
+
+#[test]
+fn three_harness_per_harness_requires_force_and_force_installs_all_copies() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let refused = run(
+        home,
+        &[
+            "--agent", "opencode", "--agent", "claude", "--agent", "codex",
+        ],
+    );
+    assert!(
+        !refused.status.success(),
+        "duplicate discovery must be refused without --force"
+    );
+    assert!(
+        !home.join(".claude/skills").exists() && !home.join(".config/opencode/skills").exists(),
+        "a refused install must not create anything"
+    );
+
+    let forced = run(
+        home,
+        &[
+            "--agent",
+            "opencode",
+            "--agent",
+            "claude",
+            "--agent",
+            "codex",
+            "--layout",
+            "per-harness",
+            "--force",
+        ],
+    );
+    assert!(
+        forced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&forced.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&forced.stderr).contains("warning: opencode scans"),
+        "forced duplicate discovery must warn: {}",
+        String::from_utf8_lossy(&forced.stderr)
+    );
+    for dir in [
+        home.join(".config/opencode/skills"),
+        home.join(".claude/skills"),
+        home.join(".agents/skills"),
+    ] {
+        assert!(
+            dir.join("solverforge-modeling/SKILL.md").is_file()
+                && dir.join("solverforge-ui/SKILL.md").is_file(),
+            "forced per-harness install must populate {}",
+            dir.display()
+        );
+    }
+}
+
+#[test]
+fn three_harness_covering_is_refused_with_guidance() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let refused = run(
+        home,
+        &[
+            "--agent", "opencode", "--agent", "claude", "--agent", "codex", "--layout", "covering",
+        ],
+    );
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("no duplicate-free placement")
+            && stderr.contains("--layout per-harness --force"),
+        "the refusal must guide to per-harness --force: {stderr}"
+    );
+    assert!(
+        !home.join(".claude/skills").exists(),
+        "a refused install must not create anything"
+    );
+}
+
+#[test]
+fn only_flag_is_rejected() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let attempt = run(home, &["--only", "opencode"]);
+    assert!(!attempt.status.success(), "--only must no longer exist");
+    let stderr = String::from_utf8_lossy(&attempt.stderr);
+    assert!(
+        stderr.contains("unknown option '--only'"),
+        "unexpected error: {stderr}"
+    );
+    assert!(
+        !home.join(".config/opencode/skills").exists(),
+        "a rejected invocation must not create anything"
+    );
+}
+
+#[test]
+fn no_agent_without_tty_fails_without_creating_directories() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let attempt = run(home, &[]);
+    assert!(!attempt.status.success());
+    let stderr = String::from_utf8_lossy(&attempt.stderr);
+    assert!(
+        stderr.contains("no --agent given"),
+        "unexpected error: {stderr}"
+    );
+    assert!(
+        !home.join(".config/opencode/skills").exists()
+            && !home.join(".claude/skills").exists()
+            && !home.join(".agents/skills").exists(),
+        "a refused invocation must not create anything"
+    );
+}
+
+fn link_receipt(home: &Path, skill: &str) -> PathBuf {
+    home.join(format!(".claude/skills/.solverforge-skill-link-{skill}"))
+}
+
+#[test]
+fn replaced_link_with_stale_receipt_is_preserved() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+    let foreign_target = tmp.path().join("foreign");
+    fs::create_dir_all(&foreign_target).expect("create foreign target");
+
+    let linked = run(home, &["--agent", "claude", "--link"]);
+    assert!(linked.status.success());
+    let entry = home.join(".claude/skills/solverforge-modeling");
+    fs::remove_file(&entry).expect("remove managed link");
+    make_symlink(&foreign_target, &entry);
+
+    let listed = run(home, &["--agent", "claude", "--list"]);
+    assert!(
+        String::from_utf8_lossy(&listed.stdout).contains("stale-rcpt"),
+        "a replaced link must list as stale, not managed"
+    );
+
+    let attempted = run(home, &["--agent", "claude"]);
+    assert!(
+        !attempted.status.success(),
+        "a replaced link must not be reinstalled over"
+    );
+
+    let removed = run(home, &["--agent", "claude", "--uninstall"]);
+    assert!(removed.status.success());
+    assert!(
+        fs::symlink_metadata(&entry)
+            .expect("replacement link survives")
+            .file_type()
+            .is_symlink()
+            && fs::read_link(&entry).expect("readlink") == foreign_target,
+        "uninstall must not delete a link it no longer owns"
+    );
+    assert!(
+        !link_receipt(home, "solverforge-modeling").exists(),
+        "the stale receipt must be removed on uninstall"
+    );
+}
+
+#[test]
+fn altered_receipt_is_not_trusted() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let linked = run(home, &["--agent", "claude", "--link"]);
+    assert!(linked.status.success());
+    let entry = home.join(".claude/skills/solverforge-modeling");
+    let receipt = link_receipt(home, "solverforge-modeling");
+    let tampered = fs::read_to_string(&receipt)
+        .expect("read receipt")
+        .lines()
+        .map(|line| {
+            if line.starts_with("target=") {
+                "target=/somewhere/else".to_string()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&receipt, tampered).expect("tamper receipt");
+
+    let removed = run(home, &["--agent", "claude", "--uninstall"]);
+    assert!(removed.status.success());
+    assert!(
+        fs::symlink_metadata(&entry).is_ok(),
+        "a link whose receipt target was altered must survive uninstall"
+    );
+}
+
+#[test]
+fn symlinked_receipt_is_not_trusted() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let linked = run(home, &["--agent", "claude", "--link"]);
+    assert!(linked.status.success());
+    let entry = home.join(".claude/skills/solverforge-modeling");
+    let receipt = link_receipt(home, "solverforge-modeling");
+    fs::remove_file(&receipt).expect("remove receipt");
+    make_symlink(&tmp.path().join("elsewhere"), &receipt);
+
+    let removed = run(home, &["--agent", "claude", "--uninstall"]);
+    assert!(removed.status.success());
+    assert!(
+        fs::symlink_metadata(&entry).is_ok(),
+        "a link with a symlinked receipt must survive uninstall"
+    );
+}
+
+#[test]
+fn owned_dangling_link_is_still_removed() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let linked = run(home, &["--agent", "claude", "--link"]);
+    assert!(linked.status.success());
+    let entry = home.join(".claude/skills/solverforge-modeling");
+    let dangling = tmp.path().join("nowhere-at-all");
+    let receipt = link_receipt(home, "solverforge-modeling");
+    fs::remove_file(&entry).expect("remove link");
+    make_symlink(&dangling, &entry);
+    let rewritten = fs::read_to_string(&receipt)
+        .expect("read receipt")
+        .lines()
+        .map(|line| {
+            if line.starts_with("target=") {
+                format!("target={}", dangling.display())
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&receipt, rewritten).expect("align receipt with the dangling link");
+
+    let removed = run(home, &["--agent", "claude", "--uninstall"]);
+    assert!(
+        removed.status.success() && String::from_utf8_lossy(&removed.stdout).contains("removed"),
+        "a self-consistent managed link must stay owned even while dangling"
+    );
+    assert!(fs::symlink_metadata(&entry).is_err());
+}
+
+#[test]
+fn uninstall_after_link_deletion_removes_only_the_receipt() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let linked = run(home, &["--agent", "claude", "--link"]);
+    assert!(linked.status.success());
+    let entry = home.join(".claude/skills/solverforge-modeling");
+    fs::remove_file(&entry).expect("remove link");
+
+    let listed = run(home, &["--agent", "claude", "--list"]);
+    assert!(
+        String::from_utf8_lossy(&listed.stdout).contains("stale-rcpt"),
+        "a deleted link must list as stale"
+    );
+
+    let removed = run(home, &["--agent", "claude", "--uninstall"]);
+    assert!(removed.status.success());
+    assert!(fs::symlink_metadata(&entry).is_err());
+    assert!(
+        !link_receipt(home, "solverforge-modeling").exists(),
+        "only the installer-owned receipt may be removed"
+    );
+}
+
+#[test]
+fn explicit_dir_with_spaces_works() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+    let dir = home.join("my skills dir");
+
+    let result = run(
+        home,
+        &[
+            "--dir",
+            dir.to_str().unwrap(),
+            "--skill",
+            "solverforge-modeling",
+        ],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(dir.join("solverforge-modeling/SKILL.md").is_file());
+}
+
+#[test]
+fn make_wrapper_forwards_args() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let output = Command::new("make")
+        .arg("install-skill")
+        .arg("ARGS=--agent claude --skill solverforge-modeling")
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .current_dir(repo_root())
+        .output()
+        .expect("run make install-skill");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        home.join(".claude/skills/solverforge-modeling/SKILL.md")
+            .is_file(),
+        "make must forward ARGS to the installer"
+    );
+    assert!(
+        !home.join(".claude/skills/solverforge-ui").exists(),
+        "skill selection must survive the make wrapper"
+    );
+
+    let refused = Command::new("make")
+        .arg("install-skill")
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .current_dir(repo_root())
+        .output()
+        .expect("run make install-skill without args");
+    assert!(
+        !refused.status.success(),
+        "make without ARGS must surface the installer's explicit-agent refusal in non-TTY runs"
     );
 }
