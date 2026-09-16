@@ -1038,6 +1038,79 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
 
     assert_cli_success(
         &project_dir,
+        &["connect", "--write", "cursor"],
+        "connect --write cursor in mcp shell",
+    );
+    let cursor_config =
+        std::fs::read_to_string(project_dir.join(".cursor/mcp.json")).expect("cursor config");
+    assert!(
+        cursor_config.contains("\"mcpServers\"") && !cursor_config.contains("\"servers\""),
+        "cursor must use the mcpServers root: {cursor_config}"
+    );
+
+    assert_cli_success(
+        &project_dir,
+        &["connect", "--write", "claude"],
+        "connect --write claude in mcp shell",
+    );
+    let claude_config = std::fs::read_to_string(project_dir.join(".mcp.json")).expect("claude");
+    assert!(
+        claude_config.contains("\"mcpServers\"")
+            && claude_config.contains("test_mcp_shell_project"),
+        "connect --write claude should write .mcp.json: {claude_config}"
+    );
+
+    assert_cli_success(
+        &project_dir,
+        &["connect", "--write", "opencode"],
+        "connect --write opencode in mcp shell",
+    );
+    let opencode_config =
+        std::fs::read_to_string(project_dir.join("opencode.json")).expect("opencode config");
+    let opencode_paths = normalize_paths(&opencode_config);
+    assert!(
+        opencode_config.contains("\"$schema\"")
+            && opencode_config.contains("https://opencode.ai/config.json")
+            && opencode_config.contains("\"mcp\"")
+            && opencode_config.contains("\"type\": \"local\"")
+            && opencode_paths
+                .contains("test_mcp_shell_project/target/release/test_mcp_shell_project"),
+        "connect --write opencode should write the local server shape: {opencode_config}"
+    );
+
+    // A user's JSONC edits survive a re-run: comments, trailing commas, and
+    // unrelated servers stay byte-for-byte while the project entry updates.
+    std::fs::write(
+        project_dir.join("opencode.json"),
+        concat!(
+            "{\n",
+            "  \"$schema\": \"https://opencode.ai/config.json\",\n",
+            "  // team-approved servers only\n",
+            "  \"mcp\": {\n",
+            "    \"other-server\": { \"type\": \"remote\", \"url\": \"https://example.com/mcp\", \"enabled\": true },\n",
+            "  },\n",
+            "  \"theme\": \"dark\",\n",
+            "}\n",
+        ),
+    )
+    .expect("seed user JSONC");
+    assert_cli_success(
+        &project_dir,
+        &["connect", "--write", "opencode"],
+        "re-run connect --write opencode against JSONC",
+    );
+    let merged_opencode =
+        std::fs::read_to_string(project_dir.join("opencode.json")).expect("merged opencode");
+    assert!(
+        merged_opencode.contains("// team-approved servers only")
+            && merged_opencode.contains("\"other-server\"")
+            && merged_opencode.contains("\"theme\": \"dark\"")
+            && merged_opencode.contains("\"test_mcp_shell_project\""),
+        "the JSONC merge must preserve user content: {merged_opencode}"
+    );
+
+    assert_cli_success(
+        &project_dir,
         &["generate", "entity", "task", "--field", "label:String"],
         "generate entity in mcp shell",
     );
