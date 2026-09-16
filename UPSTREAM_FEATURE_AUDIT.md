@@ -83,8 +83,9 @@ without turning the neutral scaffold into a domain-specific demo.
   `scalar_groups`, `ScalarGroup::assignment`, grouped scalar construction with
   `group_name`, `construction_obligation = "assign_when_candidate_exists"`, and
   `grouped_scalar_move_selector`.
-- CLI coverage today: the scaffold targets `solverforge 0.19.5` and includes
-  the retained `SolverManager` lifecycle, typed SSE, snapshots, analysis,
+- CLI coverage today: the scaffold targets `solverforge 0.19.5`, exposes the
+  `web`, `api`, `cli`, and `mcp` shells, and includes the retained
+  `SolverManager` lifecycle, typed SSE, snapshots, analysis,
   pause/resume/cancel/delete, generated `solverforge.app.toml`, scalar/list
   variable generation, complete executable scalar/list metadata projection,
   countable scalar ranges, full compact telemetry, bounded candidate-detail
@@ -92,8 +93,12 @@ without turning the neutral scaffold into a domain-specific demo.
 - Mixed execution gate: fresh runtime and browser scenarios seed a required
   scalar variable plus a list variable, start a retained solve, verify scalar
   assignment and complete list placement, and exercise cancel/terminal cleanup.
-- UI release gate: `cargo info solverforge-ui` confirms `solverforge-ui 0.7.0`
-  is published; the web scaffold targets its framework-neutral asset release.
+- UI and companion release gates: `cargo info solverforge-ui` confirms
+  `solverforge-ui 0.9.0` is published; the web scaffold targets its
+  framework-neutral asset release and additionally targets the published
+  `solverforge-maps 2.1.4`. The MCP scaffold targets the published `rmcp 3.4.0`.
+  The UI, maps, and MCP versions are independent of the `solverforge` runtime
+  target.
 - Local checkout note: `/srv/lab/dev/solverforge/solverforge` remains the
   source gate used to inspect the current release notes and feature surface.
 
@@ -200,6 +205,12 @@ scaffold defaults.
   `solverforge generate conflict-repair`, including solution attribute wiring,
   app-spec/UI metadata, local provider stubs, solver config phase insertion,
   and destroy cleanup.
+- Implemented: the `mcp` shell delivers the solver as an MCP server over stdio
+  and stateless Streamable HTTP with task-backed solving, and
+  `solverforge connect --write <harness>` writes in-project client config for
+  opencode, Claude Code, Cursor, and VS Code. The repository ships the portable
+  `solverforge-modeling` and `solverforge-ui` agent skills through
+  `scripts/install-skill`.
 - Implemented: `solverforge config set` performs lossless non-phase TOML edits
   such as `termination.seconds_spent_limit`; ordered `phases` are edited
   manually or by future phase-specific commands, not by dotted-key mutation.
