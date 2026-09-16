@@ -119,7 +119,7 @@ with this CLI. Keep it aligned with the live CLI surface:
 - `scripts/install-skill` copies the skill into each selected harness's own
   skills directory (opencode, Claude Code, the cross-harness Agent Skills
   standard), at user or project scope. It never symlinks or shares a location,
-  and it records ownership with `skills/solverforge-modeling/.solverforge-skill`
+  and it writes a `.solverforge-skill` marker into each installed copy
   so `--list` and `--uninstall` never touch an entry it did not install.
 - `skills/solverforge-modeling/scripts/solve-smoke-test.sh` verifies a generated
   app per shell; update it when a shell's runtime surface changes.

@@ -45,9 +45,10 @@ discovery. The default is one direct copy per selected harness; `--layout coveri
 computes a duplicate-free shared placement for overlapping selections, and
 `--link` symlinks instead of copying. The `{opencode, claude, codex}` combination
 has no duplicate-free placement and is reported rather than silently duplicated.
-Ownership is recorded by each skill's `.solverforge-skill` marker (and a sidecar
-receipt for symlinks), so the installer refuses to overwrite or remove an entry it
-did not install. `make install-skill` wraps the script.
+Ownership is recorded by a `.solverforge-skill` marker written into each
+installed copy (and a sidecar receipt for symlinks), so the installer refuses to
+overwrite or remove an entry it did not install. `make install-skill` wraps the
+script.
 
 The skills bundle `scripts/solve-smoke-test.sh`, a per-shell development aid: it
 builds a generated app and drives it (web/API require a clean `COMPLETED` solve

@@ -294,8 +294,8 @@ ask for, never assumes `~/.agents`, and refuses duplicate discovery.
 ```
 
 From the repository root, `make install-skill` runs the same installer. It
-updates or removes only copies it owns (tracked by each skill's
-`.solverforge-skill` marker) and leaves foreign entries untouched. Because
+updates or removes only copies it owns (tracked by the `.solverforge-skill`
+marker it writes at install time) and leaves foreign entries untouched. Because
 opencode scans the opencode, Claude, and Agent Skills directories,
 `{opencode, claude, codex}` has no duplicate-free placement; the installer
 reports that instead of silently duplicating.

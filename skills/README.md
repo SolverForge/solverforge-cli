@@ -60,9 +60,10 @@ for those selections; it places one shared copy where possible. The
 `{opencode, claude, codex}` combination has no duplicate-free placement, so the
 installer reports it and asks you to choose two or pass `--force`.
 
-Installed copies carry a `.solverforge-skill` marker; symlinked installs carry a
-sidecar receipt. The installer updates or removes only entries it owns, and
-leaves foreign files, directories, and symlinks untouched.
+Installed copies carry a `.solverforge-skill` marker that the installer writes;
+symlinked installs carry a sidecar receipt. A skill copied by hand has no marker,
+so the installer treats it as foreign: it updates or removes only entries it
+owns, and leaves foreign files, directories, and symlinks untouched.
 
 Restart the agent after installing so it rescans skill directories.
 

@@ -260,7 +260,7 @@ install_one() {
 		if managed_link "$dir" "$skill"; then
 			printf 'link       %-12s %s -> %s\n' "$skill" "$dest" "$(readlink "$dest")"
 		elif managed_copy "$dest" "$skill"; then
-			if diff -r "$src" "$dest" >/dev/null 2>&1; then
+			if diff -r -x "$receipt_name" "$src" "$dest" >/dev/null 2>&1; then
 				printf 'current    %-12s %s\n' "$skill" "$dest"
 			else
 				printf 'outdated   %-12s %s\n' "$skill" "$dest"
@@ -314,7 +314,7 @@ install_one() {
 		return
 	fi
 
-	if [ -d "$dest" ] && managed_copy "$dest" "$skill" && diff -r "$src" "$dest" >/dev/null 2>&1; then
+	if [ -d "$dest" ] && managed_copy "$dest" "$skill" && diff -r -x "$receipt_name" "$src" "$dest" >/dev/null 2>&1; then
 		printf 'current    %-12s %s\n' "$skill" "$dest"
 		return
 	fi
@@ -323,6 +323,10 @@ install_one() {
 	cp -R "$src" "$dest"
 	# Preserve executable bits on bundled tooling regardless of the copy tool.
 	find "$dest" -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod +x {} + 2>/dev/null || true
+	# Ownership is recorded here, not in the bundle: a skill copied by hand must
+	# never be mistaken for an installer-owned entry.
+	rm -f "$dest/$receipt_name"
+	printf '%s\n' "$skill" > "$dest/$receipt_name"
 	printf 'copied     %-12s %s\n' "$skill" "$dest"
 }
 

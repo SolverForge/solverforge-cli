@@ -20,6 +20,19 @@ fn run(home: &Path, args: &[&str]) -> std::process::Output {
         .expect("run installer")
 }
 
+fn copy_tree(from: &Path, to: &Path) {
+    if let Some(parent) = to.parent() {
+        fs::create_dir_all(parent).expect("create parent");
+    }
+    let status = Command::new("cp")
+        .arg("-R")
+        .arg(from)
+        .arg(to)
+        .status()
+        .expect("run cp");
+    assert!(status.success(), "cp -R {}", from.display());
+}
+
 #[test]
 fn default_installs_one_copy_per_selected_harness_and_refuses_duplicates() {
     let tmp = tempfile::tempdir().expect("temp dir");
@@ -150,6 +163,88 @@ fn explicit_skill_selection_installs_only_that_skill() {
     assert!(
         !home.join(".claude/skills/solverforge-ui").exists(),
         "only the named skill should be installed"
+    );
+}
+
+#[test]
+fn manually_copied_skill_is_not_owned_by_the_installer() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+    let manual = home.join(".claude/skills/solverforge-modeling");
+    copy_tree(&repo_root().join("skills/solverforge-modeling"), &manual);
+
+    let listed = run(home, &["--agent", "claude", "--list"]);
+    let listing = String::from_utf8_lossy(&listed.stdout);
+    assert!(
+        listing.contains("foreign"),
+        "a hand-copied skill must list as foreign: {listing}"
+    );
+
+    let removed = run(home, &["--agent", "claude", "--uninstall"]);
+    assert!(
+        removed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&removed.stderr)
+    );
+    assert!(
+        manual.join("SKILL.md").is_file(),
+        "uninstall must not delete a hand-copied skill"
+    );
+}
+
+#[test]
+fn copied_install_is_owned_and_uninstalls() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let installed = run(home, &["--agent", "claude"]);
+    assert!(
+        installed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+    let entry = home.join(".claude/skills/solverforge-modeling");
+    assert!(
+        entry.join(".solverforge-skill").is_file(),
+        "install must record ownership in the installed copy"
+    );
+
+    let removed = run(home, &["--agent", "claude", "--uninstall"]);
+    assert!(
+        removed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&removed.stderr)
+    );
+    assert!(!entry.exists(), "an owned install must be removed");
+}
+
+#[test]
+fn reinstalling_an_owned_copy_reports_current() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let first = run(
+        home,
+        &["--agent", "claude", "--skill", "solverforge-modeling"],
+    );
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let second = run(
+        home,
+        &["--agent", "claude", "--skill", "solverforge-modeling"],
+    );
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    let output = String::from_utf8_lossy(&second.stdout);
+    assert!(
+        output.contains("current"),
+        "reinstalling an unchanged owned copy must be a no-op: {output}"
     );
 }
 
