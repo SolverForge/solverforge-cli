@@ -95,6 +95,65 @@ fn link_and_uninstall_round_trip() {
 }
 
 #[test]
+fn skill_name_traversal_is_rejected() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+    let dest = home.join("dest");
+    let escaped = home.join("skills/solverforge-modeling");
+
+    let attempt = run(
+        home,
+        &[
+            "--dir",
+            dest.to_str().unwrap(),
+            "--skill",
+            "../skills/solverforge-modeling",
+        ],
+    );
+    assert!(!attempt.status.success(), "traversal must be rejected");
+    assert!(
+        !escaped.exists(),
+        "installer escaped the requested skills directory"
+    );
+}
+
+#[test]
+fn unknown_skill_name_is_rejected() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let attempt = run(home, &["--agent", "claude", "--skill", "does-not-exist"]);
+    assert!(!attempt.status.success(), "unknown skill must be rejected");
+    assert!(
+        !home.join(".claude/skills").exists(),
+        "a rejected install must not create anything"
+    );
+}
+
+#[test]
+fn explicit_skill_selection_installs_only_that_skill() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let home = tmp.path();
+
+    let result = run(
+        home,
+        &["--agent", "claude", "--skill", "solverforge-modeling"],
+    );
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(home
+        .join(".claude/skills/solverforge-modeling/SKILL.md")
+        .is_file());
+    assert!(
+        !home.join(".claude/skills/solverforge-ui").exists(),
+        "only the named skill should be installed"
+    );
+}
+
+#[test]
 fn foreign_entries_are_left_untouched() {
     let tmp = tempfile::tempdir().expect("temp dir");
     let home = tmp.path();

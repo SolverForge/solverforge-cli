@@ -100,6 +100,12 @@ $1"
 	--skill)
 		shift
 		[ -n "${1:-}" ] || { echo "error: --skill expects a name" >&2; exit 1; }
+		case "$1" in
+		.|..|*[!A-Za-z0-9._-]*)
+			echo "error: invalid skill name '$1'" >&2
+			exit 1
+			;;
+		esac
 		skills="$skills $1"
 		;;
 	--layout)
@@ -162,6 +168,19 @@ selected_skills() {
 		return
 	fi
 	all_skills
+}
+
+# An install may only name a bundled skill; uninstall must still accept a name
+# whose bundle entry was removed after install, so existence is install-only.
+require_bundled_skills() {
+	[ "$action" = install ] || return 0
+	[ -n "${skills# }" ] || return 0
+	for name in ${skills# }; do
+		[ -f "$skills_root/$name/SKILL.md" ] || {
+			echo "error: unknown skill '$name' (see $skills_root)" >&2
+			exit 1
+		}
+	done
 }
 
 # Destination list: "label<TAB>dir" lines.
@@ -310,6 +329,8 @@ install_one() {
 if [ -z "${agents# }" ] && [ -z "$explicit_dirs" ] && [ "$action" = install ]; then
 	select_agents_interactively
 fi
+
+require_bundled_skills
 
 dest_file=$(mktemp)
 trap 'rm -f "$dest_file"' EXIT HUP INT TERM
