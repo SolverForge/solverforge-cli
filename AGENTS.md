@@ -123,7 +123,8 @@ with this CLI. Keep it aligned with the live CLI surface:
   and it writes a `.solverforge-skill` marker into each installed copy
   so `--list` and `--uninstall` never touch an entry it did not install.
 - `skills/solverforge-modeling/scripts/solve-smoke-test.sh` verifies a generated
-  app per shell; update it when a shell's runtime surface changes.
+  app per shell (MCP covers transport health only; protocol proof lives in
+  `runtime_mcp_pipeline_test`); update it when a shell's runtime surface changes.
 - `make install-skill ARGS='--agent <harness>'` wraps the installer.
 
 Keep `SKILL.md` harness-agnostic; do not encode assumptions about one client.

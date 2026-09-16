@@ -312,10 +312,12 @@ duplicate discovery.
 
 The bundled `scripts/solve-smoke-test.sh <app-dir>` verifies a generated app:
 for web/API it builds, boots, starts a real solve, and requires a clean
-`COMPLETED` result with published scores; for MCP it boots a healthy HTTP
-transport (verified through the registered harness's own client); for CLI it
-validates `demo-data` serialization. It is a development aid, not a replacement
-for the generated-app suites below.
+`COMPLETED` result with published scores; for MCP it proves only that the HTTP
+transport boots with a healthy, panic-free `/health` — it does not negotiate
+MCP or call tools, so drive those through a real MCP client or the
+`runtime_mcp_pipeline_test` suite; for CLI it validates `demo-data`
+serialization. It is a development aid, not a replacement for the
+generated-app suites below.
 
 ## Validation Flow
 

@@ -54,9 +54,10 @@ ARGS='--agent <harness>'` forwards arguments to the script.
 
 The skills bundle `scripts/solve-smoke-test.sh`, a per-shell development aid: it
 builds a generated app and drives it (web/API require a clean `COMPLETED` solve
-with published scores; MCP boots a healthy HTTP transport and is verified through
-the registered harness's own MCP client; CLI validates `demo-data` serialization).
-It complements, and does not replace, the repository's generated-app suites.
+with published scores; MCP proves transport health and a panic-free boot only —
+tool calls require a real MCP client, as driven by `runtime_mcp_pipeline_test`;
+CLI validates `demo-data` serialization). It complements, and does not replace,
+the repository's generated-app suites.
 
 ## Canonical Modeling Terms
 
