@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.3.0](https://github.com/SolverForge/solverforge-cli/compare/v3.2.0...v3.3.0) (2026-09-29)
+
+### Features
+
+* **scaffold:** target rmcp 3.5.0 28ebfce
+
 ## [3.2.0](https://github.com/SolverForge/solverforge-cli/compare/v3.1.0...v3.2.0) (2026-09-29)
 
 ### Features
