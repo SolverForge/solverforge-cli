@@ -9,7 +9,7 @@
 Current scaffold policy:
 - current CLI package version is `3.1.0`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
-- generated projects currently target `solverforge 0.19.5`; the default web shell additionally targets `solverforge-ui 0.9.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.4.0`
+- generated projects currently target `solverforge 0.19.7`; the default web shell additionally targets `solverforge-ui 0.9.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.4.0`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
 - `--shell web|api|cli|mcp` is the current public shell selector; `web` is the default, `api` omits frontend assets, `cli` omits Axum/SSE routes and frontend assets, and `mcp` delivers the solver as an MCP server over stdio and stateless Streamable HTTP
 - API/CLI/MCP app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
@@ -74,7 +74,7 @@ Current end-to-end scenario policy:
 - the scalar-only runtime scenario covers full compact telemetry, bounded candidate detail, and qualified trace provenance
 - the MCP scenario models a mixed scalar-plus-list problem, generates the sample data, and drives both stdio and stateless Streamable HTTP through the real `rmcp` client: annotated tool surface, task-backed solve to a terminal snapshot with scalar assignment and complete list placement, retained lifecycle via a legacy client, and byte-level stdio stdout purity during a solve
 
-SolverForge `0.19.5` uses list variables as the sequence and route model. The
+SolverForge `0.19.7` uses list variables as the sequence and route model. The
 generated-app runtime and browser scenarios must continue to start and observe
 a real mixed scalar/list solve.
 
