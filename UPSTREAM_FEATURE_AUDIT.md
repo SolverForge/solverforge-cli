@@ -113,9 +113,22 @@ without turning the neutral scaffold into a domain-specific demo.
 - UI and companion release gates: `cargo info solverforge-ui` confirms
   `solverforge-ui 0.9.0` is published; the web scaffold targets its
   framework-neutral asset release and additionally targets the published
-  `solverforge-maps 2.1.4`. The MCP scaffold targets the published `rmcp 3.4.0`.
+  `solverforge-maps 2.1.4`. The MCP scaffold targets the published `rmcp 3.5.0`.
   The UI, maps, and MCP versions are independent of the `solverforge` runtime
   target.
+- MCP SDK upgrade (`rmcp 3.4.0` to `3.5.0`, through `3.4.1`): the SDK-wide
+  changes are additive transport/model fixes (JSON discover fallback, duplicate
+  `sep-2243` header rejection, Origin allowlist default ports, explicit null
+  `structuredContent` preservation) plus macro support for const paths and
+  `concat!` in tool descriptions. One runtime-visible change matters here:
+  `ProtocolVersion::LATEST` moves from `2025-11-25` to `2026-07-28` and a new
+  `LATEST_WITH_INITIALIZE` keeps the initialize-capable version, so a client that
+  lets the server choose now negotiates the task-capable `2026-07-28` version and
+  receives a task handle from `solve` instead of the immediate job summary. Both
+  outcomes stay covered because the CLI's acceptance client drives an explicit
+  task-capable client (`2026-07-28`) and a legacy client (`2025-11-25`) in the
+  MCP pipeline. The generated MCP surface itself is unchanged: no protocol
+  constant, `ServerConfig`, or `ClientConfig` is pinned by the templates.
 - Local checkout note: `/srv/lab/dev/solverforge/solverforge` remains the
   source gate used to inspect the current release notes and feature surface.
 
