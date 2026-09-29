@@ -15,7 +15,7 @@ New projects currently target these crate versions:
 - `solverforge 0.19.7`
 - `solverforge-ui 0.9.0` for the default web shell
 - `solverforge-maps 2.1.4` for the default web shell
-- `rmcp 3.4.0` for the MCP shell
+- `rmcp 3.5.0` for the MCP shell
 
 ```bash
 cargo install solverforge-cli

@@ -9,7 +9,7 @@
 Current scaffold policy:
 - current CLI package version is `3.2.0`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
-- generated projects currently target `solverforge 0.19.7`; the default web shell additionally targets `solverforge-ui 0.9.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.4.0`
+- generated projects currently target `solverforge 0.19.7`; the default web shell additionally targets `solverforge-ui 0.9.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.5.0`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
 - `--shell web|api|cli|mcp` is the current public shell selector; `web` is the default, `api` omits frontend assets, `cli` omits Axum/SSE routes and frontend assets, and `mcp` delivers the solver as an MCP server over stdio and stateless Streamable HTTP
 - API/CLI/MCP app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence

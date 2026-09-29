@@ -24,7 +24,7 @@ Current generated projects target:
 - `solverforge 0.19.7`
 - `solverforge-ui 0.9.0` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
-- `rmcp 3.4.0` for the MCP shell
+- `rmcp 3.5.0` for the MCP shell
 
 The CLI version is separate from those targets and must remain visible in
 version output and generated README content.
@@ -151,7 +151,7 @@ entry point.
 The MCP shell keeps the domain, constraints, solver, data, and shared DTO
 surface, but omits REST route files, SSE files, frontend assets,
 `solverforge-ui`, and `solverforge-maps`. It adds `src/mcp/`, an MCP server
-built on `rmcp 3.4.0` that projects the retained solver job lifecycle onto
+built on `rmcp 3.5.0` that projects the retained solver job lifecycle onto
 twelve annotated tools with typed schemas. `solve` returns an MCP task handle
 with the retained `jobId` in result metadata to task-capable clients (MCP
 2026-07-28) and an immediate job summary to other clients. Each task has no
