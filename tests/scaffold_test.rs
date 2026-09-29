@@ -24,7 +24,7 @@ const SOLVERFORGE_DEP_SPEC: &str =
 const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.9.0" }"#;
 const SOLVERFORGE_MCP_DEP_SPEC: &str =
     r#"{ version = "0.19.7", features = ["serde", "verbose-logging"] }"#;
-const RMCP_DEP_SPEC: &str = r#"{ version = "3.4.0", features = ["server", "macros", "transport-io", "transport-streamable-http-server", "transport-streamable-http-server-session"] }"#;
+const RMCP_DEP_SPEC: &str = r#"{ version = "3.5.0", features = ["server", "macros", "transport-io", "transport-streamable-http-server", "transport-streamable-http-server-session"] }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.4" }"#;
 const GENERATED_RUST_VERSION_SPEC: &str = r#"rust-version = "1.95""#;
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -1170,8 +1170,8 @@ fn test_new_mcp_shell_readme_discloses_rmcp_target() {
 
     assert!(
         readme.contains("SolverForge runtime target for this scaffold")
-            && readme.contains("MCP server target for this scaffold: `rmcp 3.4.0`")
-            && readme.contains("crates.io: rmcp 3.4.0")
+            && readme.contains("MCP server target for this scaffold: `rmcp 3.5.0`")
+            && readme.contains("crates.io: rmcp 3.5.0")
             && readme.contains("Scaffold shell: `mcp`")
             && readme.contains("--http")
             && !readme.contains("solverforge-ui"),
