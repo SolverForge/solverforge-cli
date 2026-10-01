@@ -5,30 +5,31 @@ Every `solverforge generate constraint <id> --<pattern> [--hard|--soft]` writes
 blocks) and, for web shells, `static/sf-config.json`. Do not wire constraints by
 hand.
 
-The generated file is a **stub**: a real `ConstraintFactory` call and placeholder
-functions that `panic!`. Its imports, entity type, scalar variable, and fact type
-are selected from the **first** entity, first scalar variable, and first fact in
-the model. In any multi-collection model, replace those generated choices with
-the collections the constraint actually reads. Then replace the placeholders
-and fix the stream source.
+The generated file is a **stub**: a real `ConstraintFactory` call streaming from
+the generated collection accessors, plus placeholder functions that `panic!`.
+Its imports, entity type, scalar variable, and fact type are selected from the
+**first** entity, first scalar variable, and first fact in the model. In any
+multi-collection model, replace those generated choices with the collections the
+constraint actually reads. Then replace the placeholders.
 
-## Two mandatory edits
+## One mandatory edit
 
 1. **Real logic.** Replace every `panic!(...)` placeholder body.
-2. **Generated accessor as the source.** Replace `fn entity_items` / `fn
-   fact_items` with the `#[planning_solution]`-generated accessors.
+
+The stream sources need no swap: every skeleton already streams from the
+`#[planning_solution]`-generated accessors.
 
 ### Why the source matters
 
 `#[planning_solution]` generates `Plan::tasks()`, `Plan::resources()`, etc. — one
 public accessor per collection. Each carries a `ChangeSource`
-(`Descriptor(i)` for planning entities, `Static` for facts/list elements). The
-skeleton's hand-written `fn entity_items(solution: &Plan) -> &[Task]` has
+(`Descriptor(i)` for planning entities, `Static` for facts/list elements). A
+hand-written extractor such as `fn entity_items(solution: &Plan) -> &[Task]` has
 `ChangeSource::Unknown`.
 
-- Unary and reward streams work with `Unknown`.
-- Joins, self-joins, `group_by`, complement, and projection **panic at solve
-  time** with `source Unknown cannot localize entity indexes`.
+- No pattern works over `Unknown` at solve time: `initialize` evaluates, but
+  the first solver-applied move panics on `on_insert`/`on_retract` — unary and
+  reward included — with `source Unknown cannot localize entity indexes`.
 
 So use `Plan::<collection>()` everywhere and delete the extractor functions:
 

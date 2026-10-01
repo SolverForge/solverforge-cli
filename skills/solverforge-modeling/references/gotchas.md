@@ -71,11 +71,26 @@ read. See `problem-modeling.md`.
 
 ## The localizing-source trap
 
-The single most common runtime failure. Hand-written
-`fn entity_items(solution: &Plan) -> &[T]` has `ChangeSource::Unknown`; any join,
-self-join, `group_by`, complement, or projection over it panics with
-`source Unknown cannot localize entity indexes`. Always use the generated
-`Plan::<collection>()` accessors. See `constraint-patterns.md`.
+The single most common runtime failure. A hand-written
+`fn entity_items(solution: &Plan) -> &[T]` has `ChangeSource::Unknown`; any
+enabled constraint over it panics on the first solver-applied move — any
+pattern, unary and reward included — with
+`source Unknown cannot localize entity indexes`. The generated skeleton already
+streams from the `Plan::<collection>()` accessors; keep it that way and never
+swap in a hand-written extractor. See `constraint-patterns.md`.
+
+## Nearby selectors require nearby hooks
+
+`nearby_change_move_selector` / `nearby_swap_move_selector` in `solver.toml`
+compile only when the targeted scalar variable declares nearby hooks
+(`nearby_value_candidates` / `nearby_entity_candidates`; the matching distance
+meters are optional). A solver policy copied from an app that declares them —
+the hospital example does — fails on a hook-less model with
+`<Entity>.<variable> does not provide required nearby scalar value source`.
+Either drop the nearby selector blocks (the default policy then emits ordinary
+change/swap moves) or regenerate the variable with
+`solverforge generate variable ... --nearby-value-candidates <fn>
+--nearby-entity-candidates <fn>` and implement the hook functions.
 
 ## Never omit the constraint pattern flag
 

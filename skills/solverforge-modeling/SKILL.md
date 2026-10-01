@@ -198,25 +198,24 @@ Patterns: `--unary --pair --join --balance --reward --runs --presence
 
 ### The localizing-source rule (read this even if you read nothing else)
 
-The generated skeleton is a **compiling stub full of `panic!` placeholders**. Two
-things must change before it is a real constraint:
-
-1. Replace every placeholder function body with real domain logic.
-2. **Use the generated collection accessor as the stream source.**
+The generated skeleton is a **compiling stub full of `panic!` placeholders**.
+Replace every placeholder function body with real domain logic before enabling
+the constraint. The stream sources are already correct: the skeleton streams
+from the `#[planning_solution]`-generated collection accessors, never from a
+hand-written extractor.
 
 `#[planning_solution]` generates a public associated accessor for each
 collection: `Plan::tasks()` for `#[planning_entity_collection] pub tasks:
 Vec<Task>`, and `Plan::resources()` for `#[problem_fact_collection]`. These
-carry the change-source metadata the incremental engine needs. The skeleton
-instead defines `fn entity_items(solution: &Plan) -> &[Task]`, whose source is
-`ChangeSource::Unknown`.
+carry the change-source metadata the incremental engine needs. A hand-written
+`fn entity_items(solution: &Plan) -> &[Task]` has `ChangeSource::Unknown`:
 
-- `for_each`-only streams (unary, reward) happen to tolerate `Unknown`.
-- **Joins, self-joins, `group_by`, complement, and projected streams do not.**
-  They panic during the solve with:
+- `initialize` (full evaluation) tolerates `Unknown`, but the first
+  solver-applied move calls `on_insert`/`on_retract`, and **every** pattern —
+  unary and reward included — panics there with:
   `constraint <name> received descriptor <n>, but source Unknown cannot localize entity indexes`.
 
-So wire **every** stream through the generated accessor and delete the
+So wire **every** stream through the generated accessor — never introduce a
 hand-written extractor:
 
 ```rust
@@ -228,9 +227,9 @@ use solverforge::IncrementalConstraint;
 /// HARD: a task's demand must not exceed its assigned resource capacity.
 pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
     ConstraintFactory::<Plan, HardSoftScore>::new()
-        .for_each(Plan::tasks())              // <- generated accessor, not entity_items
+        .for_each(Plan::tasks())
         .join((
-            Plan::resources(),                // <- generated accessor, not fact_items
+            Plan::resources(),
             equal_bi(entity_join_key, fact_join_key),
         ))
         .penalize(hard_weight(join_weight))
