@@ -45,6 +45,14 @@ pub(crate) fn generate_skeleton(
     let fact_field = fact.map(|f| f.field_name.as_str()).unwrap_or("facts");
     let fact_type = fact.map(|f| f.item_type.as_str()).unwrap_or("Fact");
 
+    // `#[planning_solution]` generates an associated accessor per collection
+    // (`Plan::tasks()`, `Plan::resources()`, ...). Streaming through it carries
+    // the ChangeSource metadata the incremental engine needs to localize
+    // per-move updates; a hand-written extractor has `ChangeSource::Unknown`
+    // and panics on the first solver-applied move.
+    let entity_source = format!("{solution_type}::{entity_field}()");
+    let fact_source = format!("{solution_type}::{fact_field}()");
+
     // Build import line(s)
     let imports = match pattern {
         Pattern::Join | Pattern::ProjectedGroup => {
@@ -110,16 +118,12 @@ pub(crate) fn generate_skeleton(
             (
                 format!(
                     r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
 {action}
         .named("{constraint_name}")"#
                 ),
                 format!(
                     r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
 
 fn unary_condition(_entity: &{entity_type}) -> bool {{
     panic!("replace placeholder condition before enabling this constraint")
@@ -139,17 +143,13 @@ fn unary_weight(entity: &{entity_type}) -> {score_type} {{
         Pattern::Pair => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .join(joiner::equal({planning_var}_join_key))
         .penalize({pair_penalty})
         .named("{constraint_name}")"#
             ),
             format!(
                 r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
 
 fn {planning_var}_join_key(entity: &{entity_type}) -> Option<usize> {{
     entity.{planning_var}
@@ -172,9 +172,9 @@ fn pair_weight(left: &{entity_type}, right: &{entity_type}) -> {score_type} {{
         Pattern::Join => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .join((
-            fact_items,
+            {fact_source},
             equal_bi(
                 entity_join_key,
                 fact_join_key,
@@ -185,14 +185,6 @@ fn pair_weight(left: &{entity_type}, right: &{entity_type}) -> {score_type} {{
             ),
             format!(
                 r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
-
-fn fact_items(solution: &{solution_type}) -> &[{fact_type}] {{
-    solution.{fact_field}.as_slice()
-}}
 
 fn entity_join_key(entity: &{entity_type}) -> Option<usize> {{
     entity.{planning_var}
@@ -219,7 +211,7 @@ fn join_weight(entity: &{entity_type}, fact: &{fact_type}) -> {score_type} {{
         Pattern::Balance => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .group_by(
             balance_scope,
             load_balance(balance_group_key, balance_metric),
@@ -229,10 +221,6 @@ fn join_weight(entity: &{entity_type}, fact: &{fact_type}) -> {score_type} {{
             ),
             format!(
                 r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
 
 fn balance_scope(_entity: &{entity_type}) -> usize {{
     0
@@ -263,16 +251,12 @@ fn balance_weight(scope: &usize, load: &LoadBalance<Option<usize>>) -> {score_ty
         Pattern::Reward => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .reward(reward_weight)
         .named("{constraint_name}")"#
             ),
             format!(
                 r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
 
 fn reward_condition(_entity: &{entity_type}) -> bool {{
     panic!("replace placeholder reward condition before enabling this constraint")
@@ -291,7 +275,7 @@ fn reward_weight(entity: &{entity_type}) -> {score_type} {{
         Pattern::Runs => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .filter(has_{planning_var})
         .group_by(
             {planning_var}_group_key,
@@ -302,10 +286,6 @@ fn reward_weight(entity: &{entity_type}) -> {score_type} {{
             ),
             format!(
                 r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
 
 fn has_{planning_var}(entity: &{entity_type}) -> bool {{
     entity.{planning_var}.is_some()
@@ -336,7 +316,7 @@ fn runs_weight(value_idx: &usize, runs: &Runs) -> {score_type} {{
         Pattern::IndexedPresence => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .filter(has_{planning_var})
         .group_by(
             {planning_var}_group_key,
@@ -347,10 +327,6 @@ fn runs_weight(value_idx: &usize, runs: &Runs) -> {score_type} {{
             ),
             format!(
                 r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
 
 fn has_{planning_var}(entity: &{entity_type}) -> bool {{
     entity.{planning_var}.is_some()
@@ -381,7 +357,7 @@ fn indexed_presence_weight(value_idx: &usize, presence: &IndexedPresence) -> {sc
         Pattern::CollectVec => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .filter(has_{planning_var})
         .group_by(
             {planning_var}_group_key,
@@ -392,10 +368,6 @@ fn indexed_presence_weight(value_idx: &usize, presence: &IndexedPresence) -> {sc
             ),
             format!(
                 r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
 
 fn has_{planning_var}(entity: &{entity_type}) -> bool {{
     entity.{planning_var}.is_some()
@@ -426,14 +398,14 @@ fn collected_values_weight(value_idx: &usize, items: &CollectedVec<usize>) -> {s
         Pattern::GroupComplement => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .filter(has_{planning_var})
         .group_by(
             {planning_var}_group_key,
             count(),
         )
         .complement(
-            fact_items,
+            {fact_source},
             complement_group_key,
             complement_default_count,
         )
@@ -442,14 +414,6 @@ fn collected_values_weight(value_idx: &usize, items: &CollectedVec<usize>) -> {s
             ),
             format!(
                 r#"
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
-
-fn fact_items(solution: &{solution_type}) -> &[{fact_type}] {{
-    solution.{fact_field}.as_slice()
-}}
 
 fn has_{planning_var}(entity: &{entity_type}) -> bool {{
     entity.{planning_var}.is_some()
@@ -484,9 +448,9 @@ fn group_complement_weight(key: &usize, count: &usize) -> {score_type} {{
         Pattern::ProjectedGroup => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
-        .for_each(entity_items)
+        .for_each({entity_source})
         .join((
-            fact_items,
+            {fact_source},
             equal_bi(
                 entity_join_key,
                 fact_join_key,
@@ -505,14 +469,6 @@ fn group_complement_weight(key: &usize, count: &usize) -> {score_type} {{
 
 struct ProjectedGroupEntry {{
     group_key: usize,
-}}
-
-fn entity_items(solution: &{solution_type}) -> &[{entity_type}] {{
-    solution.{entity_field}.as_slice()
-}}
-
-fn fact_items(solution: &{solution_type}) -> &[{fact_type}] {{
-    solution.{fact_field}.as_slice()
 }}
 
 fn entity_join_key(entity: &{entity_type}) -> Option<usize> {{

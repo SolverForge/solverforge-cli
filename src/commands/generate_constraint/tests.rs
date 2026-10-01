@@ -446,7 +446,7 @@ fn test_generate_skeleton_unary_hard() {
         "no_overlap",
         Some(&domain),
     );
-    assert!(result.contains(".for_each(entity_items)"));
+    assert!(result.contains(".for_each(EmployeeSchedule::shifts())"));
     assert!(result.contains("<HardSoftDecimalScore as Score>::one_hard()"));
     assert!(result.contains("HARD:"));
     assert!(result.contains(".penalize(hard_weight(unary_weight))"));
@@ -488,7 +488,7 @@ fn test_generate_skeleton_pair_hard() {
         "no_overlap",
         Some(&domain),
     );
-    assert!(result.contains(".for_each(entity_items)"));
+    assert!(result.contains(".for_each(EmployeeSchedule::shifts())"));
     assert!(result.contains(".join(joiner::equal(employee_idx_join_key))"));
     assert!(result.contains(".penalize(hard_weight(pair_weight))"));
     assert!(result.contains(".named(\"no_overlap\")"));
@@ -533,7 +533,7 @@ fn test_generate_skeleton_join_hard() {
         Some(&domain),
     );
     assert!(result.contains("equal_bi"));
-    assert!(result.contains("employees.as_slice()"));
+    assert!(result.contains("EmployeeSchedule::employees()"));
     assert!(result.contains("Employee"));
     assert!(result.contains("entity_join_key"));
     assert!(result.contains("fact_join_key"));
@@ -681,6 +681,57 @@ fn test_grouped_skeletons_use_weight_closures_instead_of_post_group_filters() {
         );
         assert!(result.contains("<HardSoftScore as Score>::zero()"));
         assert!(result.contains(".named(\"advanced\")"));
+        syn::parse_file(&result).expect("generated skeleton should parse as Rust");
+    }
+}
+
+#[test]
+fn test_skeletons_wire_generated_collection_accessors_as_stream_source() {
+    let domain = grouped_skeleton_domain();
+
+    for pattern in [
+        Pattern::Unary,
+        Pattern::Pair,
+        Pattern::Join,
+        Pattern::Balance,
+        Pattern::Reward,
+        Pattern::Runs,
+        Pattern::IndexedPresence,
+        Pattern::CollectVec,
+        Pattern::GroupComplement,
+        Pattern::ProjectedGroup,
+    ] {
+        let result = generate_skeleton(
+            "wired",
+            pattern,
+            false,
+            "EmployeeSchedule",
+            "HardSoftScore",
+            "wired",
+            Some(&domain),
+        );
+
+        assert!(
+            result.contains(".for_each(EmployeeSchedule::shifts())"),
+            "{pattern:?} must stream from the generated entity accessor: {result}"
+        );
+        assert!(
+            !result.contains("fn entity_items"),
+            "{pattern:?} must not emit a hand-written entity extractor: {result}"
+        );
+        if matches!(
+            pattern,
+            Pattern::Join | Pattern::GroupComplement | Pattern::ProjectedGroup
+        ) {
+            assert!(
+                result.contains("EmployeeSchedule::employees()"),
+                "{pattern:?} must stream facts from the generated fact accessor: {result}"
+            );
+            assert!(
+                !result.contains("fn fact_items"),
+                "{pattern:?} must not emit a hand-written fact extractor: {result}"
+            );
+        }
         syn::parse_file(&result).expect("generated skeleton should parse as Rust");
     }
 }
