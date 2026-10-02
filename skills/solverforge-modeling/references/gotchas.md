@@ -22,9 +22,10 @@ add facts/entities/variables.
 
 ## `src/data/data_seed.rs` is compiler-owned and aggressively regenerated
 
-Domain-shape commands such as `generate fact/entity/variable` re-render
-`data_seed.rs` from the current structs and demo sizes; constraint-only changes
-do not. Hand edits are lost on the next domain-shape change.
+Domain-shape commands such as `generate fact/entity/variable` and their
+`destroy` counterparts re-render `data_seed.rs` from the current structs and
+demo sizes; constraint-only changes do not. Hand edits are lost on the next
+domain-shape change.
 - Generated values are index-based samples, not domain data.
 - `usize` samples are `idx + 1` while scalar variable indices are `idx` (0-based).
   Joins that compare a scalar index to a `usize` slot are off by one unless you
