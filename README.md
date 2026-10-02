@@ -1,5 +1,7 @@
 # solverforge-cli
 
+<img src="docs/assets/solverforge-cli-mascot.png" width="180" alt="solverforge-cli mascot: a faceted jade serpent-dragon coiled around a terminal">
+
 Default entry point for new SolverForge projects.
 
 Use this CLI to scaffold, grow, and validate SolverForge applications. The CLI
