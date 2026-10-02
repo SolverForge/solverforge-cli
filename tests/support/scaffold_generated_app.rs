@@ -1,6 +1,7 @@
 use crate::dependency_overrides::{
     apply_generated_project_dependency_overrides, DependencyOverrideMode, USE_LOCAL_PATCHES_ENV,
 };
+use crate::network_retry::cargo_with_network_retry;
 use reqwest::blocking::Client;
 use serde_json::Value;
 use std::fs;
@@ -89,11 +90,7 @@ impl ScaffoldGeneratedApp {
 
     pub fn cargo_check(&self, label: &str) {
         self.phase(label);
-        let output = Command::new("cargo")
-            .arg("check")
-            .current_dir(&self.project_dir)
-            .output()
-            .expect("failed to run cargo check");
+        let output = cargo_with_network_retry(&self.project_dir, &["check"], "cargo check");
         self.record_command("cargo-check", &output.stdout, &output.stderr);
         assert!(
             output.status.success(),
@@ -104,11 +101,11 @@ impl ScaffoldGeneratedApp {
 
     pub fn cargo_build(&mut self, label: &str) {
         self.phase(label);
-        let output = Command::new("cargo")
-            .args(["build", "--message-format=json-render-diagnostics"])
-            .current_dir(&self.project_dir)
-            .output()
-            .expect("failed to run cargo build");
+        let output = cargo_with_network_retry(
+            &self.project_dir,
+            &["build", "--message-format=json-render-diagnostics"],
+            "cargo build",
+        );
         self.record_command("cargo-build", &output.stdout, &output.stderr);
         assert!(
             output.status.success(),

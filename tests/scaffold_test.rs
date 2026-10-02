@@ -8,12 +8,15 @@ use std::process::Command;
 
 #[path = "support/dependency_overrides.rs"]
 mod dependency_overrides;
+#[path = "support/network_retry.rs"]
+mod network_retry;
 #[path = "support/scaffold_generated_app.rs"]
 mod scaffold_generated_app;
 
 use dependency_overrides::{
     apply_generated_project_dependency_overrides, DependencyOverrideMode, USE_LOCAL_PATCHES_ENV,
 };
+use network_retry::cargo_with_network_retry;
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
 const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.19.7";
@@ -771,11 +774,11 @@ fn test_new_api_shell_excludes_frontend_assets() {
         "api shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
 
-    let output = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .output()
-        .expect("failed to run generated api shell cargo check");
+    let output = cargo_with_network_retry(
+        &project_dir,
+        &["check"],
+        "failed to run generated api shell cargo check",
+    );
     assert!(
         output.status.success(),
         "generated api shell cargo check failed\nstdout:\n{}\nstderr:\n{}",
@@ -877,11 +880,11 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         "cli shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
 
-    let output = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .output()
-        .expect("failed to run generated cli shell cargo check");
+    let output = cargo_with_network_retry(
+        &project_dir,
+        &["check"],
+        "failed to run generated cli shell cargo check",
+    );
     assert!(
         output.status.success(),
         "generated cli shell cargo check failed\nstdout:\n{}\nstderr:\n{}",
@@ -889,11 +892,11 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let output = Command::new("cargo")
-        .args(["run", "--quiet", "--", "demo-data", "--size", "small"])
-        .current_dir(&project_dir)
-        .output()
-        .expect("failed to run generated cli shell");
+    let output = cargo_with_network_retry(
+        &project_dir,
+        &["run", "--quiet", "--", "demo-data", "--size", "small"],
+        "failed to run generated cli shell",
+    );
     assert!(
         output.status.success() && String::from_utf8_lossy(&output.stdout).contains("\"score\""),
         "generated cli shell should print demo data JSON\nstdout:\n{}\nstderr:\n{}",
@@ -1131,11 +1134,11 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
         "mcp shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
 
-    let output = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .output()
-        .expect("failed to run generated mcp shell cargo check");
+    let output = cargo_with_network_retry(
+        &project_dir,
+        &["check"],
+        "failed to run generated mcp shell cargo check",
+    );
     assert!(
         output.status.success(),
         "generated mcp shell cargo check failed\nstdout:\n{}\nstderr:\n{}",
@@ -1214,14 +1217,11 @@ fn test_new_neutral_cargo_check_passes() {
             eprintln!("using explicit local Cargo patches for scaffold validation");
         }
     }
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
 
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed on scaffolded neutral project"
     );
 }
@@ -1451,14 +1451,11 @@ fn test_generate_solution_replaces_neutral_scaffold_and_cargo_check_passes() {
         solver_service
     );
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
 
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after replacing the neutral solution"
     );
 }
@@ -1566,14 +1563,11 @@ fn test_generate_score_rewrites_constraints_and_contract_files() {
         "app spec should record the new score: {app_spec}"
     );
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
 
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after generate score"
     );
 }
@@ -2445,14 +2439,11 @@ fn test_destroy_entity_container_on_list_template_keeps_project_buildable() {
         "generate data should resync compiler-owned sample data after destroy"
     );
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
 
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after destroying the list-template entity"
     );
 }
@@ -2754,14 +2745,11 @@ pub(super) fn resource_priority(_plan: &Plan, _task: &Task, _resource: usize) ->
     );
     std::fs::write(&task_path, task_rs).expect("failed to add scalar hook functions");
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
 
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after adding scalar hook functions"
     );
 }
@@ -2831,11 +2819,8 @@ fn test_generate_countable_scalar_range_projects_renders_and_compiles() {
     assert_eq!(ui_model["views"][0]["sourcePlural"], "");
 
     assert!(
-        Command::new("cargo")
-            .arg("check")
-            .current_dir(&project_dir)
-            .status()
-            .expect("failed to run cargo check")
+        cargo_with_network_retry(&project_dir, &["check"], "cargo check")
+            .status
             .success(),
         "countable scalar project failed cargo check"
     );
@@ -3085,12 +3070,12 @@ fn test_destroy_hooked_scalar_variable_removes_multiline_attribute() {
         "destroy should sync UI model without removed scalar hook metadata: {ui_model}"
     );
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
-    assert!(check_status.success(), "cargo check failed after destroy");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
+    assert!(
+        check_status.status.success(),
+        "cargo check failed after destroy"
+    );
 }
 
 #[test]
@@ -3306,13 +3291,10 @@ fn test_scalar_group_destroy_preserves_shared_stubs_and_rejects_candidate_hooks(
         "rejected candidate group should not be written: {plan_rs}"
     );
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after destroying shared-hook scalar groups"
     );
 }
@@ -3424,13 +3406,10 @@ fn test_scalar_group_solver_config_graph_contract_in_generated_app() {
     );
 
     assert_cli_success(&project_dir, &["check"], "solverforge check");
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after scalar group solver config generation"
     );
 
@@ -3626,13 +3605,10 @@ fn test_basic_constraint_skeletons_compile_in_generated_app() {
         );
     }
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed for generated basic skeleton constraints"
     );
 }
@@ -3725,13 +3701,10 @@ fn test_grouped_constraint_skeletons_compile_in_generated_app() {
         "projected grouped skeleton should use projection and grouped weight scoring: {projected}"
     );
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed for generated grouped skeleton constraints"
     );
 }
@@ -3864,14 +3837,11 @@ fn test_generate_constraint_workflow_cargo_check_passes() {
 
     assert!(generate_status.success(), "constraint generation failed");
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
 
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after generate constraint workflow"
     );
 }
@@ -4002,14 +3972,11 @@ fn test_generate_data_creates_direct_compiler_owned_data_module() {
         spec
     );
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
 
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after generate data workflow"
     );
 }
@@ -4088,14 +4055,11 @@ pub fn custom_source() -> &'static str {
         lib_rs
     );
 
-    let check_status = Command::new("cargo")
-        .arg("check")
-        .current_dir(&project_dir)
-        .status()
-        .expect("failed to run cargo check");
+    let check_status =
+        cargo_with_network_retry(&project_dir, &["check"], "failed to run cargo check");
 
     assert!(
-        check_status.success(),
+        check_status.status.success(),
         "cargo check failed after preserving the custom data wrapper and regenerating the seed"
     );
 }

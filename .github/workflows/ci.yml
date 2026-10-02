@@ -51,6 +51,9 @@ jobs:
       - name: Run scaffold contract tests
         run: cargo test --locked --test scaffold_test -- --nocapture --test-threads=1
 
+      - name: Run network-retry tests
+        run: cargo test --locked --test network_retry_test
+
   integration:
     if: ${{ github.server_url == 'https://github.com' }}
     name: Integration Tests

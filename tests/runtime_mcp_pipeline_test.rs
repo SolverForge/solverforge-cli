@@ -15,6 +15,8 @@ mod mcp_client;
 mod mcp_generated_app;
 #[path = "support/mixed_solution.rs"]
 mod mixed_solution;
+#[path = "support/network_retry.rs"]
+mod network_retry;
 
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;

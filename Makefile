@@ -112,9 +112,10 @@ test-e2e: banner
 		(printf -- "\n$(RED)$(CROSS) Playwright tests failed$(RESET)\n\n" && exit 1)
 
 test-support:
-	@printf -- "$(PROGRESS) Running installer and skill-integrity tests...\n"
+	@printf -- "$(PROGRESS) Running installer, skill-integrity, and retry tests...\n"
 	@cargo test --locked --test install_skill_test --quiet && \
 		cargo test --locked --test skill_references_test --quiet && \
+		cargo test --locked --test network_retry_test --quiet && \
 		printf -- "$(GREEN)$(CHECK) Support tests passed$(RESET)\n" || \
 		(printf -- "$(RED)$(CROSS) Support tests failed$(RESET)\n" && exit 1)
 
@@ -125,6 +126,7 @@ test-full: banner
 	@printf -- "$(PROGRESS) Phase 2/5: installer and skill-integrity tests...\n"
 	@cargo test --locked --test install_skill_test
 	@cargo test --locked --test skill_references_test
+	@cargo test --locked --test network_retry_test
 	@printf -- "$(PROGRESS) Phase 3/5: scaffold contract tests...\n"
 	@cargo test --test scaffold_test -- --nocapture --test-threads=1
 	@printf -- "$(PROGRESS) Phase 4/5: runtime pipeline tests...\n"
