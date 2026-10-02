@@ -5,7 +5,7 @@ use crate::commands::generate_constraint::remove_constraint_from_source;
 use crate::commands::generate_constraint::{domain::DomainModel, parse_domain};
 use crate::commands::generate_domain::{find_file_for_type, snake_to_pascal};
 use crate::commands::generate_domain::{
-    remove_domain_mod_entry_source, unwire_collection_from_solution_source,
+    remove_domain_mod_entry_source, sync_demo_data_module, unwire_collection_from_solution_source,
 };
 use crate::error::{CliError, CliResult};
 use crate::model_contract;
@@ -68,6 +68,8 @@ pub fn run_solution(skip_confirm: bool) -> CliResult {
         source: e,
     })?;
     app_spec::sync_from_project()?;
+    // Keep the compiler-owned demo data in sync after the domain changed.
+    sync_demo_data_module()?;
 
     output::print_remove(&format!("src/domain/{}.rs", file_name));
     output::print_update("src/domain/mod.rs");
@@ -160,6 +162,8 @@ pub fn run_entity(name: &str, skip_confirm: bool) -> CliResult {
     })?;
     crate::commands::sf_config::remove_entity(&snake)?;
     app_spec::sync_from_project()?;
+    // Keep the compiler-owned demo data in sync after the domain changed.
+    sync_demo_data_module()?;
 
     output::print_remove(&format!("src/domain/{}.rs", file_name));
     output::print_update("src/domain/mod.rs");
@@ -249,6 +253,8 @@ pub fn run_fact(name: &str, skip_confirm: bool) -> CliResult {
     })?;
     crate::commands::sf_config::remove_fact(&snake)?;
     app_spec::sync_from_project()?;
+    // Keep the compiler-owned demo data in sync after the domain changed.
+    sync_demo_data_module()?;
 
     output::print_remove(&format!("src/domain/{}.rs", file_name));
     output::print_update("src/domain/mod.rs");
@@ -347,6 +353,8 @@ pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
     })?;
     crate::commands::sf_config::remove_constraint(constraint_id.as_str())?;
     app_spec::sync_from_project()?;
+    // Keep the compiler-owned demo data in sync after the constraint set changed.
+    sync_demo_data_module()?;
 
     output::print_remove(&file_path.display().to_string());
     output::print_update("src/constraints/mod.rs");

@@ -8,6 +8,28 @@ use crate::list_variable_metadata::ListVariableMetadata;
 use crate::managed_block;
 use crate::scalar_variable_hooks::ScalarVariableHooks;
 use crate::test_support;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
+struct CwdGuard {
+    original_dir: PathBuf,
+}
+
+impl CwdGuard {
+    fn enter(path: &Path) -> Self {
+        let original_dir = std::env::current_dir().expect("failed to read current dir");
+        std::env::set_current_dir(path).expect("failed to enter temp dir");
+        Self { original_dir }
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        std::env::set_current_dir(&self.original_dir).expect("failed to restore current dir");
+    }
+}
 
 fn generate_builtin_entity(
     pascal: &str,
@@ -847,4 +869,243 @@ pub fn custom_source() -> &'static str {
     let lib = std::fs::read_to_string(tmp.path().join("src/lib.rs"))
         .expect("failed to read rewritten lib");
     assert!(lib.contains("Schedule solution"));
+}
+
+fn write_score_rewrite_project(score: &str) {
+    fs::create_dir_all("src/domain").expect("failed to create domain dir");
+    fs::create_dir_all("src/constraints").expect("failed to create constraints dir");
+    fs::create_dir_all("src/api").expect("failed to create api dir");
+    fs::create_dir_all("src/solver").expect("failed to create solver dir");
+    fs::create_dir_all("src/data").expect("failed to create data dir");
+    fs::write(
+        "src/domain/mod.rs",
+        r#"solverforge::planning_model! {
+    root = "src/domain";
+
+    // @solverforge:begin domain-exports
+mod shift;
+mod plan;
+
+pub use shift::Shift;
+pub use plan::Plan;
+// @solverforge:end domain-exports
+}
+"#,
+    )
+    .expect("failed to write domain mod");
+    fs::write(
+        "src/domain/shift.rs",
+        r#"use serde::{Deserialize, Serialize};
+use solverforge::prelude::*;
+
+#[planning_entity]
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Shift {
+    #[planning_id]
+    pub id: String,
+}
+
+impl Shift {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
+    }
+}
+"#,
+    )
+    .expect("failed to write shift");
+    fs::write(
+        "src/domain/plan.rs",
+        format!(
+            r#"use serde::{{Deserialize, Serialize}};
+use solverforge::prelude::*;
+
+// @solverforge:begin solution-imports
+use super::Shift;
+// @solverforge:end solution-imports
+
+#[planning_solution(
+    constraints = "crate::constraints::create_constraints",
+    solver_toml = "../../solver.toml"
+)]
+#[derive(Serialize, Deserialize)]
+pub struct Plan {{
+    // @solverforge:begin solution-collections
+    #[planning_entity_collection]
+    pub shifts: Vec<Shift>,
+    // @solverforge:end solution-collections
+    #[planning_score]
+    pub score: Option<{score}>,
+}}
+
+impl Plan {{
+    pub fn new(
+        // @solverforge:begin solution-constructor-params
+        shifts: Vec<Shift>,
+        // @solverforge:end solution-constructor-params
+    ) -> Self {{
+        Self {{
+            // @solverforge:begin solution-constructor-init
+            shifts,
+            // @solverforge:end solution-constructor-init
+            score: None,
+        }}
+    }}
+}}
+"#
+        ),
+    )
+    .expect("failed to write plan");
+    fs::write(
+        "src/constraints/mod.rs",
+        format!(
+            r#"use crate::domain::Plan;
+use solverforge::prelude::*;
+
+pub use self::assemble::create_constraints;
+
+// @solverforge:begin constraint-modules
+mod all_assigned;
+// @solverforge:end constraint-modules
+
+mod assemble {{
+    use super::*;
+
+    pub fn create_constraints() -> impl ConstraintSet<Plan, {score}> {{
+        // @solverforge:begin constraint-calls
+        all_assigned::constraint()
+        // @solverforge:end constraint-calls
+    }}
+}}
+"#
+        ),
+    )
+    .expect("failed to write constraints mod");
+    fs::write(
+        "src/constraints/all_assigned.rs",
+        format!(
+            r#"use crate::domain::{{Plan, Shift}};
+use solverforge::prelude::*;
+
+pub fn constraint() -> impl Constraint<Plan, {score}> {{
+    ConstraintFactory::<Plan, {score}>::new()
+}}
+"#
+        ),
+    )
+    .expect("failed to write all_assigned");
+    fs::write(
+        "src/api/dto.rs",
+        format!(
+            "use solverforge::{{{score}, SolverStatus}};\nuse crate::domain::Plan;\npub fn dto(status: &SolverStatus<{score}>) {{}}\n"
+        ),
+    )
+    .expect("failed to write dto");
+    fs::write(
+        "src/solver/service.rs",
+        format!(
+            "use solverforge::{{{score}, SolverEventMetadata, SolverStatus}};\nuse crate::domain::Plan;\nfn status() -> SolverStatus<{score}> {{}}\nfn event(metadata: &SolverEventMetadata<{score}>) {{}}\n"
+        ),
+    )
+    .expect("failed to write service");
+    fs::write(
+        "src/lib.rs",
+        format!("/* Plan solution */\nuse solverforge::{score};\npub mod domain;\n"),
+    )
+    .expect("failed to write lib");
+    fs::write(
+        "src/data/data_seed.rs",
+        "// @generated by solverforge-cli: data v1\n",
+    )
+    .expect("failed to write data seed");
+    fs::write(
+        "src/data/mod.rs",
+        "mod data_seed;\n\npub use data_seed::{available_demo_data, default_demo_data, generate, DemoData};\n",
+    )
+    .expect("failed to write data mod");
+    fs::write("solver.toml", "[solver]\nrun_class = \"test\"\n")
+        .expect("failed to write solver.toml");
+}
+
+fn score_rewrite_assertions(paths: &[&str], new_score: &str, old_score: &str) {
+    for path in paths {
+        let content =
+            fs::read_to_string(path).unwrap_or_else(|err| panic!("failed to read {path}: {err}"));
+        assert!(
+            content.contains(new_score),
+            "{path} should reference the new score: {content}"
+        );
+        assert!(
+            !content.contains(old_score),
+            "{path} should not retain the old score: {content}"
+        );
+    }
+}
+
+#[test]
+fn generate_score_rewrites_constraints_and_contract_files() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+
+    write_score_rewrite_project("HardSoftScore");
+
+    super::run_score("HardMediumSoftScore")
+        .expect("generate score should rewrite every score-typed surface");
+
+    score_rewrite_assertions(
+        &[
+            "src/domain/plan.rs",
+            "src/constraints/mod.rs",
+            "src/constraints/all_assigned.rs",
+            "src/api/dto.rs",
+            "src/solver/service.rs",
+            "src/lib.rs",
+        ],
+        "HardMediumSoftScore",
+        "HardSoftScore",
+    );
+    let app_spec = fs::read_to_string("solverforge.app.toml")
+        .expect("failed to read app spec after score change");
+    assert!(
+        app_spec.contains("HardMediumSoftScore"),
+        "app spec should record the new score: {app_spec}"
+    );
+}
+
+#[test]
+fn generate_score_is_idempotent_and_failure_safe() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+
+    write_score_rewrite_project("HardSoftScore");
+
+    super::run_score("HardSoftScore").expect("same-score run should be a no-op");
+    let constraints_mod =
+        fs::read_to_string("src/constraints/mod.rs").expect("failed to read constraints mod");
+    assert!(
+        constraints_mod.contains("HardSoftScore")
+            && !constraints_mod.contains("HardMediumSoftScore"),
+        "same-score run must not mutate constraint files: {constraints_mod}"
+    );
+
+    fs::write("src/api/dto.rs", "pub struct Broken {").expect("failed to break dto");
+    super::run_score("HardSoftDecimalScore")
+        .expect("an unparseable auxiliary file must not abort the score rewrite");
+    let dto = fs::read_to_string("src/api/dto.rs").expect("failed to read dto");
+    assert_eq!(
+        dto, "pub struct Broken {",
+        "a syntactically broken auxiliary file should be left alone"
+    );
+    score_rewrite_assertions(
+        &[
+            "src/domain/plan.rs",
+            "src/constraints/mod.rs",
+            "src/constraints/all_assigned.rs",
+            "src/solver/service.rs",
+            "src/lib.rs",
+        ],
+        "HardSoftDecimalScore",
+        "HardSoftScore",
+    );
 }

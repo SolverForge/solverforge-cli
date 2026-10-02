@@ -1464,6 +1464,121 @@ fn test_generate_solution_replaces_neutral_scaffold_and_cargo_check_passes() {
 }
 
 #[test]
+fn test_generate_score_rewrites_constraints_and_contract_files() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let project_name = "test_generate_score_rewrites_all_surfaces";
+
+    let scaffold_status = cli_command()
+        .args([
+            "new",
+            project_name,
+            "--skip-git",
+            "--skip-readme",
+            "--quiet",
+        ])
+        .current_dir(tmp.path())
+        .status()
+        .expect("failed to run solverforge new");
+
+    assert!(scaffold_status.success(), "scaffolding failed");
+
+    let project_dir = tmp.path().join(project_name);
+    apply_generated_project_dependency_overrides(&project_dir);
+
+    let seed_status = cli_command()
+        .args([
+            "generate",
+            "entity",
+            "shift",
+            "--planning-variable",
+            "resource_idx",
+        ])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate entity");
+    assert!(seed_status.success(), "generate entity failed");
+
+    let constraint_status = cli_command()
+        .args(["generate", "constraint", "all_assigned", "--unary"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to generate constraint");
+    assert!(constraint_status.success(), "generate constraint failed");
+
+    let score_status = cli_command()
+        .args(["generate", "score", "HardMediumSoftScore"])
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run solverforge generate score");
+
+    assert!(
+        score_status.status.success(),
+        "generate score failed: {}",
+        String::from_utf8_lossy(&score_status.stderr)
+    );
+
+    let constraints_dir = project_dir.join("src").join("constraints");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&constraints_dir).expect("failed to read constraints dir") {
+        let path = entry.expect("failed to read constraints entry").path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+            continue;
+        }
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            content.contains("HardMediumSoftScore"),
+            "{} should reference the new score: {content}",
+            path.display()
+        );
+        assert!(
+            !content.contains("HardSoftScore"),
+            "{} should not retain the old score: {content}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 2,
+        "expected the constraint mod plus at least one module to be rewritten"
+    );
+
+    let plan_rs =
+        std::fs::read_to_string(project_dir.join("src").join("domain").join("plan.rs")).unwrap();
+    assert!(
+        plan_rs.contains("Option<HardMediumSoftScore>"),
+        "solution should carry the new score: {plan_rs}"
+    );
+    let solver_service =
+        std::fs::read_to_string(project_dir.join("src").join("solver").join("service.rs")).unwrap();
+    assert!(
+        solver_service.contains("HardMediumSoftScore") && !solver_service.contains("HardSoftScore"),
+        "solver service should carry the new score: {solver_service}"
+    );
+    let dto_rs =
+        std::fs::read_to_string(project_dir.join("src").join("api").join("dto.rs")).unwrap();
+    assert!(
+        dto_rs.contains("HardMediumSoftScore") && !dto_rs.contains("HardSoftScore"),
+        "DTOs should carry the new score: {dto_rs}"
+    );
+    let app_spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
+    assert!(
+        app_spec.contains("HardMediumSoftScore"),
+        "app spec should record the new score: {app_spec}"
+    );
+
+    let check_status = Command::new("cargo")
+        .arg("check")
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo check");
+
+    assert!(
+        check_status.success(),
+        "cargo check failed after generate score"
+    );
+}
+
+#[test]
 fn test_generate_solution_refuses_after_domain_shape_exists() {
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let project_name = "test_generate_solution_refuses_shaped_project";

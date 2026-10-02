@@ -24,6 +24,15 @@ const NEUTRAL_SCORE_TYPE: &str = "HardSoftScore";
 const DOMAIN_EXPORTS_BLOCK: &str = "domain-exports";
 const CONSTRAINT_MODULES_BLOCK: &str = "constraint-modules";
 const CONSTRAINT_CALLS_BLOCK: &str = "constraint-calls";
+/// Generated files outside src/domain that carry the solution type or score
+/// type and must follow `generate score` / solution replacement.
+const CONTRACT_REFERENCE_PATHS: &[&str] = &[
+    "src/api/dto.rs",
+    "src/solver/service.rs",
+    "src/lib.rs",
+    "src/mcp/dto.rs",
+    "src/mcp/tasks.rs",
+];
 
 struct CollectionRewritePlan {
     solution_file: PathBuf,
@@ -449,22 +458,95 @@ pub fn run_score(score_type: &str) -> CliResult {
     }
 
     let domain = parse_domain().map_err(CliError::general)?;
-    let solution_file = find_file_for_type(domain_dir, &domain.solution_type)?;
+    if domain.score_type == score_type {
+        return Ok(());
+    }
 
-    let src = fs::read_to_string(&solution_file).map_err(|e| CliError::IoError {
+    let solution_file = find_file_for_type(domain_dir, &domain.solution_type)?;
+    let rewrites = precompute_score_rewrites(&domain, &solution_file, score_type)?;
+
+    for (path, updated) in &rewrites {
+        fs::write(path, updated).map_err(|e| CliError::IoError {
+            context: format!("failed to write {}", path.display()),
+            source: e,
+        })?;
+    }
+    for (path, _) in &rewrites {
+        output::print_update(&path.display().to_string());
+    }
+    sync_project_metadata()?;
+    Ok(())
+}
+
+/// Rewrites the score type across every score-typed surface before writing
+/// anything: the solution file, every constraints/*.rs module, and the
+/// generated contract files outside src/domain.
+fn precompute_score_rewrites(
+    domain: &DomainModel,
+    solution_file: &Path,
+    new_score: &str,
+) -> CliResult<Vec<(PathBuf, String)>> {
+    let old_score = domain.score_type.as_str();
+    let solution_src = fs::read_to_string(solution_file).map_err(|e| CliError::IoError {
         context: format!("failed to read {}", solution_file.display()),
         source: e,
     })?;
+    let new_solution_src =
+        replace_score_type(&solution_src, old_score, new_score).map_err(CliError::general)?;
 
-    let new_src = replace_score_type(&src, &domain.score_type, score_type)?;
-    fs::write(&solution_file, new_src).map_err(|e| CliError::IoError {
-        context: format!("failed to write {}", solution_file.display()),
-        source: e,
-    })?;
+    let mut rewrites = vec![(solution_file.to_path_buf(), new_solution_src)];
+    rewrites.extend(precompute_constraint_score_rewrites(old_score, new_score)?);
+    rewrites.extend(precompute_contract_score_rewrites(old_score, new_score)?);
+    Ok(rewrites)
+}
 
-    output::print_update(solution_file.to_str().unwrap());
-    sync_project_metadata()?;
-    Ok(())
+fn precompute_constraint_score_rewrites(
+    old_score: &str,
+    new_score: &str,
+) -> CliResult<Vec<(PathBuf, String)>> {
+    let constraints_dir = Path::new("src/constraints");
+    let mut rewrites = Vec::new();
+    let Ok(entries) = fs::read_dir(constraints_dir) else {
+        return Ok(rewrites);
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+            continue;
+        }
+        let src = fs::read_to_string(&path).map_err(|e| CliError::IoError {
+            context: format!("failed to read {}", path.display()),
+            source: e,
+        })?;
+        let updated = replace_score_type_source(&src, old_score, new_score);
+        if updated != src {
+            rewrites.push((path, updated));
+        }
+    }
+    rewrites.sort_by(|(left, _), (right, _)| left.cmp(right));
+    Ok(rewrites)
+}
+
+fn precompute_contract_score_rewrites(
+    old_score: &str,
+    new_score: &str,
+) -> CliResult<Vec<(PathBuf, String)>> {
+    let mut rewrites = Vec::new();
+    for path in CONTRACT_REFERENCE_PATHS {
+        let path = Path::new(path);
+        if !path.exists() {
+            continue;
+        }
+        let src = fs::read_to_string(path).map_err(|e| CliError::IoError {
+            context: format!("failed to read {}", path.display()),
+            source: e,
+        })?;
+        let updated = replace_score_type_source(&src, old_score, new_score);
+        if updated != src {
+            rewrites.push((path.to_path_buf(), updated));
+        }
+    }
+    Ok(rewrites)
 }
 
 pub fn run_data(mode: &str, size: Option<&str>) -> CliResult {
@@ -584,7 +666,7 @@ fn precompute_generated_contract_references(
     }
 
     let mut rewrites = Vec::new();
-    for path in ["src/api/dto.rs", "src/solver/service.rs", "src/lib.rs"] {
+    for path in CONTRACT_REFERENCE_PATHS {
         let path = Path::new(path);
         if !path.exists() {
             continue;
@@ -601,6 +683,18 @@ fn precompute_generated_contract_references(
     }
 
     Ok(rewrites)
+}
+
+/// Score replacement for auxiliary files (constraint modules, contract
+/// files): identifier-boundary-safe like `wiring::replace_score_type`, but
+/// non-erroring — an old score that no longer appears means the file is
+/// already current, and callers detect that by comparing against the input.
+fn replace_score_type_source(src: &str, old_score: &str, new_score: &str) -> String {
+    if old_score.chars().all(is_rust_identifier_char) {
+        replace_identifier(src, old_score, new_score)
+    } else {
+        src.replace(old_score, new_score)
+    }
 }
 
 pub(crate) fn remove_neutral_scaffold(solution_type: &str, score_type: &str) -> CliResult {
@@ -711,24 +805,41 @@ fn sync_project_metadata() -> CliResult {
     app_spec::sync_from_project().and_then(|_| sync_demo_data_module())
 }
 
-fn sync_demo_data_module() -> CliResult {
-    render_data_seed("sample", false)
+/// Best-effort data-seed re-render for destroy paths. After `destroy solution`
+/// there is no `#[planning_solution]` left, so the seed cannot reference the
+/// solution any more; skip the render instead of failing the destroy.
+pub(crate) fn sync_demo_data_module() -> CliResult {
+    let rendered = render_data_seed_source();
+    match rendered {
+        Ok(source) => write_data_seed_source(&source),
+        Err(err) if err.contains("requires exactly one #[planning_solution]") => Ok(()),
+        Err(err) => Err(CliError::general(err)),
+    }
 }
 
 fn render_data_seed(mode: &str, announce: bool) -> CliResult {
     let spec = app_spec::load()?;
     let domain = parse_domain().map_err(CliError::general)?;
-
-    let rendered = build_data_seed_source(&spec, &domain, mode)?;
-    let seed_path = Path::new("src/data/data_seed.rs");
-    fs::write(seed_path, rendered).map_err(|e| CliError::IoError {
-        context: "failed to write src/data/data_seed.rs".to_string(),
-        source: e,
-    })?;
+    let source = build_data_seed_source(&spec, &domain, mode)?;
+    write_data_seed_source(&source)?;
     if announce {
         output::print_update("src/data/data_seed.rs");
     }
     Ok(())
+}
+
+fn render_data_seed_source() -> Result<String, String> {
+    let spec = app_spec::load().map_err(|err| err.to_string())?;
+    let domain = parse_domain().map_err(|err| err.to_string())?;
+    build_data_seed_source(&spec, &domain, "sample").map_err(|err| err.to_string())
+}
+
+fn write_data_seed_source(source: &str) -> CliResult {
+    let seed_path = Path::new("src/data/data_seed.rs");
+    fs::write(seed_path, source).map_err(|e| CliError::IoError {
+        context: "failed to write src/data/data_seed.rs".to_string(),
+        source: e,
+    })
 }
 
 fn build_data_seed_source(
