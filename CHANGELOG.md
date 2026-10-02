@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.3.3](https://github.com/SolverForge/solverforge-cli/compare/v3.3.2...v3.3.3) (2026-10-02)
+
+
+### Bug Fixes
+
+* **generate:** rewrite every score surface and resync demo data on destroy a615b59
+
 ## [3.3.2](https://github.com/SolverForge/solverforge-cli/compare/v3.3.1...v3.3.2) (2026-10-01)
 
 
