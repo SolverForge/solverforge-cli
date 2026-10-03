@@ -8,6 +8,8 @@ Use this CLI to scaffold, grow, and validate SolverForge applications. The CLI
 is its own versioned product: `solverforge --version` reports the CLI package
 version and the scaffold dependency targets separately.
 
+![CLI session: change the score type, generate sample data, validate the model, and inspect the project](docs/assets/cli-grow-and-check.png)
+
 Current CLI package version: `3.3.3`.
 
 Required Rust version: `1.95` or later.
