@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in `src/app_spec.rs`, `src/countable_range.rs`, `src/error.rs`, `src/list_variable_metadata.rs`, `src/managed_block.rs`, `src/model_contract.rs`, `src/model_id.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, `src/scalar_variable_hooks.rs`, `src/solver_config.rs`, and `src/template.rs`. Integration tests live in `tests/`; their reusable generated-app harness lives in `tests/support/`, browser scenarios live in `tests/e2e/`, and scaffold/template assets live in `templates/`. The portable agent skill lives in `skills/` and is installed by `scripts/install-skill`; `.versionrc.js` configures `commit-and-tag-version` for releases.
+`src/main.rs` defines the CLI entrypoint and Clap command tree. Command implementations live in `src/commands/`; larger generators use submodules such as `src/commands/generate_constraint/` and `src/commands/generate_domain/`. Shared support code sits in `src/app_spec.rs`, `src/countable_range.rs`, `src/error.rs`, `src/list_variable_metadata.rs`, `src/managed_block.rs`, `src/model_contract.rs`, `src/model_id.rs`, `src/output.rs`, `src/rc.rs`, `src/scaffold_target.rs`, `src/scalar_variable_hooks.rs`, `src/solver_config.rs`, and `src/template.rs`. Integration tests live in `tests/`; their reusable generated-app harness lives in `tests/support/`, browser scenarios live in `tests/e2e/`, and scaffold/template assets live in `templates/`. The portable agent skill lives in `skills/` and is installed by `scripts/install-skill`; `csemver.toml` configures `csemver` for releases.
 
 ## Current Product Direction
 `solverforge-cli` is the default entry point for new SolverForge applications. Treat the CLI as its own versioned product, distinct from the runtime crates and UI assets that generated projects target.
@@ -97,14 +97,13 @@ Follow the commit style already used in history: `fix: ...`, `refactor: ...`, `s
 
 ## Releases
 
-Releases are cut with `commit-and-tag-version`, configured by the checked-in
-`.versionrc.js`. Never hand-edit `CHANGELOG.md` or a version surface the config
-owns (`Cargo.toml`, `Cargo.lock`, `package.json`, `package-lock.json`) or the
+Releases are cut with `csemver`, configured by the checked-in `csemver.toml`.
+Never hand-edit `CHANGELOG.md` or a version surface the config owns
+(`Cargo.toml`, `Cargo.lock`, `package.json`, `package-lock.json`) or the
 prose version lines in `README.md`, `AGENTS.md`, `WIREFRAME.md`, and
-`skills/solverforge-modeling/SKILL.md`. Run
-`commit-and-tag-version --release-as vX.Y.Z` (or let conventional commits pick
-the bump) instead of bumping by hand; the tool owns the release commit, the tag,
-and the changelog.
+`skills/solverforge-modeling/SKILL.md`. Run `csemver --release-as vX.Y.Z`
+(or let conventional commits pick the bump) instead of bumping by hand; the
+tool owns the release commit, the tag, and the changelog.
 
 ## Security & Configuration Tips
 Do not commit generated projects, secrets, or credentials. The pre-commit config runs `gitleaks`; keep it enabled. When tests or generated scaffolds touch published SolverForge crate versions, verify `Cargo.toml` template changes and corresponding integration tests together.

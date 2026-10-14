@@ -1,0 +1,87 @@
+# Release configuration for csemver, replacing the retired .versionrc.js
+# (commit-and-tag-version). The JS configuration channel is gone from csemver,
+# so the effective settings of the old tool carry over here natively.
+#
+# The product version is the [package] version in Cargo.toml, read with the
+# native regex updater; the match is anchored to the start of a line so it
+# cannot collide with dependency versions written inline. Cargo.lock records
+# the same number for this crate and CI builds with --locked, so it is a
+# declared surface instead of drift. package.json / package-lock.json carry
+# the npm test-harness metadata (Playwright) and the old JSON updater types
+# cover them natively.
+#
+# The prose version lines the old tool owned via JavaScript updaters become
+# regex bumps: the README/WIREFRAME line, the AGENTS.md policy bullet, and
+# the bundled agent skill's version line, so no surface can drift from the
+# package version.
+#
+# All commit types are declared explicitly; hidden types match the old
+# conventional preset so changelog rendering is unchanged in shape.
+tagPrefix = "v"
+releaseCommitMessageFormat = "chore(release): {{currentTag}}"
+commitUrlFormat = "https://github.com/SolverForge/solverforge-cli/commit/{{hash}}"
+compareUrlFormat = "https://github.com/SolverForge/solverforge-cli/compare/{{previousTag}}...{{currentTag}}"
+issueUrlFormat = "https://github.com/SolverForge/solverforge-cli/issues/{{id}}"
+
+packageFiles = [
+  { filename = "Cargo.toml", type = "regex", pattern = '^version = "([0-9]+\\.[0-9]+\\.[0-9]+)"', versionGroup = 1 },
+]
+
+[[bumpFiles]]
+filename = "Cargo.toml"
+type = "regex"
+pattern = '^version = "([0-9]+\.[0-9]+\.[0-9]+)"'
+versionGroup = 1
+
+[[bumpFiles]]
+filename = "Cargo.lock"
+type = "regex"
+pattern = '''^\[\[package\]\]
+name = "solverforge-cli"
+version = "([0-9]+\.[0-9]+\.[0-9]+)"'''
+versionGroup = 1
+
+[[bumpFiles]]
+filename = "package.json"
+type = "json"
+
+[[bumpFiles]]
+filename = "package-lock.json"
+type = "json"
+
+[[bumpFiles]]
+filename = "README.md"
+type = "regex"
+pattern = '^(Current CLI package version: `)([0-9]+\.[0-9]+\.[0-9]+)(`\.)$'
+versionGroup = 2
+
+[[bumpFiles]]
+filename = "WIREFRAME.md"
+type = "regex"
+pattern = '^(Current CLI package version: `)([0-9]+\.[0-9]+\.[0-9]+)(`\.)$'
+versionGroup = 2
+
+[[bumpFiles]]
+filename = "AGENTS.md"
+type = "regex"
+pattern = '^(- current CLI package version is `)([0-9]+\.[0-9]+\.[0-9]+)(`)$'
+versionGroup = 2
+
+[[bumpFiles]]
+filename = "skills/solverforge-modeling/SKILL.md"
+type = "regex"
+pattern = '^(This skill describes CLI `)([0-9]+\.[0-9]+\.[0-9]+)(` \(scaffold runtime target )'
+versionGroup = 2
+
+types = [
+  { type = "feat", section = "Features" },
+  { type = "fix", section = "Bug Fixes" },
+  { type = "chore", effect = "hidden" },
+  { type = "docs", effect = "hidden" },
+  { type = "style", effect = "hidden" },
+  { type = "refactor", effect = "hidden" },
+  { type = "perf", effect = "hidden" },
+  { type = "test", effect = "hidden" },
+  { type = "build", effect = "hidden" },
+  { type = "ci", effect = "hidden" },
+]
