@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.5.1](https://github.com/SolverForge/solverforge-cli/compare/v3.5.0...v3.5.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **scaffold:** target SolverForge 0.21.2 ([26468d6](https://github.com/SolverForge/solverforge-cli/commit/26468d65d29ab69c747d5016803defc5f588610b))
+
+
 ## [3.5.0](https://github.com/SolverForge/solverforge-cli/compare/v3.4.0...v3.5.0) (2026-10-14)
 
 
