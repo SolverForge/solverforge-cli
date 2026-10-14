@@ -13,7 +13,6 @@ use crate::scaffold_target::{
 };
 use crate::template;
 
-// Keep the neutral scaffold embedded so generated apps are self-contained at build time.
 static UNIFIED_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/templates/scalar/generic");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
@@ -59,7 +58,6 @@ pub fn run(
 ) -> CliResult {
     let crate_name = to_crate_name(name);
 
-    // Validate project name
     validate_project_name(name, &crate_name)?;
 
     scaffold(
@@ -81,7 +79,6 @@ fn validate_project_name(name: &str, crate_name: &str) -> CliResult {
         });
     }
 
-    // Must start with a letter
     if !name.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
         return Err(CliError::InvalidProjectName {
             name: name.to_string(),
@@ -89,7 +86,6 @@ fn validate_project_name(name: &str, crate_name: &str) -> CliResult {
         });
     }
 
-    // Only valid chars
     if !name
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -100,7 +96,6 @@ fn validate_project_name(name: &str, crate_name: &str) -> CliResult {
         });
     }
 
-    // Check Rust keyword
     if is_rust_keyword(crate_name) {
         return Err(CliError::ReservedKeyword {
             name: crate_name.to_string(),
@@ -149,7 +144,6 @@ fn scaffold(
     template::render(template_dir, dest, vars)?;
     materialize_shell(dest, project_name, crate_name, shell)?;
 
-    // Write .gitignore
     let gitignore_content = "/target\n**/*.rs.bk\n";
     fs::write(dest.join(".gitignore"), gitignore_content).map_err(|e| CliError::IoError {
         context: "failed to write .gitignore".to_string(),
@@ -158,7 +152,6 @@ fn scaffold(
     output::print_create(".gitignore");
 
     if !skip_readme {
-        // Write README.md
         let readme = generate_readme(project_name, crate_name, shell);
         fs::write(dest.join("README.md"), readme).map_err(|e| CliError::IoError {
             context: "failed to write README.md".to_string(),
@@ -167,11 +160,9 @@ fn scaffold(
         output::print_create("README.md");
     }
 
-    // Print file listing
     print_file_tree(dest, dest)?;
 
     if !skip_git {
-        // git init
         let git_ok = Command::new("git")
             .args(["init", "--quiet"])
             .current_dir(dest)
@@ -180,7 +171,6 @@ fn scaffold(
             .unwrap_or(false);
 
         if git_ok {
-            // Initial commit
             let add_ok = Command::new("git")
                 .args(["add", "."])
                 .current_dir(dest)
@@ -214,7 +204,6 @@ fn scaffold(
 
     print_template_guidance(project_name, shell);
 
-    // Optional cargo check prompt (skipped in quiet mode)
     if !quiet {
         run_cargo_check_prompt(dest)?;
     }
@@ -859,7 +848,6 @@ fn print_file_tree(root: &Path, dir: &Path) -> CliResult {
         let relative = path.strip_prefix(root).unwrap_or(&path);
 
         if path.is_dir() {
-            // Skip .git directory
             if path.file_name().is_some_and(|n| n == ".git") {
                 continue;
             }
@@ -1002,7 +990,6 @@ fn generate_readme(project_name: &str, _crate_name: &str, shell: ScaffoldShell) 
     readme
 }
 
-/// Converts a project name to a valid Rust crate name (underscores, lowercase).
 fn to_crate_name(name: &str) -> String {
     name.chars()
         .map(|c| {

@@ -18,7 +18,6 @@ struct ConstraintSurface {
     calls: Vec<String>,
 }
 
-/// Rewrites `src/constraints/mod.rs` using the managed module and tuple blocks.
 pub(crate) fn rewrite_mod(src: &str, name: &str) -> Result<String, String> {
     let mut surface = ConstraintSurface::parse(src)?;
     if !surface.modules.iter().any(|existing| existing == name) {

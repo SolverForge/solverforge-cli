@@ -3,7 +3,6 @@ use std::fmt;
 pub type CliResult<T = ()> = Result<T, CliError>;
 
 pub enum CliError {
-    // Project scaffolding errors
     DirectoryExists {
         name: String,
     },
@@ -15,12 +14,10 @@ pub enum CliError {
         name: String,
     },
 
-    // "Not in a project" errors
     NotInProject {
         missing: &'static str,
     },
 
-    // Resource errors
     ResourceExists {
         kind: &'static str,
         name: String,
@@ -30,7 +27,6 @@ pub enum CliError {
         name: String,
     },
 
-    // Validation
     InvalidName {
         name: String,
     },
@@ -39,7 +35,6 @@ pub enum CliError {
         known: &'static [&'static str],
     },
 
-    // IO and subprocess
     IoError {
         context: String,
         source: std::io::Error,
@@ -48,7 +43,6 @@ pub enum CliError {
         command: String,
     },
 
-    // General with optional hint
     General {
         message: String,
         hint: Option<String>,
@@ -149,7 +143,6 @@ impl From<String> for CliError {
     }
 }
 
-// Rust reserved keywords that cannot be used as crate names
 const RUST_KEYWORDS: &[&str] = &[
     "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
     "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",

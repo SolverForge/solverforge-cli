@@ -3,7 +3,6 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
-// Verbosity: 0 = quiet, 1 = normal, 2 = verbose
 static VERBOSITY: AtomicU8 = AtomicU8::new(1);
 
 static NO_COLOR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -36,7 +35,6 @@ pub fn display_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-// Applies color only when NO_COLOR is not set
 fn colorize_green(s: &str) -> String {
     if is_no_color() {
         s.to_string()
@@ -93,7 +91,6 @@ fn colorize_yellow(s: &str) -> String {
     }
 }
 
-// Consistent output verbs.
 pub fn print_create(path: &str) {
     if !is_quiet() {
         println!("      {} {}", colorize_green("create"), colorize_cyan(path));

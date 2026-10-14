@@ -11,7 +11,6 @@ use crate::commands::generate_domain::is_soft_score;
 use crate::error::{CliError, CliResult};
 use crate::output;
 
-// Print lines present in `after` but not in `before`, prefixed with '+', when --verbose.
 fn print_diff_verbose(before: &str, after: &str) {
     if !output::is_verbose() {
         return;
@@ -74,7 +73,6 @@ pub fn run(
     let solution_type = domain.solution_type.clone();
     let score_type = domain.score_type.clone();
 
-    // Determine pattern + hardness
     let (pattern, is_soft) = resolve_pattern_and_hardness(
         PatternFlags {
             soft,
@@ -151,7 +149,6 @@ pub fn run(
         ));
     }
 
-    // Generate the new constraint file
     let skeleton = generate_skeleton(
         name,
         pattern,

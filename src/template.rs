@@ -4,11 +4,6 @@ use std::path::Path;
 
 use crate::error::{CliError, CliResult};
 
-// Looks for a custom template override in `.solverforge/templates/<template_name>.rs.tmpl`.
-// Template variables use `{{NAME}}`, `{{SNAKE_NAME}}`, `{{FIELDS}}` style placeholders.
-// Entity and solution overrides are supported only when they emit the canonical
-// managed blocks required by later generate/destroy rewrites.
-// Returns the rendered content if a custom template exists, or `None` to use the built-in default.
 pub fn load_custom(template_name: &str, vars: &[(&str, &str)]) -> Option<String> {
     let path = Path::new(".solverforge")
         .join("templates")
@@ -49,7 +44,6 @@ fn render_dir(dir: &Dir, dest: &Path, vars: &[(&str, &str)]) -> CliResult {
                     .to_string_lossy()
                     .to_string();
 
-                // Strip .tmpl extension if present
                 let file_name = if file_name_raw.ends_with(".tmpl") {
                     file_name_raw[..file_name_raw.len() - 5].to_string()
                 } else {
@@ -60,7 +54,6 @@ fn render_dir(dir: &Dir, dest: &Path, vars: &[(&str, &str)]) -> CliResult {
 
                 let contents = file.contents();
 
-                // Binary files (non-UTF-8): copy as-is
                 let Ok(text) = std::str::from_utf8(contents) else {
                     fs::write(&out_path, contents).map_err(|e| CliError::IoError {
                         context: format!("failed to write {:?}", out_path),
@@ -69,7 +62,6 @@ fn render_dir(dir: &Dir, dest: &Path, vars: &[(&str, &str)]) -> CliResult {
                     continue;
                 };
 
-                // Text files: apply placeholder substitution
                 let rendered = apply_vars(text, vars);
                 fs::write(&out_path, rendered).map_err(|e| CliError::IoError {
                     context: format!("failed to write {:?}", out_path),

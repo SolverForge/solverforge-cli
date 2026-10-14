@@ -48,7 +48,6 @@ pub(crate) fn resolve_pattern_and_hardness(
         _ => None,
     };
 
-    // balance and reward imply soft
     let pattern_implies_soft = matches!(
         explicit_pattern,
         Some(Pattern::Balance) | Some(Pattern::Reward)
@@ -57,10 +56,7 @@ pub(crate) fn resolve_pattern_and_hardness(
 
     match explicit_pattern {
         Some(p) => Ok((p, is_soft_explicit)),
-        None => {
-            // Interactive wizard
-            run_wizard(flags.soft, domain)
-        }
+        None => run_wizard(flags.soft, domain),
     }
 }
 
@@ -101,7 +97,6 @@ fn run_wizard(soft_flag: bool, domain: &DomainModel) -> Result<(Pattern, bool), 
     }
     println!();
 
-    // Pattern selection
     let has_join = !domain.facts.is_empty();
 
     let mut pattern_options: Vec<(&str, Pattern)> = vec![
@@ -140,7 +135,6 @@ fn run_wizard(soft_flag: bool, domain: &DomainModel) -> Result<(Pattern, bool), 
 
     let pattern = pattern_options[pattern_idx].1;
 
-    // Hard/soft selection (skip if pattern implies soft)
     let is_soft = if matches!(pattern, Pattern::Balance | Pattern::Reward) || soft_flag {
         true
     } else {

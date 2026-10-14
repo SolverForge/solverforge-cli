@@ -8,7 +8,6 @@ use toml_edit::{value, DocumentMut, Item, Table, TableLike, Value};
 
 const CONFIG_PATH: &str = "solver.toml";
 
-// Print the contents of solver.toml.
 pub fn run_show() -> CliResult {
     let path = Path::new(CONFIG_PATH);
     if !path.exists() {
@@ -30,7 +29,6 @@ pub fn run_show() -> CliResult {
     Ok(())
 }
 
-// Set a dotted key path in solver.toml to the given value.
 pub fn run_set(key: &str, value: &str) -> CliResult {
     let path = Path::new(CONFIG_PATH);
     if !path.exists() {
@@ -99,7 +97,6 @@ struct KeySegment {
     index: Option<usize>,
 }
 
-// Navigate and set a dotted key path (e.g. "termination.seconds_spent_limit") in a toml::Value.
 #[cfg(test)]
 fn set_toml_key(doc: &mut toml::Value, key: &str, value: &str) -> CliResult {
     let segments = parse_key_segments(key)?;
@@ -290,7 +287,6 @@ fn parse_key_segment(segment: &str) -> CliResult<KeySegment> {
     })
 }
 
-// Parse a string into a toml::Value: try integer, then float, then bool, then string.
 #[cfg(test)]
 fn parse_toml_value(s: &str) -> toml::Value {
     if let Ok(i) = s.parse::<i64>() {

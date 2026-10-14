@@ -1,8 +1,5 @@
 use super::*;
 
-/// ```
-/// // RcConfig parses known TOML keys correctly.
-/// ```
 #[test]
 fn test_parse_rc_full() {
     let toml = r#"

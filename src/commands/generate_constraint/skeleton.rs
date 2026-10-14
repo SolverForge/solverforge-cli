@@ -29,7 +29,6 @@ pub(crate) fn generate_skeleton(
         "HARD: TODO — describe what this constraint enforces."
     };
 
-    // Pick the first entity and fact from domain (if available)
     let entity = domain.and_then(|d| d.entities.first());
     let fact = domain.and_then(|d| d.facts.first());
 
@@ -53,7 +52,6 @@ pub(crate) fn generate_skeleton(
     let entity_source = format!("{solution_type}::{entity_field}()");
     let fact_source = format!("{solution_type}::{fact_field}()");
 
-    // Build import line(s)
     let imports = match pattern {
         Pattern::Join | Pattern::ProjectedGroup => {
             if fact.is_some() && solution_type != entity_type {

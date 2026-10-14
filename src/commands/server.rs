@@ -36,7 +36,6 @@ pub fn run(port: u16, debug: bool) -> CliResult {
         output::print_dim("  Compiling in release mode... (this may take a minute on first run)");
     }
 
-    // Set PORT env var for the server to pick up
     let status = Command::new("cargo")
         .args(server_args(shell.as_deref(), debug))
         .env("PORT", port.to_string())

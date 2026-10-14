@@ -601,12 +601,10 @@ enum DestroyResource {
 }
 
 fn main() {
-    // Load rc config first so CLI flags can override it.
     let rc = rc::load_rc().unwrap_or_default();
 
     let cli = Cli::parse();
 
-    // Configure output — CLI flags override rc config.
     let quiet = cli.quiet || rc.quiet;
     if quiet {
         output::set_verbosity(0);

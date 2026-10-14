@@ -68,7 +68,6 @@ pub fn run_solution(skip_confirm: bool) -> CliResult {
         source: e,
     })?;
     app_spec::sync_from_project()?;
-    // Keep the compiler-owned demo data in sync after the domain changed.
     sync_demo_data_module()?;
 
     output::print_remove(&format!("src/domain/{}.rs", file_name));
@@ -353,7 +352,6 @@ pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
     })?;
     crate::commands::sf_config::remove_constraint(constraint_id.as_str())?;
     app_spec::sync_from_project()?;
-    // Keep the compiler-owned demo data in sync after the constraint set changed.
     sync_demo_data_module()?;
 
     output::print_remove(&file_path.display().to_string());

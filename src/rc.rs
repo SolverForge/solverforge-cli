@@ -2,27 +2,20 @@ use std::path::PathBuf;
 
 use crate::error::CliResult;
 
-// Persistent preferences loaded from `.solverforgerc` in home dir or project root.
-// Project root takes precedence over home directory.
 #[derive(Debug, Default)]
 pub struct RcConfig {
-    // Default server port
     pub port: Option<u16>,
-    // Disable colored output
     pub no_color: bool,
-    // Suppress all output except errors
     pub quiet: bool,
 }
 
 impl RcConfig {
-    // Returns true if no preferences were set.
     #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.port.is_none() && !self.no_color && !self.quiet
     }
 }
 
-// Locate the rc file to use: project root `.solverforgerc` takes precedence over `~/.solverforgerc`.
 fn find_rc_path() -> Option<PathBuf> {
     let project_path = PathBuf::from(".solverforgerc");
     if project_path.exists() {
@@ -39,7 +32,6 @@ fn find_rc_path() -> Option<PathBuf> {
     None
 }
 
-// Resolve the user home directory via the `HOME` environment variable.
 fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }

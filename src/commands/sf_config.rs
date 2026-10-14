@@ -1,5 +1,3 @@
-// JSON-based sf-config.json reader/writer for UI wiring.
-// Reads/modifies/writes static/sf-config.json.
 // If the file doesn't exist, operations return Ok(()) silently.
 
 use std::fs;

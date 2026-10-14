@@ -10,7 +10,6 @@ pub(crate) const KNOWN_SCORE_TYPES: &[&str] = &[
     "BendableScore<N, M>",
 ];
 
-/// Converts `snake_case` to `PascalCase`.
 pub(crate) fn snake_to_pascal(name: &str) -> String {
     name.split('_')
         .map(|word| {
@@ -91,7 +90,6 @@ pub(crate) fn ensure_domain_dir(domain_dir: &Path) -> CliResult {
     Ok(())
 }
 
-/// Finds the `*.rs` file in `domain_dir` that contains `pub struct <TypeName>`.
 pub(crate) fn find_file_for_type(
     domain_dir: &Path,
     type_name: &str,

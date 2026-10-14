@@ -697,7 +697,6 @@ pub(crate) fn remove_variable_field(src: &str, field: &str) -> Result<String, St
     managed_block::replace_block(&src, ENTITY_VARIABLE_INIT_BLOCK, &initializers.join("\n"))
 }
 
-/// Replaces the score type in the solution file.
 pub(crate) fn replace_score_type(
     src: &str,
     old_score: &str,

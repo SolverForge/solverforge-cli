@@ -5,7 +5,6 @@ use crate::app_spec;
 use crate::error::{CliError, CliResult};
 use crate::output;
 
-// Parses src/api/ for axum `.route()` calls and prints a METHOD/PATH/HANDLER table.
 pub fn run() -> CliResult {
     if Path::new("solverforge.app.toml").exists() {
         let spec = app_spec::load()?;
@@ -49,7 +48,6 @@ pub fn run() -> CliResult {
         return Ok(());
     }
 
-    // Column widths
     let method_w = routes
         .iter()
         .map(|(m, _, _)| m.len())
@@ -104,11 +102,9 @@ pub fn run() -> CliResult {
     Ok(())
 }
 
-// Extracts (METHOD, PATH, HANDLER) triples from axum .route() calls.
 fn parse_routes(content: &str) -> Vec<(String, String, String)> {
     let mut routes = Vec::new();
 
-    // Match patterns like: .route("/path", get(handler)) or .route("/path", post(handler))
     let http_methods = [
         "get", "post", "put", "delete", "patch", "head", "options", "trace",
     ];
@@ -119,10 +115,8 @@ fn parse_routes(content: &str) -> Vec<(String, String, String)> {
             continue;
         }
 
-        // Extract path string
         let path = extract_string_arg(trimmed).unwrap_or_default();
 
-        // Extract method and handler
         for method in &http_methods {
             let pattern = format!("{}(", method);
             if let Some(pos) = trimmed.find(&pattern) {
@@ -144,7 +138,6 @@ fn parse_routes(content: &str) -> Vec<(String, String, String)> {
     routes
 }
 
-// Extract the first string literal (double-quoted) from a line.
 fn extract_string_arg(line: &str) -> Option<String> {
     let start = line.find('"')? + 1;
     let end = line[start..].find('"')?;

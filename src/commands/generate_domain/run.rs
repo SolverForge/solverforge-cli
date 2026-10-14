@@ -220,7 +220,6 @@ fn preflight_collection_rewrites(
     })
 }
 
-// Parse "name:Type" field specifications.
 fn parse_fields(fields: &[String]) -> CliResult<Vec<(String, String)>> {
     fields
         .iter()
@@ -240,7 +239,6 @@ fn parse_fields(fields: &[String]) -> CliResult<Vec<(String, String)>> {
         .collect()
 }
 
-// Print lines of new_src prefixed with '+' when verbose.
 fn print_diff_verbose(before: &str, after: &str) {
     if !output::is_verbose() {
         return;
@@ -313,7 +311,6 @@ pub fn run_solution(name: &str, score: &str) -> CliResult {
         rewrite_domain_mod_source(&base_domain_mod, name, &pascal, Some(name))
             .map_err(CliError::general)?;
 
-    // A fresh neutral scaffold may be replaced once. Shaped projects require an explicit destroy.
     if replace_neutral {
         remove_neutral_scaffold(&pascal, score)?;
     }

@@ -91,7 +91,6 @@ fn load_mcp_spec() -> CliResult<app_spec::AppSpec> {
     Ok(spec)
 }
 
-/// Commands that a harness runs to speak MCP over stdio.
 fn stdio_command(binary: &str) -> String {
     binary.to_string()
 }
@@ -189,7 +188,6 @@ fn print_http_section(name: &str, url: &str) {
     println!("    Any other MCP client: connect to {url}");
 }
 
-/// Writes the in-project client config for one harness target.
 fn write_target(
     project_root: &Path,
     target: ConnectWriteTarget,
@@ -611,7 +609,6 @@ fn resolve_binary(project_root: &Path, crate_name: &str) -> (String, bool) {
     )
 }
 
-/// Converts a project name to its generated binary name (underscores, lowercase).
 fn to_crate_name(name: &str) -> String {
     name.chars()
         .map(|c| {

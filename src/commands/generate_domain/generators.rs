@@ -8,7 +8,6 @@ pub(crate) fn generate_entity(
     planning_variable: Option<&str>,
     extra_fields: &[(String, String)],
 ) -> Result<String, String> {
-    // Custom entity overrides are supported only when they keep the canonical managed blocks.
     let snake = pascal_to_snake(pascal);
     let fields_repr: String = extra_fields
         .iter()
@@ -91,7 +90,6 @@ impl {pascal} {{
 }
 
 pub(crate) fn generate_fact(pascal: &str, extra_fields: &[(String, String)]) -> String {
-    // Check for a custom override in `.solverforge/templates/fact.rs.tmpl`.
     let snake = pascal_to_snake(pascal);
     let fields_repr: String = extra_fields
         .iter()
@@ -146,7 +144,6 @@ impl {pascal} {{
 }
 
 pub(crate) fn generate_solution(pascal: &str, score: &str) -> Result<String, String> {
-    // Custom solution overrides are supported only when they keep the canonical managed blocks.
     let snake = pascal_to_snake(pascal);
     let vars: &[(&str, &str)] = &[("NAME", pascal), ("SNAKE_NAME", &snake), ("FIELDS", score)];
     if let Some(custom) = crate::template::load_custom("solution", vars) {
@@ -272,7 +269,6 @@ mod tests {{
     )
 }
 
-// Produce default test arguments for extra fields based on type.
 fn extra_field_test_args(extra_fields: &[(String, String)]) -> String {
     extra_fields
         .iter()
@@ -286,7 +282,6 @@ fn extra_field_test_args(extra_fields: &[(String, String)]) -> String {
         .collect()
 }
 
-// Simple pascal → snake conversion for test fn names.
 fn pascal_to_snake(pascal: &str) -> String {
     let mut result = String::new();
     for (i, c) in pascal.chars().enumerate() {

@@ -13,7 +13,6 @@ pub fn run() -> CliResult {
         });
     }
 
-    // Read project name from Cargo.toml
     let project_name = read_project_name().unwrap_or_else(|| "<unknown>".to_string());
     output::print_heading(&format!("Project: {}", project_name));
     println!();
@@ -61,7 +60,6 @@ pub fn run() -> CliResult {
         println!();
     }
 
-    // List constraints
     let constraints_dir = Path::new("src/constraints");
     if constraints_dir.exists() {
         let constraints = list_constraints(constraints_dir);
@@ -74,7 +72,6 @@ pub fn run() -> CliResult {
         }
     }
 
-    // Show solver.toml summary
     if Path::new("solver.toml").exists() {
         println!("  Config:      solver.toml");
     }

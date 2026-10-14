@@ -3,7 +3,6 @@ use std::process::Command;
 use crate::error::{CliError, CliResult};
 use crate::output;
 
-// Wraps `cargo test` with optional passthrough arguments.
 pub fn run(extra_args: &[String]) -> CliResult {
     output::print_status("test", "running cargo test");
 
