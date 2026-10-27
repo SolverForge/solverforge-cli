@@ -25,7 +25,7 @@ required source/collector rules for the grouped patterns.
   `solverforge --version`, `solverforge new --help`,
   `solverforge generate variable --help`.
 
-This skill describes CLI `3.6.0` (scaffold runtime target `solverforge 0.22.0`,
+This skill describes CLI `3.6.0` (scaffold runtime target `solverforge 0.23.0`,
 UI `solverforge-ui 0.9.0`, maps `solverforge-maps 2.1.4`, MCP `rmcp 3.5.1`).
 Re-derive specifics from the CLI if the version differs.
 
@@ -403,5 +403,5 @@ small conventional commits if the user asks for commits.
 | `references/output-shells.md` | `web` vs `api` vs `cli` vs `mcp`, what each generates, and how to run each. |
 | `references/verification.md` | `check` vs compile vs real solve vs per-constraint tests; the API smoke flow and helper script; explaining a plan from framework analysis. |
 | `references/gotchas.md` | Managed blocks, compiler-owned files, ordering traps, score-type limits, hard-constraint and precompute traps. |
-| `references/advanced-resources.md` | Countable ranges, scalar hooks, list metadata, scalar groups, conflict repair, candidate traces. |
+| `references/advanced-resources.md` | Countable ranges, scalar hooks, list metadata, scalar groups, conflict repair, candidate traces, parallel evaluation. |
 | `references/routing-and-maps.md` | When and how to use `solverforge-maps` for road-network travel times, matrices, and route geometry. |

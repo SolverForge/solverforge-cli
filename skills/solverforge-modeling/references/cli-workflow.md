@@ -155,6 +155,7 @@ solverforge connect --write vscode     # .vscode/mcp.json
 solverforge config show
 solverforge config set termination.seconds_spent_limit 60
 solverforge config set candidate_trace.max_entries 100000
+solverforge config set move_thread_count.count 4   # parallel local-search evaluation
 solverforge test                 # delegates to `cargo test`
 solverforge completions <shell>
 ```

@@ -16,7 +16,7 @@ Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.22.0`
+- `solverforge 0.23.0`
 - `solverforge-ui 0.9.0` for the default web shell
 - `solverforge-maps 2.1.4` for the default web shell
 - `rmcp 3.5.1` for the MCP shell
@@ -181,6 +181,9 @@ Core commands:
   solver config still references the resource.
 - `solverforge config set candidate_trace.max_entries <N>` enables the
   bounded candidate-pull diagnostics and rejects zero/non-integer capacities.
+- `solverforge config set move_thread_count.count <N>` enables parallel
+  local-search evaluation; `check` and `config set` accept only the runtime's
+  `"auto"`, `"none"`, and `{ count = N }` forms.
 - `solverforge server` runs web/API generated apps through Cargo, and boots the
   MCP-shell project's stateless Streamable HTTP transport. CLI-shell projects
   run directly with `cargo run -- demo-data`; MCP-shell projects default to the
@@ -267,9 +270,30 @@ then from `~/.solverforgerc`. Recognized preferences are intentionally narrow:
 
 Generated web/API apps expose every compact `SolverTelemetry` aggregate,
 including applied/not-doable/rejected moves, hard-score direction counts,
-conflict-repair counters, construction counters, current phase detail,
-per-selector and per-move breakdowns, and the bounded applied-move trace. These
-fields are carried consistently by status, snapshot, and typed SSE payloads.
+conflict-repair counters, construction counters, one record per started phase
+(`phases`, in execution order), per-selector and per-move breakdowns, and the
+bounded applied-move trace. These fields are carried consistently by status,
+snapshot, and typed SSE payloads.
+
+## Parallel Evaluation
+
+SolverForge `0.23.0` can score each local-search step's candidates on several
+cores while one coordinator keeps the sequential acceptance order. Generated
+`solver.toml` files document the setting and leave it off:
+
+```bash
+solverforge config set move_thread_count.count 4
+```
+
+At fixed work (a seeded, step-bounded solve) the parallel run reaches the same
+solution, score, and logical counters as the sequential one. Candidates
+evaluated ahead of the decision point and then discarded are reported as
+`movesSpeculative` in the run totals and per phase, and as the
+`discarded_speculative` candidate-trace disposition. The effective evaluator
+count is capped by the Rayon pool and by 32. Every job a generated server runs
+shares one pool, sized by `RAYON_NUM_THREADS` (default: the core count). The
+default `auto` stays sequential. Small models usually solve faster that way,
+because coordinating evaluators costs more than scoring a cheap move.
 
 Candidate-pull traces are intentionally not copied into those ordinary
 control-plane payloads. After enabling `[candidate_trace]`, fetch the retained
@@ -358,7 +382,10 @@ Current scenario coverage:
 - neutral shell: scaffold, boot, and verify the empty production shell
 - mixed app: scaffold mixed shape, seed non-empty mixed demo data, start a real
   retained solve, verify required scalar assignment and complete list placement,
-  then cancel and delete the job through the generated runtime/browser surface
+  then cancel and delete the job through the generated runtime/browser surface;
+  the runtime pipeline then reruns a seeded fixed-work solve sequentially and
+  with `move_thread_count` 4 and requires the same solution, logical counters,
+  and consumed candidate pulls, with speculative work only in the parallel run
 - scalar-only app: seed non-empty data and run it through the real generated
   solver, including typed SSE, status, analysis, checkpointed Pause/Resume,
   user-facing Stop as runtime cancel, terminal-only Delete, and status/snapshot
@@ -369,8 +396,9 @@ Current scenario coverage:
   both stdio and stateless Streamable HTTP, including the annotated tool
   surface, task-backed solve to a terminal snapshot with scalar assignment and
   complete list placement, the retained lifecycle through a legacy client, and a
-  byte-level stdio check that the transport channel stays pure JSON-RPC
-SolverForge `0.22.0` supports mixed scalar/list construction, canonical mixed
+  byte-level stdio check that the transport channel stays pure JSON-RPC; every
+  MCP phase runs with parallel evaluation enabled
+SolverForge `0.23.0` supports mixed scalar/list construction, canonical mixed
 local-search defaults, and list-based sequence modeling. The CLI suite proves
 the mixed path in both runtime and browser pipelines; the scalar-only scenario keeps the deeper
 pause/resume, analysis, reconnect, and qualified-trace checks.

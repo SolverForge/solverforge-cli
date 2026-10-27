@@ -21,7 +21,7 @@ Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.22.0`
+- `solverforge 0.23.0`
 - `solverforge-ui 0.9.0` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
 - `rmcp 3.5.1` for the MCP shell
@@ -308,6 +308,15 @@ missing, zero, non-integer, or out-of-range capacity. The neutral template
 documents this setting but leaves it disabled by default because trace detail
 can be large.
 
+Parallel local-search evaluation is enabled through `move_thread_count`,
+including `solverforge config set move_thread_count.count <N>`. The CLI accepts
+exactly the runtime's forms (`"auto"`, `"none"`, `{ count = N }` with a
+non-negative integer) because the generated app parses its embedded
+`solver.toml` on the first solve, where a malformed value would fail the job
+instead of the build. The neutral template documents the setting, the Rayon and
+32-evaluator caps, and the shared per-process pool, and leaves the runtime
+default `auto` (sequential) in place.
+
 `.solverforgerc` is loaded from the project root first, then from
 `~/.solverforgerc`. It is intentionally narrow and only carries local CLI
 preferences:
@@ -332,7 +341,9 @@ Current scenario policy:
 - neutral shell: bootable empty app
 - mixed app: seeded scalar-plus-list solve through the runtime and browser,
   including required scalar assignment, complete list placement, cancel, and
-  terminal cleanup
+  terminal cleanup; the runtime pipeline also proves fixed-work parallel
+  evaluation retraces the sequential solution, logical counters, and consumed
+  candidate pulls
 - scalar-only app: seeded solve flow through typed SSE, status, snapshot-bound
   analysis, checkpointed pause/resume, cancel, terminal-only delete, and
   reconnect bootstrap, including full aggregate telemetry, bounded candidate
@@ -341,9 +352,10 @@ Current scenario policy:
   `rmcp` client over stdio and stateless Streamable HTTP, covering the
   annotated tool surface, task-backed solve to a terminal snapshot with scalar
   assignment and complete list placement, the retained lifecycle through a
-  legacy client, and byte-level stdio stdout purity during a solve
+  legacy client, and byte-level stdio stdout purity during a solve, all with
+  parallel evaluation enabled
 
-SolverForge `0.22.0` uses list variables for ordered sequences and routes. Both
+SolverForge `0.23.0` uses list variables for ordered sequences and routes. Both
 generated-app end-to-end suites start and observe the real mixed scalar/list
 path.
 

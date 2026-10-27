@@ -121,3 +121,28 @@ Then fetch the retained detail from `GET /jobs/{id}/telemetry`. Ordinary status,
 snapshot, and SSE payloads never include candidate pulls. `POST /jobs/qualified`
 starts the same retained lifecycle with externally attested SHA-256 digests and
 a non-empty producer. These are diagnostics, not modeling primitives.
+
+## Parallel local-search evaluation
+
+Local search can score each step's candidates on several cores:
+
+```bash
+solverforge config set move_thread_count.count 4
+```
+
+`check` and `config set` accept only `"auto"`, `"none"`, or `{ count = N }`;
+the app embeds `solver.toml` and would otherwise fail its first solve.
+
+- One coordinator keeps the sequential acceptance order, so a seeded,
+  step-bounded solve reaches the same solution and logical counters as the
+  sequential run. Do not treat a thread count as a quality knob.
+- Candidates evaluated ahead of the decision point and discarded show up as
+  `telemetry.movesSpeculative` (run totals and each entry of
+  `telemetry.phases`) and as the `discarded_speculative` trace disposition.
+  `movesGenerated` includes them; compare `movesEvaluated` across thread counts.
+- Only local search runs in parallel; construction stays sequential.
+- The effective count is `min(count, Rayon pool, 32)`. Every job in one server
+  process shares the pool, sized by `RAYON_NUM_THREADS` (default: core count).
+- The default `auto` is sequential. Enable it only when moves are expensive to
+  score, and measure the wall-clock gain on the real instance: on small models
+  coordinating evaluators can cost more than it saves.
