@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.7.0](https://github.com/SolverForge/solverforge-cli/compare/v3.6.0...v3.7.0) (2026-10-27)
+
+
+### Features
+
+* **config:** validate move_thread_count against the runtime's forms ([19ff0f8](https://github.com/SolverForge/solverforge-cli/commit/19ff0f85d474b8ebcc08db43f19bc50efc2a4fd8))
+* **scaffold:** target SolverForge 0.23.0 ([207920d](https://github.com/SolverForge/solverforge-cli/commit/207920de6ee1d0f35715a13c320d0e71302ca588))
+
+
 ## [3.6.0](https://github.com/SolverForge/solverforge-cli/compare/v3.5.2...v3.6.0) (2026-10-18)
 
 

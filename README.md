@@ -10,7 +10,7 @@ version and the scaffold dependency targets separately.
 
 ![CLI session: change the score type, generate sample data, validate the model, and inspect the project](docs/assets/cli-grow-and-check.png)
 
-Current CLI package version: `3.6.0`.
+Current CLI package version: `3.7.0`.
 
 Required Rust version: `1.95` or later.
 
