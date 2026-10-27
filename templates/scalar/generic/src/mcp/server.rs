@@ -4,7 +4,7 @@ use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CancelTaskParams, CreateTaskResult, GetTaskParams,
-    GetTaskResult, Implementation, MetaObject, ServerCapabilities, ServerInfo, UpdateTaskParams,
+    GetTaskResult, Implementation, MetaObject, ServerCapabilities, ServerConfig, UpdateTaskParams,
 };
 use rmcp::service::RequestContext;
 use rmcp::task_manager::TaskManager;
@@ -375,8 +375,8 @@ impl SolverMcp {
 
 #[tool_handler]
 impl ServerHandler for SolverMcp {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_tasks()

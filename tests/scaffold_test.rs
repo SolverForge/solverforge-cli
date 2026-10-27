@@ -1165,6 +1165,11 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("use of deprecated"),
+        "generated mcp shell must compile without deprecated rmcp API: {stderr}"
+    );
 }
 
 #[test]
