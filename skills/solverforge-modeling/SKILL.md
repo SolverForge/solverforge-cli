@@ -26,7 +26,7 @@ required source/collector rules for the grouped patterns.
   `solverforge generate variable --help`.
 
 This skill describes CLI `3.7.0` (scaffold runtime target `solverforge 0.23.0`,
-UI `solverforge-ui 0.9.0`, maps `solverforge-maps 2.1.4`, MCP `rmcp 3.5.1`).
+UI `solverforge-ui 0.9.0`, maps `solverforge-maps 2.1.4`, MCP `rmcp 3.8.0`).
 Re-derive specifics from the CLI if the version differs.
 
 ## First: which project are you in?
