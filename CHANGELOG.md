@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.7.1](https://github.com/SolverForge/solverforge-cli/compare/v3.7.0...v3.7.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **mcp:** name ServerConfig instead of the deprecated ServerInfo alias ([b1ded48](https://github.com/SolverForge/solverforge-cli/commit/b1ded48fca966e0f7db5388df328d4b999eed1e5))
+* **scaffold:** target rmcp 3.8.0 ([86127d7](https://github.com/SolverForge/solverforge-cli/commit/86127d70e7e778b7cb267212d0f94612a74c9c34))
+
+
 ## [3.7.0](https://github.com/SolverForge/solverforge-cli/compare/v3.6.0...v3.7.0) (2026-10-27)
 
 
