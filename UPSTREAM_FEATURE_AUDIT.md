@@ -156,9 +156,10 @@ without turning the neutral scaffold into a domain-specific demo.
 - UI and companion release gates: `cargo info solverforge-ui` confirms
   `solverforge-ui 0.9.0` is published; the web scaffold targets its
   framework-neutral asset release and additionally targets the published
-  `solverforge-maps 2.1.4`. The MCP scaffold targets the published `rmcp 3.5.1`
-  (the `3.5.0` to `3.5.1` patch is additive; `ProtocolVersion::LATEST` stays
-  `2026-07-28`, so both acceptance-client negotiation paths are unaffected).
+  `solverforge-maps 2.1.4`. The MCP scaffold targets the published `rmcp 3.8.0`
+  (`ProtocolVersion::LATEST` stays `2026-07-28` and `LATEST_WITH_INITIALIZE`
+  stays `2025-11-25` from `3.5.0` through `3.8.0`, so both acceptance-client
+  negotiation paths are unaffected).
   The UI, maps, and MCP versions are independent of the `solverforge` runtime
   target.
 - MCP SDK upgrade (`rmcp 3.4.0` to `3.5.0`, through `3.4.1`): the SDK-wide
@@ -173,7 +174,22 @@ without turning the neutral scaffold into a domain-specific demo.
   outcomes stay covered because the CLI's acceptance client drives an explicit
   task-capable client (`2026-07-28`) and a legacy client (`2025-11-25`) in the
   MCP pipeline. The generated MCP surface itself is unchanged: no protocol
-  constant, `ServerConfig`, or `ClientConfig` is pinned by the templates.
+  constant is pinned by the templates.
+- MCP SDK upgrade (`rmcp 3.5.1` to `3.8.0`, through `3.6.0` and `3.7.0`): the
+  SDK-wide changes are client cancellation of abandoned calls, a non-blocking
+  `stdio_pipes` transport, auth scope/OIDC additions, body-free HTTP status
+  errors, and transport/model fixes (bounded stdio line buffer, per-request
+  tool-schema lookup, 400 for a session-less non-initialize POST, float request
+  ids, conflicting result/error rejection). Two server-side changes were checked
+  against the generated shell: `3.6.0` rejects server-to-client requests on
+  `2026-07-28` sessions, and the generated server issues none (no sampling,
+  elicitation, or roots). The generated HTTP transport is stateless
+  (`NeverSessionManager`, legacy session mode off); the task-backed and legacy
+  lifecycle flows over Streamable HTTP both pass against `3.8.0`. The
+  templates now name `ServerConfig` instead of the `ServerInfo` alias deprecated
+  since `3.4.0`, and the scaffold contract asserts the generated MCP app compiles
+  without deprecated rmcp API. The CLI's acceptance client moves to `3.8.0` with
+  the template target.
 - Local checkout note: `/srv/lab/dev/solverforge/solverforge` remains the
   source gate used to inspect the current release notes and feature surface.
 
