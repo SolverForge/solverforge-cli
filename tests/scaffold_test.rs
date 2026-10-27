@@ -605,7 +605,12 @@ fn test_new_creates_neutral_project_files() {
         "neutral solver config should document the opt-in candidate trace surface: {solver_toml}"
     );
     assert!(
-        solver_toml.contains("# [move_thread_count]\n# count = 4")
+        solver_toml
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .windows(2)
+            .any(|pair| pair == ["# [move_thread_count]", "# count = 4"])
             && solver_toml.contains("RAYON_NUM_THREADS")
             && solver_toml.contains("\"auto\", stays sequential")
             && !solver_toml
