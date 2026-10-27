@@ -383,6 +383,33 @@ pub(crate) fn validate_managed_blocks(raw: &str) -> CliResult {
 pub(crate) fn validate_current_settings(raw: &str) -> CliResult {
     let value: toml::Value = toml::from_str(raw)
         .map_err(|err| CliError::general(format!("failed to parse solver.toml: {err}")))?;
+    validate_move_thread_count(&value)?;
+    validate_candidate_trace(&value)
+}
+
+// The generated app embeds solver.toml and parses it on the first solve, so a
+// malformed thread count builds cleanly and then panics the job. Accept exactly
+// the runtime's forms: "auto", "none", or { count = N }.
+fn validate_move_thread_count(value: &toml::Value) -> CliResult {
+    let Some(move_thread_count) = value.get("move_thread_count") else {
+        return Ok(());
+    };
+    let invalid = || {
+        CliError::general(
+            "solver.toml move_thread_count must be \"auto\", \"none\", or { count = N } with N a non-negative integer",
+        )
+    };
+    match move_thread_count {
+        toml::Value::String(mode) if mode == "auto" || mode == "none" => Ok(()),
+        toml::Value::Table(table) if table.len() == 1 => match table.get("count") {
+            Some(toml::Value::Integer(count)) if *count >= 0 => Ok(()),
+            _ => Err(invalid()),
+        },
+        _ => Err(invalid()),
+    }
+}
+
+fn validate_candidate_trace(value: &toml::Value) -> CliResult {
     let Some(candidate_trace) = value.get("candidate_trace") else {
         return Ok(());
     };
@@ -1511,6 +1538,34 @@ group_name = "other"
         ] {
             let err = validate_current_settings(raw).expect_err("invalid trace config should fail");
             assert!(err.to_string().contains("candidate_trace"));
+        }
+    }
+
+    #[test]
+    fn move_thread_count_accepts_every_runtime_form() {
+        for raw in [
+            "move_thread_count = \"auto\"\n",
+            "move_thread_count = \"none\"\n",
+            "move_thread_count = { count = 4 }\n",
+            "[move_thread_count]\ncount = 0\n",
+        ] {
+            validate_current_settings(raw).expect("runtime thread-count form should validate");
+        }
+    }
+
+    #[test]
+    fn move_thread_count_rejects_forms_the_runtime_cannot_parse() {
+        for raw in [
+            "move_thread_count = 4\n",
+            "move_thread_count = \"many\"\n",
+            "[move_thread_count]\ncount = \"four\"\n",
+            "[move_thread_count]\ncount = -1\n",
+            "[move_thread_count]\n",
+            "[move_thread_count]\ncount = 4\nthreads = 4\n",
+        ] {
+            let err = validate_current_settings(raw)
+                .expect_err("malformed thread count should fail validation");
+            assert!(err.to_string().contains("move_thread_count"), "{raw}");
         }
     }
 
