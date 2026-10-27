@@ -142,11 +142,17 @@ impl GeneratedApp {
     }
 
     pub fn start_server(&mut self) -> u16 {
+        self.start_server_with_env(&[])
+    }
+
+    pub fn start_server_with_env(&mut self, env: &[(&str, &str)]) -> u16 {
         self.phase("Boot generated server");
+        self.stop_server();
         let port = find_free_port();
         let child = spawn_generated_server(
             &self.project_binary_path(),
             &[],
+            env,
             &self.project_dir,
             port,
             &self.stdout_log,
@@ -157,6 +163,15 @@ impl GeneratedApp {
             wait_for_health(port, server, &self.stdout_log, &self.stderr_log);
         }
         port
+    }
+
+    /// Stops the running generated server so the app can be rebuilt and
+    /// rebooted with a different embedded `solver.toml`.
+    pub fn stop_server(&mut self) {
+        if let Some(mut child) = self.server.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 
     pub fn client(&self) -> Client {

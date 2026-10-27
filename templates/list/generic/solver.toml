@@ -18,3 +18,12 @@ seconds_spent_limit = 30
 # retained separately from ordinary status, snapshot, and SSE telemetry.
 # [candidate_trace]
 # max_entries = 100000
+
+# Opt in to parallel local-search evaluation when moves are expensive to score.
+# Each step's candidates are scored on up to `count` evaluators while one
+# coordinator keeps the sequential acceptance order, so results match the
+# sequential run at fixed work. The effective count is capped by the Rayon pool
+# (RAYON_NUM_THREADS, shared by every concurrent job) and by 32. The default,
+# "auto", stays sequential; small models usually solve faster that way.
+# [move_thread_count]
+# count = 4

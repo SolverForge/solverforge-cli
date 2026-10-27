@@ -7,7 +7,7 @@
 
 use super::app_harness::{
     artifact_root, cli_command, copy_dir_recursive, find_free_port, resolve_built_executable,
-    spawn_generated_server, wait_for_health,
+    spawn_generated_server, wait_for_health, PINNED_RAYON_POOL,
 };
 use super::dependency_overrides::{
     apply_generated_project_dependency_overrides, DependencyOverrideMode, USE_LOCAL_PATCHES_ENV,
@@ -148,6 +148,7 @@ impl McpGeneratedApp {
         let child = spawn_generated_server(
             &self.binary_path(),
             &args,
+            &[PINNED_RAYON_POOL],
             &self.project_dir,
             port,
             &self.stdout_log,

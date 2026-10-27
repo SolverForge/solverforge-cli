@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
-use support::app_harness::short_solver_config;
+use support::app_harness::{short_solver_config, PINNED_RAYON_POOL};
 use support::generated_app::{seeded_mixed_data_module, seeded_scalar_data_module, GeneratedApp};
 use support::mixed_solution;
 
@@ -218,7 +218,198 @@ fn mixed_runtime_pipeline() {
         204
     );
 
+    // PHASE 3: fixed-work parallel evaluation must retrace the sequential run.
+    app.stop_server();
+    app.phase("Pin a seeded fixed-work solver config");
+    app.write_file("solver.toml", fixed_work_solver_config());
+    app.cargo_build("Build sequential fixed-work mixed app");
+    let sequential = run_fixed_work_solve(&mut app, &[]);
+    app.run_cli(
+        "Enable parallel local-search evaluation",
+        &["config", "set", "move_thread_count.count", "4"],
+    );
+    app.cargo_build("Build parallel fixed-work mixed app");
+    let parallel = run_fixed_work_solve(&mut app, &[PINNED_RAYON_POOL]);
+    app.phase("Compare parallel and sequential trajectories");
+    assert_parallel_retraces_sequential(&sequential, &parallel);
+
     app.mark_success();
+}
+
+/// Seeded, step-bounded search so a parallel solve does exactly the logical
+/// work of the sequential one; the trace cap covers every pull of the solve.
+fn fixed_work_solver_config() -> &'static str {
+    r#"random_seed = 7
+
+[[phases]]
+type = "construction_heuristic"
+construction_heuristic_type = "first_fit"
+
+[[phases]]
+type = "local_search"
+[phases.acceptor]
+type = "late_acceptance"
+late_acceptance_size = 400
+[phases.forager]
+type = "accepted_count"
+limit = 4
+
+[termination]
+step_count_limit = 300
+
+[candidate_trace]
+max_entries = 100000
+"#
+}
+
+struct FixedWorkRun {
+    status: Value,
+    solution: Value,
+    consumed_pulls: Vec<String>,
+    speculative_pulls: usize,
+}
+
+fn run_fixed_work_solve(app: &mut GeneratedApp, env: &[(&str, &str)]) -> FixedWorkRun {
+    let port = app.start_server_with_env(env);
+    let client = app.client();
+    let base_url = app.base_url(port);
+    let job_id = app.create_job_from_demo(&client, port, "LARGE");
+    let status = wait_for_job_state(&client, &base_url, &job_id, "COMPLETED");
+    let snapshot = client
+        .get(format!("{base_url}/jobs/{job_id}/snapshot"))
+        .send()
+        .expect("fixed-work snapshot request failed")
+        .error_for_status()
+        .expect("fixed-work snapshot should be successful")
+        .json::<Value>()
+        .expect("fixed-work snapshot should return JSON");
+    let detail = client
+        .get(format!("{base_url}/jobs/{job_id}/telemetry"))
+        .send()
+        .expect("fixed-work telemetry request failed")
+        .error_for_status()
+        .expect("fixed-work telemetry should be successful")
+        .json::<Value>()
+        .expect("fixed-work telemetry should return JSON");
+    let trace = &detail["candidateTrace"];
+    assert_eq!(
+        trace["truncated"], false,
+        "the trace cap must cover the whole fixed-work solve: {} pulls",
+        trace["totalPulls"]
+    );
+    let pulls = trace["pulls"].as_array().expect("trace pulls array");
+    let is_speculative = |pull: &&Value| {
+        pull["dispositions"]
+            .as_array()
+            .expect("pull dispositions array")
+            .iter()
+            .any(|disposition| disposition == "discarded_speculative")
+    };
+    // Speculative pulls are the only legitimate difference between thread
+    // counts; every consumed candidate and its decisions must match in order.
+    let consumed_pulls = pulls
+        .iter()
+        .filter(|pull| !is_speculative(pull))
+        .map(|pull| {
+            format!(
+                "{}:{}:{}:{}",
+                pull["phaseIndex"], pull["stepIndex"], pull["identity"], pull["dispositions"]
+            )
+        })
+        .collect();
+    let speculative_pulls = pulls.iter().filter(is_speculative).count();
+    assert_eq!(
+        client
+            .delete(format!("{base_url}/jobs/{job_id}"))
+            .send()
+            .expect("fixed-work delete request failed")
+            .status()
+            .as_u16(),
+        204
+    );
+    app.stop_server();
+    FixedWorkRun {
+        status,
+        solution: snapshot["solution"].clone(),
+        consumed_pulls,
+        speculative_pulls,
+    }
+}
+
+fn assert_parallel_retraces_sequential(sequential: &FixedWorkRun, parallel: &FixedWorkRun) {
+    mixed_solution::assert_complete_mixed_solution(&parallel.solution);
+    assert_eq!(
+        parallel.solution, sequential.solution,
+        "parallel evaluation must reach the sequential solution at fixed work"
+    );
+    assert_eq!(parallel.status["bestScore"], sequential.status["bestScore"]);
+    // Generated moves include the speculative ones, so they legitimately
+    // differ; every logical counter must not.
+    let seq = &sequential.status["telemetry"];
+    let par = &parallel.status["telemetry"];
+    for counter in [
+        "stepCount",
+        "movesEvaluated",
+        "movesAccepted",
+        "movesApplied",
+        "movesForagerIgnored",
+        "scoreCalculations",
+    ] {
+        assert!(
+            seq[counter].is_number(),
+            "missing telemetry counter {counter}"
+        );
+        assert_eq!(
+            par[counter], seq[counter],
+            "logical counter {counter} must match the sequential run"
+        );
+    }
+    assert_eq!(seq["movesSpeculative"], 0);
+    assert_eq!(sequential.speculative_pulls, 0);
+    let speculative = par["movesSpeculative"]
+        .as_u64()
+        .expect("parallel telemetry must count speculative moves");
+    assert!(
+        speculative > 0,
+        "move_thread_count 4 on a pinned pool must evaluate speculatively: phases {:?}",
+        par["phases"]
+    );
+    assert_eq!(
+        parallel.speculative_pulls as u64, speculative,
+        "the trace must mark exactly the speculative work the telemetry counts"
+    );
+    let phase_speculative = |telemetry: &Value| {
+        telemetry["phases"]
+            .as_array()
+            .expect("telemetry phases array")
+            .iter()
+            .map(|phase| {
+                (
+                    phase["phaseType"].as_str().unwrap_or_default().to_string(),
+                    phase["movesSpeculative"].as_u64().unwrap_or_default(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let parallel_phases = phase_speculative(par);
+    assert_eq!(
+        parallel_phases.len(),
+        2,
+        "fixed-work telemetry should report construction and local search: {parallel_phases:?}"
+    );
+    assert_eq!(
+        parallel_phases[0].1, 0,
+        "construction never evaluates speculatively: {parallel_phases:?}"
+    );
+    assert_eq!(
+        parallel_phases[1].1, speculative,
+        "local search owns all speculative work: {parallel_phases:?}"
+    );
+    assert!(!sequential.consumed_pulls.is_empty());
+    assert_eq!(
+        parallel.consumed_pulls, sequential.consumed_pulls,
+        "consumed candidate pulls and their decisions must match the sequential run in order"
+    );
 }
 
 #[test]
@@ -284,6 +475,8 @@ fn scalar_solver_pipeline() {
     assert!(solving["telemetry"]["selectorTelemetry"].is_array());
     assert!(solving["telemetry"]["moveTelemetry"].is_array());
     assert!(solving["telemetry"]["appliedMoveTrace"].is_array());
+    assert_eq!(solving["telemetry"]["movesSpeculative"], 0);
+    assert!(solving["telemetry"]["phases"].is_array());
 
     let latest_snapshot = client
         .get(format!("{base_url}/jobs/{live_job_id}/snapshot"))

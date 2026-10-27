@@ -83,11 +83,17 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Spawns a built generated binary with the given args and both streams
-/// captured to log files.
+/// Pins the Rayon pool of a generated binary that runs parallel evaluation.
+/// The runtime caps `move_thread_count` at the pool size, so an unpinned pool
+/// on a one-core runner would silently evaluate sequentially.
+pub const PINNED_RAYON_POOL: (&str, &str) = ("RAYON_NUM_THREADS", "4");
+
+/// Spawns a built generated binary with the given args and environment and
+/// both streams captured to log files.
 pub fn spawn_generated_server(
     binary: &Path,
     args: &[String],
+    env: &[(&str, &str)],
     project_dir: &Path,
     port: u16,
     stdout_log: &Path,
@@ -97,6 +103,7 @@ pub fn spawn_generated_server(
     let stderr = fs::File::create(stderr_log).expect("failed to create stderr log");
     Command::new(binary)
         .args(args)
+        .envs(env.iter().copied())
         .env("PORT", port.to_string())
         .current_dir(project_dir)
         .stdout(Stdio::from(stdout))

@@ -20,6 +20,8 @@ use rmcp::transport::TokioChildProcess;
 use rmcp::ServiceExt;
 use serde_json::{json, Value};
 
+use super::app_harness::PINNED_RAYON_POOL;
+
 const DEMO: &str = "STANDARD";
 
 #[derive(Debug)]
@@ -53,7 +55,7 @@ pub struct LifecycleReport {
 /// terminal payload, then cancel. Used for both transports.
 pub fn stdio_task_flow(binary: &Path, timeout: Duration) -> TaskFlowReport {
     runtime().block_on(async move {
-        let transport = TokioChildProcess::new(tokio::process::Command::new(binary))
+        let transport = TokioChildProcess::new(stdio_server_command(binary))
             .expect("failed to spawn generated MCP server");
         let client = task_client()
             .serve_with_lifecycle(transport, task_lifecycle())
@@ -84,7 +86,7 @@ pub fn http_task_flow(port: u16, timeout: Duration) -> TaskFlowReport {
 /// lifecycle using the polling tools.
 pub fn stdio_lifecycle_flow(binary: &Path, timeout: Duration) -> LifecycleReport {
     runtime().block_on(async move {
-        let transport = TokioChildProcess::new(tokio::process::Command::new(binary))
+        let transport = TokioChildProcess::new(stdio_server_command(binary))
             .expect("failed to spawn generated MCP server");
         let client = plain_client()
             .serve(transport)
@@ -116,6 +118,7 @@ pub fn http_lifecycle_flow(port: u16, timeout: Duration) -> LifecycleReport {
 /// transport, so every returned line must parse as JSON.
 pub fn raw_stdio_stdout_lines(binary: &Path, timeout: Duration) -> Vec<String> {
     let mut child = Command::new(binary)
+        .env(PINNED_RAYON_POOL.0, PINNED_RAYON_POOL.1)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -405,6 +408,14 @@ fn task_lifecycle() -> ClientLifecycleMode {
         preferred_versions: vec![ProtocolVersion::V_2026_07_28],
         legacy_version: Some(ProtocolVersion::V_2025_11_25),
     }
+}
+
+/// The generated MCP app runs parallel evaluation, so every stdio session
+/// pins the Rayon pool that bounds it.
+fn stdio_server_command(binary: &Path) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(binary);
+    command.env(PINNED_RAYON_POOL.0, PINNED_RAYON_POOL.1);
+    command
 }
 
 fn runtime() -> tokio::runtime::Runtime {

@@ -19,14 +19,14 @@ use dependency_overrides::{
 use network_retry::cargo_with_network_retry;
 use scaffold_generated_app::ScaffoldGeneratedApp;
 
-const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.22.0";
+const RUNTIME_DEP_LABEL: &str = "crates.io: solverforge 0.23.0";
 const UI_DEP_LABEL: &str = "crates.io: solverforge-ui 0.9.0";
 const MAPS_DEP_LABEL: &str = "crates.io: solverforge-maps 2.1.4";
 const SOLVERFORGE_DEP_SPEC: &str =
-    r#"{ version = "0.22.0", features = ["serde", "console", "verbose-logging"] }"#;
+    r#"{ version = "0.23.0", features = ["serde", "console", "verbose-logging"] }"#;
 const SOLVERFORGE_UI_DEP_SPEC: &str = r#"{ version = "0.9.0" }"#;
 const SOLVERFORGE_MCP_DEP_SPEC: &str =
-    r#"{ version = "0.22.0", features = ["serde", "verbose-logging"] }"#;
+    r#"{ version = "0.23.0", features = ["serde", "verbose-logging"] }"#;
 const RMCP_DEP_SPEC: &str = r#"{ version = "3.5.1", features = ["server", "macros", "transport-io", "transport-streamable-http-server", "transport-streamable-http-server-session"] }"#;
 const SOLVERFORGE_MAPS_DEP_SPEC: &str = r#"{ version = "2.1.4" }"#;
 const GENERATED_RUST_VERSION_SPEC: &str = r#"rust-version = "1.95""#;
@@ -285,7 +285,7 @@ fn test_version_output_distinguishes_cli_from_runtime_target() {
     assert!(
         stdout.contains(&format!("solverforge-cli {}", CLI_VERSION))
             && stdout.contains(&format!("CLI version: {}", CLI_VERSION))
-            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.22.0")
+            && stdout.contains("Scaffold runtime target: SolverForge crate target 0.23.0")
             && stdout.contains("Scaffold UI target: solverforge-ui 0.9.0")
             && stdout.contains("Scaffold maps target: solverforge-maps 2.1.4")
             && stdout.contains(RUNTIME_DEP_LABEL)
@@ -420,8 +420,8 @@ fn test_new_creates_neutral_project_files() {
     assert!(
         app_spec.contains("starter = \"neutral-shell\"")
             && app_spec.contains("shell = \"web\"")
-            && app_spec.contains("target = \"solverforge 0.22.0\"")
-            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.22.0\"")
+            && app_spec.contains("target = \"solverforge 0.23.0\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.23.0\"")
             && app_spec.contains("[demo]")
             && app_spec.contains("default_size = \"standard\"")
             && app_spec.contains("available_sizes = [\"small\", \"standard\", \"large\"]")
@@ -471,7 +471,7 @@ fn test_new_creates_neutral_project_files() {
     );
     assert!(
         cargo_toml.contains(
-            "solverforge = { version = \"0.22.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
+            "solverforge = { version = \"0.23.0\", features = [\"serde\", \"console\", \"verbose-logging\"] }"
         ) && cargo_toml.contains("solverforge-ui = { version = \"0.9.0\" }")
             && cargo_toml.contains("solverforge-maps = { version = \"2.1.4\" }")
             && cargo_toml.contains(GENERATED_RUST_VERSION_SPEC)
@@ -583,13 +583,19 @@ fn test_new_creates_neutral_project_files() {
             && telemetry_rs.contains("pub moves_not_doable: u64")
             && telemetry_rs.contains("pub conflict_repair_exposed: u64")
             && telemetry_rs.contains("pub scalar_assignment_required_remaining: u64")
+            && telemetry_rs.matches("pub moves_speculative: u64").count() == 2
+            && telemetry_rs.contains("pub phases: Vec<PhaseTelemetryDto>")
+            && !telemetry_rs.contains("pub phase: Option<PhaseTelemetryDto>")
             && telemetry_rs.contains("pub selector_telemetry: Vec<SelectorTelemetryDto>")
             && telemetry_rs.contains("pub move_telemetry: Vec<MoveTelemetryDto>")
             && telemetry_rs.contains("pub applied_move_trace: Vec<AppliedMoveTelemetryDto>")
             && telemetry_rs.contains("pub struct CandidateTraceDto")
             && telemetry_rs.contains("pub qualified_run_provenance")
             && telemetry_rs.contains("CandidateTraceSource::ListClarkeWrightCompletionInsertion")
-            && telemetry_rs.contains("CandidateTraceDisposition::Applied"),
+            && telemetry_rs.contains("CandidateTraceDisposition::Applied")
+            && telemetry_rs.contains(
+                "CandidateTraceDisposition::DiscardedSpeculative => \"discarded_speculative\""
+            ),
         "neutral scaffold should project the complete compact and diagnostic SolverForge telemetry surfaces: {telemetry_rs}"
     );
     assert!(
@@ -597,6 +603,15 @@ fn test_new_creates_neutral_project_files() {
             && solver_toml.contains("max_entries = 100000")
             && solver_toml.contains("retained separately"),
         "neutral solver config should document the opt-in candidate trace surface: {solver_toml}"
+    );
+    assert!(
+        solver_toml.contains("# [move_thread_count]\n# count = 4")
+            && solver_toml.contains("RAYON_NUM_THREADS")
+            && solver_toml.contains("\"auto\", stays sequential")
+            && !solver_toml
+                .lines()
+                .any(|line| line.trim_start().starts_with("[move_thread_count]")),
+        "neutral solver config should document parallel evaluation as an opt-in: {solver_toml}"
     );
     assert!(
         sse_rs.contains(".bootstrap_event(&id)")
@@ -661,7 +676,7 @@ fn test_new_readme_records_cli_and_runtime_versions_separately() {
         readme.contains(&format!(
             "CLI version used to scaffold this project: `{}`",
             CLI_VERSION
-        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.22.0`")
+        )) && readme.contains("SolverForge runtime target for this scaffold: `solverforge 0.23.0`")
             && readme.contains("SolverForge UI target for this scaffold: `solverforge-ui 0.9.0`")
             && readme
                 .contains("SolverForge maps target for this scaffold: `solverforge-maps 2.1.4`")
@@ -731,8 +746,8 @@ fn test_new_api_shell_excludes_frontend_assets() {
 
     assert!(
         app_spec.contains("shell = \"api\"")
-            && app_spec.contains("target = \"solverforge 0.22.0\"")
-            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.22.0\"")
+            && app_spec.contains("target = \"solverforge 0.23.0\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.23.0\"")
             && !app_spec.contains("ui_source"),
         "api shell should be recorded in solverforge.app.toml: {app_spec}"
     );
@@ -767,9 +782,9 @@ fn test_new_api_shell_excludes_frontend_assets() {
         std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     assert!(
         app_spec_after_generate.contains("shell = \"api\"")
-            && app_spec_after_generate.contains("target = \"solverforge 0.22.0\"")
+            && app_spec_after_generate.contains("target = \"solverforge 0.23.0\"")
             && app_spec_after_generate
-                .contains("runtime_source = \"crates.io: solverforge 0.22.0\"")
+                .contains("runtime_source = \"crates.io: solverforge 0.23.0\"")
             && !app_spec_after_generate.contains("ui_source"),
         "api shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
@@ -818,8 +833,8 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
 
     assert!(
         app_spec.contains("shell = \"cli\"")
-            && app_spec.contains("target = \"solverforge 0.22.0\"")
-            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.22.0\"")
+            && app_spec.contains("target = \"solverforge 0.23.0\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.23.0\"")
             && !app_spec.contains("ui_source"),
         "cli shell should be recorded in solverforge.app.toml: {app_spec}"
     );
@@ -873,9 +888,9 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     assert!(
         app_spec_after_generate.contains("shell = \"cli\"")
-            && app_spec_after_generate.contains("target = \"solverforge 0.22.0\"")
+            && app_spec_after_generate.contains("target = \"solverforge 0.23.0\"")
             && app_spec_after_generate
-                .contains("runtime_source = \"crates.io: solverforge 0.22.0\"")
+                .contains("runtime_source = \"crates.io: solverforge 0.23.0\"")
             && !app_spec_after_generate.contains("ui_source"),
         "cli shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
@@ -939,8 +954,8 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
 
     assert!(
         app_spec.contains("shell = \"mcp\"")
-            && app_spec.contains("target = \"solverforge 0.22.0\"")
-            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.22.0\"")
+            && app_spec.contains("target = \"solverforge 0.23.0\"")
+            && app_spec.contains("runtime_source = \"crates.io: solverforge 0.23.0\"")
             && !app_spec.contains("ui_source"),
         "mcp shell should be recorded in solverforge.app.toml: {app_spec}"
     );
@@ -1127,9 +1142,9 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
         std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     assert!(
         app_spec_after_generate.contains("shell = \"mcp\"")
-            && app_spec_after_generate.contains("target = \"solverforge 0.22.0\"")
+            && app_spec_after_generate.contains("target = \"solverforge 0.23.0\"")
             && app_spec_after_generate
-                .contains("runtime_source = \"crates.io: solverforge 0.22.0\"")
+                .contains("runtime_source = \"crates.io: solverforge 0.23.0\"")
             && !app_spec_after_generate.contains("ui_source"),
         "mcp shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );

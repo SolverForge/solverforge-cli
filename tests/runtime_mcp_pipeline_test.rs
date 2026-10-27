@@ -77,6 +77,12 @@ fn seed_modeled_mcp_app(test_name: &str) -> McpGeneratedApp {
     );
     app.run_cli("Generate demo data", &["generate", "data"]);
     app.write_file("solver.toml", short_solver_config());
+    // Every MCP phase runs with parallel evaluation: worker threads must keep
+    // the stdio channel pure and the task lifecycle intact.
+    app.run_cli(
+        "Enable parallel local-search evaluation",
+        &["config", "set", "move_thread_count.count", "4"],
+    );
     app.cargo_build("Build generated MCP app");
     app
 }
@@ -113,6 +119,19 @@ fn assert_tool_surface(surface: &ToolSurface) {
 
 /// Asserts the terminal task payload carries a real mixed solution: scalar
 /// assignment plus complete list placement.
+/// The terminal status counts candidates evaluated ahead of the sequential
+/// decision point; a positive count proves the solve ran parallel evaluation.
+fn assert_parallel_evaluation(terminal: &serde_json::Value) {
+    let speculative = terminal["telemetry"]["movesSpeculative"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("terminal telemetry must count speculative moves: {terminal:?}"));
+    assert!(
+        speculative > 0,
+        "a solve with move_thread_count 4 on a pinned pool must evaluate speculatively: {:?}",
+        terminal["telemetry"]
+    );
+}
+
 fn assert_mixed_solution(terminal: &serde_json::Value) {
     assert!(
         terminal["jobId"].is_string(),
@@ -256,6 +275,7 @@ fn mcp_stdio_pipeline() {
         report.states
     );
     assert_mixed_solution(&report.terminal);
+    assert_parallel_evaluation(&report.terminal);
     assert_terminal_matches_solve_schema(&report.surface, &report.terminal);
     assert!(
         report.cancel_acked,
@@ -267,7 +287,7 @@ fn mcp_stdio_pipeline() {
     assert_lifecycle_sequence(&stdio_lifecycle_flow(&app.binary_path(), FLOW_TIMEOUT));
 
     // PHASE 4: stdio stdout must stay pure JSON-RPC while a solve runs.
-    app.phase("Verify stdio stdout purity during a solve");
+    app.phase("Verify stdio stdout purity during a parallel solve");
     let lines = raw_stdio_stdout_lines(&app.binary_path(), Duration::from_secs(30));
     assert!(
         lines.iter().any(|line| line.contains("\"id\":2")),
@@ -310,6 +330,7 @@ fn mcp_http_pipeline() {
         report.states
     );
     assert_mixed_solution(&report.terminal);
+    assert_parallel_evaluation(&report.terminal);
     assert_terminal_matches_solve_schema(&report.surface, &report.terminal);
 
     // PHASE 4: legacy client over Streamable HTTP drives the full lifecycle.
