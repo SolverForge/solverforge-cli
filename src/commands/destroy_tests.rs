@@ -339,6 +339,162 @@ impl Task {
     );
 }
 
+fn write_task_constraint(name: &str, body: &str) {
+    fs::create_dir_all("src/constraints").expect("failed to create constraints dir");
+    fs::write(format!("src/constraints/{name}.rs"), body).expect("failed to write constraint");
+}
+
+fn snapshot_domain() -> Vec<(String, String)> {
+    [
+        "src/domain/task.rs",
+        "src/domain/resource.rs",
+        "src/domain/plan.rs",
+        "src/domain/mod.rs",
+    ]
+    .iter()
+    .map(|path| {
+        (
+            path.to_string(),
+            fs::read_to_string(path).expect("failed to read domain file"),
+        )
+    })
+    .collect()
+}
+
+fn assert_domain_unchanged(before: &[(String, String)]) {
+    for (path, contents) in before {
+        assert_eq!(
+            &fs::read_to_string(path).unwrap_or_else(|_| panic!("{path} must still exist")),
+            contents,
+            "failed dependency check must not rewrite {path}"
+        );
+    }
+}
+
+#[test]
+fn destroy_entity_rejects_source_references_without_mutation() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+    write_minimal_domain_project(true);
+    write_task_constraint(
+        "all_assigned",
+        r#"use crate::domain::{Plan, Task};
+
+fn unary_condition(_entity: &Task) -> bool {
+    true
+}
+"#,
+    );
+    fs::create_dir_all("src/api").expect("failed to create api dir");
+    fs::write(
+        "src/api/stats.rs",
+        "pub fn count(tasks: &[crate::domain::Task]) -> usize {\n    tasks.len()\n}\n",
+    )
+    .expect("failed to write api file");
+    let before = snapshot_domain();
+
+    let err = run_entity("task", true)
+        .expect_err("destroy entity should fail while source still references the type");
+
+    let message = err.to_string();
+    assert!(
+        message.contains(
+            "cannot destroy entity 'Task' because source files still reference it: src/api/stats.rs, src/constraints/all_assigned.rs"
+        ) && message.contains("`solverforge destroy --yes constraint all_assigned`")
+            && message.contains("remove the references to 'Task' from src/api/stats.rs"),
+        "unexpected error: {message}"
+    );
+    assert_domain_unchanged(&before);
+}
+
+#[test]
+fn destroy_entity_rejects_solution_collection_accessor_references() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+    write_minimal_domain_project(true);
+    write_task_constraint(
+        "all_assigned",
+        r#"use crate::domain::Plan;
+
+pub fn constraint() {
+    ConstraintFactory::<Plan, HardSoftScore>::new()
+        .for_each(Plan :: tasks())
+        .named("all_assigned");
+}
+"#,
+    );
+    let before = snapshot_domain();
+
+    let err = run_entity("task", true)
+        .expect_err("destroy entity should fail while a constraint streams its collection");
+
+    assert!(
+        err.to_string().contains(
+            "cannot destroy entity 'Task' because source files still reference it: src/constraints/all_assigned.rs"
+        ),
+        "unexpected error: {err}"
+    );
+    assert_domain_unchanged(&before);
+}
+
+#[test]
+fn destroy_fact_rejects_constraint_references_without_mutation() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+    write_minimal_domain_project(true);
+    write_task_constraint(
+        "skill",
+        r#"use crate::domain::{Plan, Resource, Task};
+
+fn join_condition(_entity: &Task, _fact: &Resource) -> bool {
+    true
+}
+"#,
+    );
+    let before = snapshot_domain();
+
+    let err = run_fact("resource", true)
+        .expect_err("destroy fact should fail while a constraint still joins it");
+
+    assert!(
+        err.to_string().contains(
+            "cannot destroy fact 'Resource' because source files still reference it: src/constraints/skill.rs"
+        ) && err
+            .to_string()
+            .contains("`solverforge destroy --yes constraint skill`"),
+        "unexpected error: {err}"
+    );
+    assert_domain_unchanged(&before);
+}
+
+#[test]
+fn destroy_entity_ignores_mentions_in_comments_and_literals() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+    write_minimal_domain_project(true);
+    write_task_constraint(
+        "notes",
+        r##"// Task used to be modelled here; see Plan::tasks().
+/* nested /* Task */ comment */
+pub const LABEL: &str = "Task";
+pub const RAW: &str = r#"Plan::tasks() and "Task""#;
+pub const QUOTE: char = '"';
+pub fn tasks_label<'a>(value: &'a str) -> &'a str {
+    value
+}
+"##,
+    );
+    write_stale_data_seed();
+
+    run_entity("task", true).expect("mentions outside code must not block destroy");
+
+    assert!(!Path::new("src/domain/task.rs").exists());
+}
+
 #[test]
 fn destroy_entity_rejects_scalar_group_targets_without_mutation() {
     let _cwd_guard = test_support::lock_cwd();

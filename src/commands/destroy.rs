@@ -91,6 +91,13 @@ pub fn run_entity(name: &str, skip_confirm: bool) -> CliResult {
         })?;
 
     model_contract::ensure_entity_has_no_scalar_group_targets(&pascal)?;
+    ensure_type_is_unreferenced_in_source(
+        "entity",
+        &domain,
+        &entity.item_type,
+        &entity.field_name,
+        &snake,
+    )?;
 
     if !confirm_destroy("entity", &pascal, skip_confirm)? {
         output::print_skip(&format!("entity {}", pascal));
@@ -185,6 +192,13 @@ pub fn run_fact(name: &str, skip_confirm: bool) -> CliResult {
         })?;
 
     ensure_fact_collection_is_unreferenced(&domain, fact.field_name.as_str(), &fact.item_type)?;
+    ensure_type_is_unreferenced_in_source(
+        "fact",
+        &domain,
+        &fact.item_type,
+        &fact.field_name,
+        &snake,
+    )?;
 
     if !confirm_destroy("fact", &pascal, skip_confirm)? {
         output::print_skip(&format!("fact {}", pascal));
@@ -298,6 +312,240 @@ fn ensure_fact_collection_is_unreferenced(
         field_name,
         references.join(", ")
     )))
+}
+
+/// Refuses to destroy a domain type while project source outside the files the
+/// destroy rewrites still names it.
+///
+/// Destroying an entity or fact deletes its file, its domain export, and its
+/// solution collection. Any other source that uses the type (`Task`) or its
+/// solution collection accessor (`Plan::tasks()`), typically constraints,
+/// would stop compiling, so the destroy is blocked and the dependent files are
+/// named instead of being edited or deleted behind the user's back.
+fn ensure_type_is_unreferenced_in_source(
+    kind: &str,
+    domain: &DomainModel,
+    type_name: &str,
+    field_name: &str,
+    snake: &str,
+) -> CliResult {
+    let domain_dir = Path::new("src/domain");
+    let mut rewritten = vec![
+        domain_dir.join("mod.rs"),
+        domain_dir.join(format!("{snake}.rs")),
+        Path::new("src/data/data_seed.rs").to_path_buf(),
+    ];
+    for owned_type in [type_name, domain.solution_type.as_str()] {
+        if let Ok(path) = find_file_for_type(domain_dir, owned_type) {
+            rewritten.push(path);
+        }
+    }
+
+    let mut files = Vec::new();
+    collect_rust_files(Path::new("src"), &mut files)?;
+    files.sort();
+
+    let mut dependents = Vec::new();
+    for file in files {
+        if rewritten.iter().any(|path| path == &file) {
+            continue;
+        }
+        let source = fs::read_to_string(&file).map_err(|e| CliError::IoError {
+            context: format!("failed to read {}", file.display()),
+            source: e,
+        })?;
+        if source_references_type(&source, type_name, &domain.solution_type, field_name) {
+            dependents.push(file);
+        }
+    }
+
+    if dependents.is_empty() {
+        return Ok(());
+    }
+
+    let constraints_dir = Path::new("src/constraints");
+    let mut constraint_ids = Vec::new();
+    let mut other_files = Vec::new();
+    for file in &dependents {
+        let constraint_id = (file.parent() == Some(constraints_dir))
+            .then(|| file.file_stem().and_then(|stem| stem.to_str()))
+            .flatten()
+            .filter(|stem| *stem != "mod");
+        match constraint_id {
+            Some(id) => constraint_ids.push(id.to_string()),
+            None => other_files.push(file.display().to_string()),
+        }
+    }
+
+    let mut hints = Vec::new();
+    if !constraint_ids.is_empty() {
+        hints.push(format!(
+            "destroy dependent constraints first with {}",
+            constraint_ids
+                .iter()
+                .map(|id| format!("`solverforge destroy --yes constraint {id}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if !other_files.is_empty() {
+        hints.push(format!(
+            "remove the references to '{type_name}' from {}",
+            other_files.join(", ")
+        ));
+    }
+
+    Err(CliError::with_hint(
+        format!(
+            "cannot destroy {kind} '{type_name}' because source files still reference it: {}",
+            dependents
+                .iter()
+                .map(|file| file.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        hints.join("; then "),
+    ))
+}
+
+fn collect_rust_files(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> CliResult {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+    let entries = fs::read_dir(dir).map_err(|e| CliError::IoError {
+        context: format!("failed to read {}", dir.display()),
+        source: e,
+    })?;
+    for entry in entries {
+        let path = entry
+            .map_err(|e| CliError::IoError {
+                context: format!("failed to read {}", dir.display()),
+                source: e,
+            })?
+            .path();
+        if path.is_dir() {
+            collect_rust_files(&path, files)?;
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Reports whether Rust `source` names `type_name` or the solution collection
+/// accessor `<solution_type>::<field_name>` outside comments and literals.
+fn source_references_type(
+    source: &str,
+    type_name: &str,
+    solution_type: &str,
+    field_name: &str,
+) -> bool {
+    let tokens = code_tokens(source);
+    tokens.iter().enumerate().any(|(i, token)| {
+        token == type_name
+            || (token == solution_type
+                && tokens.get(i + 1).map(String::as_str) == Some("::")
+                && tokens.get(i + 2).map(String::as_str) == Some(field_name))
+    })
+}
+
+/// Splits Rust source into identifiers and `::` path separators, dropping
+/// comments, string/char literals, and other punctuation.
+fn code_tokens(source: &str) -> Vec<String> {
+    let chars: Vec<char> = source.chars().collect();
+    let mut tokens = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
+        if c == '/' && next == Some('/') {
+            while i < chars.len() && chars[i] != '\n' {
+                i += 1;
+            }
+        } else if c == '/' && next == Some('*') {
+            let mut depth = 0usize;
+            while i < chars.len() {
+                if chars[i] == '/' && chars.get(i + 1) == Some(&'*') {
+                    depth += 1;
+                    i += 2;
+                } else if chars[i] == '*' && chars.get(i + 1) == Some(&'/') {
+                    depth -= 1;
+                    i += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+        } else if c == 'r' && matches!(next, Some('"') | Some('#')) && raw_string_start(&chars, i) {
+            i = skip_raw_string(&chars, i);
+        } else if c == '"' {
+            i += 1;
+            while i < chars.len() && chars[i] != '"' {
+                i += if chars[i] == '\\' { 2 } else { 1 };
+            }
+            i += 1;
+        } else if c == '\'' {
+            i = skip_char_literal_or_lifetime(&chars, i);
+        } else if c.is_alphabetic() || c == '_' {
+            let start = i;
+            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                i += 1;
+            }
+            tokens.push(chars[start..i].iter().collect());
+        } else if c == ':' && next == Some(':') {
+            tokens.push("::".to_string());
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    tokens
+}
+
+fn raw_string_start(chars: &[char], start: usize) -> bool {
+    if start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
+        return false;
+    }
+    let mut i = start + 1;
+    while chars.get(i) == Some(&'#') {
+        i += 1;
+    }
+    chars.get(i) == Some(&'"')
+}
+
+fn skip_raw_string(chars: &[char], start: usize) -> usize {
+    let mut i = start + 1;
+    let mut hashes = 0;
+    while chars.get(i) == Some(&'#') {
+        hashes += 1;
+        i += 1;
+    }
+    i += 1;
+    while i < chars.len() {
+        if chars[i] == '"' && (1..=hashes).all(|k| chars.get(i + k) == Some(&'#')) {
+            return i + 1 + hashes;
+        }
+        i += 1;
+    }
+    chars.len()
+}
+
+/// Skips a char literal (`'a'`, `'\''`); a lifetime (`'a`) only skips its quote
+/// so the label is still tokenized harmlessly.
+fn skip_char_literal_or_lifetime(chars: &[char], start: usize) -> usize {
+    match (chars.get(start + 1), chars.get(start + 2)) {
+        (Some('\\'), _) => {
+            let mut i = start + 3;
+            while i < chars.len() && chars[i] != '\'' {
+                i += 1;
+            }
+            i + 1
+        }
+        (Some(_), Some('\'')) => start + 3,
+        _ => start + 1,
+    }
 }
 
 pub fn run_variable(field: &str, entity: &str, skip_confirm: bool) -> CliResult {
