@@ -1,11 +1,11 @@
 # SolverForge Upstream Feature Audit
 
-Audit date: 2026-10-27
+Audit date: 2026-11-03
 
 This audit compares the current `solverforge-cli` scaffold surface against the
 live SolverForge upstream checkout at `/srv/lab/dev/solverforge/solverforge`
 and the crates.io release state. Generated projects now target the published
-SolverForge `0.23.0` release. Registry-only generated-app validation is the
+SolverForge `0.24.0` release. Registry-only generated-app validation is the
 release gate; `SF_USE_LOCAL_PATCHES=1` remains reserved for explicit future
 prerelease checks against sibling checkouts.
 
@@ -15,11 +15,13 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Source Evidence
 
-- Published gate: `cargo info solverforge@0.23.0` resolves the published crate
-  on 2026-10-27, with Rust `1.95` and the scaffolded `serde`,
-  `console`, and `verbose-logging` feature set still available.
+- Published gate: `cargo info solverforge@0.24.0` resolves the published crate
+  on 2026-11-03, with Rust `1.95` and the `serde`, `console`, and
+  `verbose-logging` features; `verbose-logging` is
+  `[console, solverforge-console/verbose-logging]`, so the web, API, and CLI
+  shells keep all three and the MCP shell enables only `serde`.
 - Upstream local checkout: the workspace and inter-crate dependency baseline is
-  `0.23.0`, with `v0.23.0` at the checked-out release commit. The `0.19.0`
+  `0.24.0`, with `v0.24.0` (`c114e2d2`) at the checked-out release commit. The `0.19.0`
   release made list variables the sole sequence and route model; the published
   `0.19.1` through `0.19.7` patch line carries the subsequent solver fixes.
 - Upstream `0.19.7..0.22.0` release surface: `0.19.8` through `0.19.14` are
@@ -55,7 +57,58 @@ without turning the neutral scaffold into a domain-specific demo.
   shadows). `Move::tabu_signature` lends a `Cow` and the bridge's
   `DynamicScore` becomes a plain three-level value; neither touches generated
   code, which declares no custom moves or bridge bindings.
-  `0.19.7` remains a version-surface-only release (no source delta over
+- Upstream `0.23.0..0.24.0` release surface (107 commits, source-carrying,
+  breaking): constraint weights and an API cleanup. Breaking changes that reach
+  generated apps, and how the scaffold handles each:
+  - `ConstraintAnalysis.weight` becomes `weight_multiplier` (constraints now
+    scale by a bound `#[constraint_weights]` weight). The generated analysis
+    DTO projects `weightMultiplier` (`u32`) instead of `weight`, a breaking
+    wire change for generated-app consumers. The neutral scaffold declares no
+    `#[constraint_weights]`; the CLI exposes no weights surface.
+  - `SelectorTelemetry` loses its six `conflict_repair_*` fields (they could
+    never be non-zero). The selector DTO drops `conflictRepair*`; the run-level
+    `TelemetryDto` keeps the six counters because `SolverTelemetry` still
+    carries them. `PhaseTelemetry` carries none in either release, so the phase
+    DTO is unchanged.
+  - `SolverManager::solve` returns `SolverEventReceiver` instead of tokio's
+    `UnboundedReceiver`. The retained job store holds that receiver.
+  - Closures, `fn` items, and `vec(...)` are no longer stream sources. CLI
+    constraint skeletons already stream from `Plan::<collection>()`; the
+    internal list template's built-in constraints now stream
+    `Plan::containers()`.
+  - `verbose-logging` now enables `console`. The MCP shell drops it (it had no
+    effect there on `0.23.0`) so the runtime banner never reaches the stdio
+    transport; it enables only `serde`.
+  - An `acceptor_forager` local search without `move_selector` compiles only
+    when the model yields a default selector. The neutral template's explicit
+    phases failed every solve of a fresh scaffold, so it now declares no
+    `[[phases]]` and uses the runtime's model-aware default pipeline.
+  - Assignment-owned scalar-group targets reject any other construction
+    phase that reaches them. `generate scalar-group` refuses such a
+    user-authored phase instead of writing a config that cannot solve.
+  - `#[planning_solution]` requires a `ParseableScore`, implemented for
+    `HardSoftScore`, `HardSoftDecimalScore`, `HardMediumSoftScore`, and
+    `SoftScore` only (`0.24.0` adds serde for `BendableScore`, not parsing).
+    `generate score|solution` rejects `BendableScore`.
+  - Solver configuration rejects unknown keys at load. Generated apps parse
+    the embedded `solver.toml` on the first solve; `solverforge check` does
+    not reject unknown keys, so such a typo fails the job, not the check.
+  - Models without `solver_toml` stop reading `solver.toml` from the working
+    directory. Both templates declare `solver_toml = "../../solver.toml"`, so
+    nothing changes for generated apps.
+  - API removals and renames that generated code does not use: YAML config,
+    `solverforge::bridge`, the `decimal` feature, `SolverHandle`,
+    `MoveArena`, `IncrementalConstraint::weight()`, the
+    `IncrementalConstraintSealed` to `SingleConstraint` rename, fallible
+    `SearchContext`/acceptor/forager builders, `Solvable::solve` returning a
+    result, `VrpSolution::vehicle_data`, and the solverforge-solver
+    crate-root-only exports.
+  - Runtime-owned changes with no scaffold surface: real-time problem
+    changes, `solve_with_config`, score arithmetic that panics on `i64`
+    overflow, exact `HardSoftDecimalScore` parsing, rejection of
+    out-of-domain selector values, and a solve failure on an unparseable
+    `best_score_limit`.
+- `0.19.7` remains a version-surface-only release (no source delta over
   `0.19.6`), so no CLI contract question is decided by `0.19.7` itself.
 - Upstream `0.19.6` feature — entity pinning: `#[planning_pin]` on a boolean
   planning-entity field preserves that entity's input genuine scalar and list
@@ -130,14 +183,17 @@ without turning the neutral scaffold into a domain-specific demo.
   `scalar_groups`, `ScalarGroup::assignment`, grouped scalar construction with
   `group_name`, `construction_obligation = "assign_when_candidate_exists"`, and
   `grouped_scalar_move_selector`.
-- CLI coverage today: the scaffold targets `solverforge 0.23.0`, exposes the
+- CLI coverage today: the scaffold targets `solverforge 0.24.0`, exposes the
   `web`, `api`, `cli`, and `mcp` shells, and includes the retained
   `SolverManager` lifecycle, typed SSE, snapshots, analysis,
   pause/resume/cancel/delete, generated `solverforge.app.toml`, scalar/list
   variable generation, complete executable scalar/list metadata projection,
   countable scalar ranges, full compact telemetry (including per-phase records
   and speculative counts), bounded candidate-detail retrieval, qualified trace
-  jobs, and validated opt-in parallel evaluation.
+  jobs, validated opt-in parallel evaluation, and a neutral `solver.toml` that
+  defers to the runtime default pipeline.
+- Neutral solve gate: the neutral runtime pipeline solves the untouched
+  scaffold's demo data to `COMPLETED` with `0hard/0soft`.
 - Mixed execution gate: fresh runtime and browser scenarios seed a required
   scalar variable plus a list variable, start a retained solve, verify that
   every required scalar is assigned inside its range and that each list element
@@ -206,19 +262,26 @@ without turning the neutral scaffold into a domain-specific demo.
 | Scalar `candidate_values` hook | Implemented in this worktree: `generate variable --kind scalar` accepts `--candidate-values`, renders it into `#[planning_variable(...)]`, parses handwritten attributes, persists it in `solverforge.app.toml`, and projects it into `static/generated/ui-model.json`. | Covered. This is a generic scalar modeling capability and remains starter-safe as metadata only. | No further scaffold change. Keep hook bodies domain-owned and keep tests proving generated apps compile when the user provides the hook. | Existing parser/generator/app-spec/scaffold tests. |
 | Scalar nearby hooks and distance meters | Implemented in this worktree for `--nearby-value-candidates`, `--nearby-entity-candidates`, `--nearby-value-distance-meter`, and `--nearby-entity-distance-meter`. | Covered. Nearby selectors remain opt-in because the model must bound candidate discovery explicitly. | No further scaffold change. Do not alter `solver.toml` defaults when these flags are present. | Existing parser/projection/generation/scaffold tests; keep coverage that no nearby selector is emitted by default. |
 | Scalar construction order hooks | Implemented in this worktree for `--construction-entity-order-key` and `--construction-value-order-key`. | Covered. Required by scalar-only order-sensitive construction heuristics, but metadata alone should not switch solver policy. | No further scaffold change. A future config preset can validate that required hooks exist before selecting order-sensitive construction. | Existing parser/projection/generated-attribute tests. |
-| Countable scalar value ranges | Implemented as mutually exclusive `--countable-range FROM..TO`, with non-negative half-open validation, macro emission, domain parsing, app-spec/UI projection, numeric web rendering, and a fresh generated-app compile check. | Covered. This is a canonical scalar value source and does not require a synthetic fact collection. | Keep the stored macro/app-spec form as `from..to`; keep the UI projection structured as numeric `from`/`to` bounds. | Parser/validation unit tests, projection assertions, and generated-app `cargo check` against 0.23.0. |
+| Countable scalar value ranges | Implemented as mutually exclusive `--countable-range FROM..TO`, with non-negative half-open validation, macro emission, domain parsing, app-spec/UI projection, numeric web rendering, and a fresh generated-app compile check. | Covered. This is a canonical scalar value source and does not require a synthetic fact collection. | Keep the stored macro/app-spec form as `from..to`; keep the UI projection structured as numeric `from`/`to` bounds. | Parser/validation unit tests, projection assertions, and generated-app `cargo check` against 0.24.0. |
 | Sequence and route modeling | Implemented only through `--kind list --elements <collection>` and current list metadata. | Included. One list representation owns assignment and order and is the canonical sequence architecture. | Keep the public CLI, app spec, parser, generated data, UI projection, and runtime gates scalar/list-only. | List generator/parser/projection tests, mixed generated-app compile and runtime gates, and CVRP metadata generation/projection assertions (no generated CVRP app is built or solved). |
 | `0.19.4` assignment-backed omitted-phase defaults | Generated projects consume the runtime compiler through the umbrella `solverforge` crate; CLI-managed scalar-group phases already use explicit grouped `first_fit`. | Covered by the runtime target upgrade. The hard-first required batch and deferred rematch policy are runtime-owned and do not require a new CLI flag or template branch. | Preserve the explicit CLI-managed phase contract and let omitted-phase projects inherit the `0.19.4` runtime defaults. | Scalar-group config assertions, registry-only generated-app compilation, and upstream required-assignment runtime tests. |
-| `0.19.5` runtime fixes (cancellation retention, score-history fill, complete Clarke-Wright construction) | Generated projects consume the runtime through the umbrella `solverforge` crate; the retained cancellation and local-search paths are exercised by the scalar and mixed runtime/browser scenarios. The CVRP list profile has generator, projection, and conflict-validation coverage only; no generated CVRP app is built or solved. | Covered by the runtime target upgrade. These are runtime-owned bug fixes and require no CLI flag, template branch, or compatibility path. | Keep the generated model and config contracts unchanged and validate every shell plus scalar, list, and mixed runtime pipelines against `0.23.0`. | Registry-only scaffold checks, seeded scalar/mixed generated solves, browser lifecycle tests, and CVRP generation/projection assertions (no generated CVRP runtime solve today). |
-| Current construction heuristic catalog | CLI ships conservative scalar/list template defaults and generic `config set`. | Do not mirror every variant in scaffold defaults. | Document which upstream heuristics need opt-in model hooks; keep `first_fit` and `list_cheapest_insertion` templates stable until a command explicitly owns a configured preset. | Docs/audit assertions only unless a preset command is added. |
-| Immutable runtime compilation and resolved selector policy | Generated planning macros and `solver.toml` enter the canonical 0.23.0 runtime compiler; the templates do not assemble phases directly. | Covered by the runtime dependency upgrade. This is runtime-owned architecture, not a new scaffold family or compatibility path. | Keep the generated model and config contracts unchanged and validate every shell plus scalar, list, and mixed runtime pipelines against `0.23.0`. | Registry-only scaffold checks, seeded scalar/mixed generated solves, and browser lifecycle tests. |
-| `0.19.6` entity pinning (`#[planning_pin]`) | Not emitted by the CLI. The neutral scaffold declares no pin field and no `generate` surface writes `#[planning_pin]`; the attribute is user-authored domain metadata. The CLI's managed-block rewrites and model-contract check leave it in place: a generated app with a hand-added `#[planning_pin] bool` field passes `solverforge check` and `cargo check` against the published `0.23.0` registry. | Covered by the runtime target upgrade as opt-in domain metadata. Pinning is a per-entity modeling decision, not a scaffold family or a neutral default. | No scaffold change. Keep the neutral scaffold pin-free; if pinning is ever exposed it belongs in an explicit post-scaffold modeling command, in the same class as scalar groups and conflict repairs. | Generated-app `solverforge check` and registry-only `cargo check` with a hand-added pin field. Pinned solve semantics stay runtime-owned and are not exercised by this suite. |
+| `0.19.5` runtime fixes (cancellation retention, score-history fill, complete Clarke-Wright construction) | Generated projects consume the runtime through the umbrella `solverforge` crate; the retained cancellation and local-search paths are exercised by the scalar and mixed runtime/browser scenarios. The CVRP list profile has generator, projection, and conflict-validation coverage only; no generated CVRP app is built or solved. | Covered by the runtime target upgrade. These are runtime-owned bug fixes and require no CLI flag, template branch, or compatibility path. | Keep the generated model and config contracts unchanged and validate every shell plus scalar, list, and mixed runtime pipelines against `0.24.0`. | Registry-only scaffold checks, seeded scalar/mixed generated solves, browser lifecycle tests, and CVRP generation/projection assertions (no generated CVRP runtime solve today). |
+| Current construction heuristic catalog | The neutral scaffold declares no phases and inherits the runtime's model-aware construction; the internal list template keeps `list_cheapest_insertion`; `config set` stays generic. CLI-generated scalar-group phases select grouped `first_fit`. | Do not mirror every variant in scaffold defaults. | Document which upstream heuristics need opt-in model hooks; the commented example in the neutral `solver.toml` shows an explicit `first_fit` construction plus local search. | Docs/audit assertions only unless a preset command is added. |
+| Immutable runtime compilation and resolved selector policy | Generated planning macros and `solver.toml` enter the canonical 0.24.0 runtime compiler; the templates do not assemble phases directly. | Covered by the runtime dependency upgrade. This is runtime-owned architecture, not a new scaffold family or compatibility path. | Keep the generated model and config contracts unchanged and validate every shell plus scalar, list, and mixed runtime pipelines against `0.24.0`. | Registry-only scaffold checks, seeded scalar/mixed generated solves, and browser lifecycle tests. |
+| `0.19.6` entity pinning (`#[planning_pin]`) | Not emitted by the CLI. The neutral scaffold declares no pin field and no `generate` surface writes `#[planning_pin]`; the attribute is user-authored domain metadata. The CLI's managed-block rewrites and model-contract check leave it in place: a generated app with a hand-added `#[planning_pin] bool` field passes `solverforge check` and, once `solverforge generate data` re-renders the seed with the new field, `cargo check` against the published `0.24.0` registry (re-checked 2026-11-03). Sample data seeds that bool as `idx % 2 == 0`, so half the sample entities start pinned. | Covered by the runtime target upgrade as opt-in domain metadata. Pinning is a per-entity modeling decision, not a scaffold family or a neutral default. | No scaffold change. Keep the neutral scaffold pin-free; if pinning is ever exposed it belongs in an explicit post-scaffold modeling command, in the same class as scalar groups and conflict repairs. | Generated-app `solverforge check` and registry-only `cargo check` with a hand-added pin field. Pinned solve semantics stay runtime-owned and are not exercised by this suite. |
 | Parallel local-search evaluation (`0.23.0` `move_thread_count`) | Implemented as an opt-in `solver.toml` setting: both templates carry a commented `[move_thread_count]` block that documents the Rayon and 32-evaluator caps, the per-process shared pool, and the sequential `auto` default; `solverforge config set move_thread_count.count N` writes it; `check` and `config set` accept exactly the runtime's `"auto"`, `"none"`, and `{ count = N }` forms, because the embedded config is parsed on the first solve where a malformed value fails the job rather than the build. | Included, disabled by default. Upstream keeps `auto` sequential until benchmarks set a policy, and on the small mixed demo four evaluators measured slower than one (0.21 s against 0.11 s for 300 steps), so the neutral scaffold must not opt in. No per-solve override exists upstream (`SolverConfigOverride` carries termination only), so the setting stays app-wide and build-time. | No app-spec projection: `solver.toml` is the single owner. Generated servers do not size their own Rayon pool; `RAYON_NUM_THREADS` stays the operator's knob. | Validator unit tests against every runtime form, scaffold assertions on the commented block, and the mixed runtime fixed-work parity gate plus parallel MCP phases. |
 | Per-phase telemetry and speculative evaluation (`0.23.0` `phases`, `moves_speculative`, `DiscardedSpeculative`) | Implemented: `TelemetryDto.phases` projects every started phase in execution order (replacing the single `phase` record), the run and phase DTOs carry `movesSpeculative`, and the trace DTO labels `discarded_speculative`. Selector and move breakdowns carry no speculative counter upstream and none is invented. | Included as part of the full compact telemetry contract. `phase` to `phases` is a breaking wire change for generated-app consumers; `solverforge-ui 0.9.0` reads neither key. | Keep the projection one-to-one with `SolverTelemetry`; do not derive an evaluator count the runtime does not report. | Scaffold source assertions, scalar runtime assertions that sequential telemetry reports zero speculative work, and the parity gate's per-phase speculative assertions. |
+| Constraint weights and analysis multiplier (`0.24.0` `#[constraint_weights]`, `ConstraintAnalysis.weight_multiplier`) | The generated analysis DTO projects `weightMultiplier` (`u32`) in place of the removed `weight`. No `generate` surface writes `#[constraint_weights]`; the neutral scaffold declares none. | Analysis projection covered; weights stay opt-in domain metadata. `weight` to `weightMultiplier` is a breaking wire change for generated-app consumers. | No scaffold change beyond the DTO. A weights surface would be an explicit post-scaffold command. | Scaffold source assertions on the DTO; weighted scoring semantics are runtime-owned and not exercised by this suite. |
+| Selector telemetry without conflict-repair counters (`0.24.0`) | The selector DTO no longer carries `conflictRepair*`; the run-level `TelemetryDto` keeps the six counters because `SolverTelemetry` does. | Covered as part of the full compact telemetry contract; dropping selector keys is a breaking wire change. | Keep the projection one-to-one with the runtime telemetry types. | Scaffold source assertions and the scalar runtime pipeline's full aggregate telemetry checks. |
+| `SolverEventReceiver` from `SolverManager::solve` (`0.24.0`) | The retained job store holds the `SolverEventReceiver`. | Covered by the runtime dependency upgrade. | None. | Generated-app compile checks and the retained-lifecycle runtime, MCP, and browser pipelines. |
+| MCP shell runtime features (`0.24.0` `verbose-logging` enables `console`) | The MCP shell enables only `serde`; web, API, and CLI keep `serde`, `console`, and `verbose-logging`. | Covered. `console` writes the banner to stdout, the stdio MCP channel. | None. | Scaffold dependency assertions and the MCP pipeline's byte-level stdio purity phase. |
+| Planning solution score types (`ParseableScore` requirement) | `generate score|solution` accepts `HardSoftScore`, `HardSoftDecimalScore`, `HardMediumSoftScore`, and `SoftScore` and rejects `BendableScore`, which `0.24.0` cannot parse. | Covered by refusal. A `BendableScore` project could never compile (E0277). | Revisit when upstream implements `ParseableScore` for `BendableScore`. | Score validator tests and generated-app compile checks for the accepted types. |
+| Scalar-group target ownership in construction (`0.24.0` runtime rejection) | `generate scalar-group` refuses a user-authored scalar construction phase that reaches an assignment-owned target (untargeted, or matching `entity_class`/`variable_name`), naming the phase path and how to scope it. | Covered by refusal; candidate groups and list heuristics are unaffected. | None. | Solver-config ordering unit tests with scoped user phases. |
+| Unknown-key rejection in solver configuration (`0.24.0`) | Not covered: `solverforge check` and `config set` validate the settings they document but do not reject unknown `solver.toml` keys, so a typo passes `check` and fails the job at its first solve. | Gap, open. | Extend the CLI-private `solver.toml` validation to the runtime's accepted key set without linking `solverforge-config`. | Validator tests against the runtime parser's accepted and rejected keys. |
 | Qualified candidate execution traces | Implemented as an opt-in config setting, complete typed diagnostic DTO, `GET /jobs/{id}/telemetry`, and additive `POST /jobs/qualified` entry point carrying all required external digests and producer attestation. Candidate pulls remain absent from ordinary SSE/status/snapshot payloads. | Included but disabled by default. This preserves the runtime's compact control plane while exposing the complete diagnostic and qualification surface. | Keep the commented `[candidate_trace]` example, positive-capacity validation, separate detail route, and qualified provenance request aligned with the runtime types. | Unit config validation, scaffold source assertions, fresh generated-app compile checks, and a runtime pipeline that proves normal and qualified retained traces. |
 | Model-declared guided scalar search ordering (`0.20.3` `search_entity_order_key` / `search_value_order_key`) | Not emitted by the CLI. No `generate` surface writes the hooks; the neutral scaffold's scalar variables stay hook-free and the solver's seeded-random walk is unchanged without them. | Covered by the runtime target upgrade as opt-in domain metadata. Guided ordering is a per-variable modeling decision, not a scaffold default; the CLI's construction-order hooks (`--construction-entity-order-key`/`--construction-value-order-key`) remain construction-only and unrelated. | No scaffold change. Keep the neutral scaffold hook-free; a future opt-in flag on `generate variable --kind scalar` would mirror the nearby/construction hook pattern. | Tolerance of the hooks in generated apps is runtime-owned; matrix-covered by the registry-only compile gate, not by this suite. |
 | CVRP list profile and split route/savings hooks | Implemented through `generate variable --kind list`: `--domain cvrp` plus all generic distance, route/savings, metric-class, ownership, construction-order, precedence, and solution-trait metadata. Domain parsing, app spec, and web UI projection preserve the exact values. | Included as opt-in metadata; the neutral scaffold remains domain-free. The CLI rejects profile-owned overrides alongside `--domain cvrp`. | Keep hook bodies and CVRP trait implementation domain-owned. Do not inject fake route logic or a domain-specific default model. | Generator/parser tests, app-spec/UI projection coverage, CVRP conflict validation, upstream macro tests, and generated-app checks for the neutral/list templates. |
-| Canonical local-search defaults | CLI templates still specify explicit late-acceptance plus accepted-count local search. | No immediate change. Explicit scaffold defaults are stable and compile; upstream omitted-selector defaults are runtime-owned. | Leave current `solver.toml` templates alone. Consider a later docs note that deleting `move_selector` lets runtime choose canonical defaults. | Existing scaffold/runtime tests. |
+| Canonical local-search defaults | The neutral `solver.toml` declares no `[[phases]]`, so the runtime's model-aware default pipeline runs: it completes an empty model and adapts construction and local search as scalar, scalar-group, and list variables are added. The previous explicit late-acceptance plus accepted-count phases stay as a commented example. The internal list template keeps explicit phases. | Covered. On `0.24.0` an explicit `acceptor_forager` local search without `move_selector` cannot compile for a model with no planning variables, so the explicit default made every fresh-scaffold solve fail. | Keep the neutral template phase-free; generated scalar-group phases are the only phases the CLI writes, and destroying the last group restores the default pipeline. | Scaffold assertion that the neutral `solver.toml` has no `phases`, and the neutral runtime pipeline solving the untouched scaffold to `COMPLETED`. |
 | Scoring collectors and grouped/complemented stream APIs, including `consecutive_runs`, `indexed_presence`, and `collect_vec` | Implemented as opt-in advanced constraint skeleton flags while leaving scoring logic to the app. | Include as skeletons only. These APIs are important, but generated neutral constraints should not choose domain-specific collectors. | Keep the skeletons on the public stream surface with explicit panic placeholders. | Existing constraint-generation tests plus focused skeleton assertions. |
 | Conflict repair providers via `conflict_repairs = "path"` | Implemented as `solverforge generate conflict-repair CONSTRAINT_ID --provider provider_fn` with optional selector config. | Included, opt-in only. It requires constraint-specific provider code and is not neutral starter behavior. | The command wires `conflict_repairs = "conflict_repairs"`, emits a provider stub for local function names, and stores the exact snake_case constraint ID in generated Rust, app metadata, and solver config. | Unit tests for rendering and config mutation; generated-app `cargo check` after provider implementation exists. |
 | Retained `SolverManager` lifecycle | Already represented in templates, routes, DTOs, JS hooks, runtime tests, and E2E tests. | Already covered. | No action. Keep scaffold assertions protecting snapshots, lifecycle metadata, and pause/resume/cancel/delete semantics. | Existing scaffold, runtime, and Playwright lifecycle tests. |
@@ -226,7 +289,8 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Recommended Follow-Up Implementation Slice
 
-The current starter-safe 0.23.0 surface is implemented. The next high-value slice
+The current starter-safe 0.24.0 surface is implemented, apart from the
+unknown-key `solver.toml` validation gap recorded in the matrix. The next high-value slice
 is domain-specific documentation and executable examples, not more neutral
 scaffold defaults.
 
@@ -242,14 +306,15 @@ scaffold defaults.
 
 ## Implementation Status
 
-- Release state: `solverforge 0.23.0` is published on crates.io and matches
+- Release state: `solverforge 0.24.0` is published on crates.io and matches
   the live upstream release checkout and this generated target. The
-  `0.19.8..0.23.0` line is source-carrying (grouped-scalar search/perf work,
+  `0.19.8..0.24.0` line is source-carrying (grouped-scalar search/perf work,
   the `0.20.3` search-order hooks, the `0.21.0` scoring `group_by` joins, the
   `0.21.2` selector-subgraph edge rebase fix, the `0.21.3` precedence route
   delta fix, the `0.22.0` grouped-stream accumulator-kernel rework, the
-  `0.23.0` parallel local-search evaluation), and the published crate, the
-  `v0.23.0` tag, and this generated target are the same code. Registry-only validation is therefore authoritative.
+  `0.23.0` parallel local-search evaluation, the `0.24.0` constraint weights
+  and API cleanup), and the published crate, the `v0.24.0` tag, and this
+  generated target are the same code. Registry-only validation is therefore authoritative.
   `SF_USE_LOCAL_PATCHES=1` is only for an explicit future coordinated prerelease
   check. The audit uses the current `scalar_groups` / `ScalarGroup::assignment`
   vocabulary instead of the superseded coverage-group vocabulary from the earlier
@@ -341,9 +406,19 @@ scaffold defaults.
   `penalize_with` helper.
 - Preserved: the CLI still does not generate real Rust hook bodies. Generated
   stubs fail fast with TODO panics until the user-owned hook functions are
-  implemented.
-- Preserved: neutral `solver.toml` policy is unchanged. Its commented candidate
-  trace block documents the opt-in without enabling diagnostic overhead.
+  implemented. Constraint placeholders name their function and
+  `src/constraints/<name>.rs` file, and a solve that reaches one ends
+  `FAILED`.
+- Aligned: the `--unary`, `--reward`, and `--pair` skeletons score as their
+  help says: unary is `for_each` + `filter` + `penalize` for both hardness
+  levels, reward is `for_each` + `filter` + `reward`, and pair filters out
+  unassigned entities before a `joiner::equal` self-join (each unordered pair
+  once; `0.24.0` has no `for_each_unique_pair`) and selects conflicts with a
+  filter.
+- Changed: the neutral `solver.toml` declares no `[[phases]]` and defers to the
+  runtime's model-aware default pipeline; its explicit phases remain as a
+  commented example. Its commented candidate trace block documents the opt-in
+  without enabling diagnostic overhead.
   Scalar/list metadata flags do not select unrelated heuristics automatically.
 - Not implemented by design: neutral scalar-group, conflict-repair, or grouped
   solver defaults. These remain opt-in modeling resources.
@@ -368,7 +443,7 @@ Any implementation from this audit should pass:
 - focused parser/generator/app-spec tests for the new metadata;
 - scaffold contract tests proving fresh generated projects include only the
   opt-in scalar-group surface requested by the user;
-- generated app `cargo check` against the published `0.23.0` registry target;
+- generated app `cargo check` against the published `0.24.0` registry target;
 - runtime pipeline coverage only if the new command claims actual solving
   behavior;
 - `SF_USE_LOCAL_PATCHES=1` only for an explicit future sibling-checkout
