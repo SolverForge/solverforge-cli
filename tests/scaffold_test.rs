@@ -862,6 +862,7 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
     );
     assert!(
         api_mod.contains("pub use dto::PlanDto;")
+            && api_mod.contains("pub mod dto;")
             && main_rs.contains("derive(Parser)")
             && main_rs.contains("Command::DemoData"),
         "cli shell should expose a Clap command backed by shared DTOs"
@@ -909,6 +910,11 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         "generated cli shell cargo check failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+    let check_stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !check_stderr.contains("warning:"),
+        "generated cli shell should compile without warnings:\n{check_stderr}"
     );
 
     let output = cargo_with_network_retry(
