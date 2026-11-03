@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.8.1](https://github.com/SolverForge/solverforge-cli/compare/v3.8.0...v3.8.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **destroy:** name dependent files with forward slashes on every platform ([a68d432](https://github.com/SolverForge/solverforge-cli/commit/a68d4323ff32d9eff2136469a6424d55f7e906d2))
+* **generate:** re-render only the data seed the CLI still owns ([b020746](https://github.com/SolverForge/solverforge-cli/commit/b020746205d3f3a1be346cb4e80dcfcadb410cd2))
+
+
 ## [3.8.0](https://github.com/SolverForge/solverforge-cli/compare/v3.7.1...v3.8.0) (2026-11-03)
 
 
