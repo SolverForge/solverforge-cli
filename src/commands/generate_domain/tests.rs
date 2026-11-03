@@ -1,5 +1,7 @@
 use super::{
-    field_types::reject_duplicate_fields,
+    field_types::{
+        add_chrono_dependency, field_type_imports, reject_duplicate_fields, uses_chrono,
+    },
     generators::{generate_entity, generate_fact, generate_solution},
     run::remove_neutral_scaffold,
     utils::{pluralize, snake_to_pascal, validate_score_type},
@@ -1148,4 +1150,67 @@ fn test_reject_duplicate_fields_rejects_repeated_field() {
     .to_string();
     assert!(err.contains("'start'"), "unexpected error: {err}");
     assert!(reject_duplicate_fields("entity", &fields(&[("start", "i64")]), &["id"]).is_ok());
+}
+
+#[test]
+fn test_field_type_imports_cover_std_collections_chrono_and_domain_types() {
+    let specs = fields(&[
+        ("skills", "BTreeSet<String>"),
+        ("unavailable_dates", "BTreeSet<NaiveDate>"),
+        ("start", "Option<NaiveDateTime>"),
+        ("by_day", "HashMap<chrono::Weekday, Vec<u32>>"),
+        ("home_hub", "CareHub"),
+    ]);
+    assert_eq!(
+        field_type_imports(&specs, "Employee"),
+        "use std::collections::{BTreeSet, HashMap};\n\
+use chrono::{NaiveDate, NaiveDateTime};\n\
+use super::CareHub;\n"
+    );
+    assert_eq!(
+        field_type_imports(
+            &fields(&[("load", "i32"), ("tag", "Option<String>")]),
+            "Task"
+        ),
+        ""
+    );
+    assert!(uses_chrono(&specs));
+    assert!(uses_chrono(&fields(&[("day", "chrono::Weekday")])));
+    assert!(!uses_chrono(&fields(&[("skills", "BTreeSet<String>")])));
+}
+
+#[test]
+fn test_generate_fact_and_entity_import_field_types() {
+    let fact = generate_builtin_fact(
+        "Employee",
+        &fields(&[("unavailable_dates", "BTreeSet<NaiveDate>")]),
+    );
+    assert!(
+        fact.contains("use solverforge::prelude::*;\nuse std::collections::BTreeSet;\nuse chrono::NaiveDate;\n"),
+        "fact should import its field types: {fact}"
+    );
+    let entity = generate_builtin_entity("Shift", None, &fields(&[("start", "NaiveDateTime")]))
+        .expect("entity generation should succeed");
+    assert!(
+        entity.contains("use chrono::NaiveDateTime;\n"),
+        "entity should import its field types: {entity}"
+    );
+}
+
+#[test]
+fn test_add_chrono_dependency_is_added_once() {
+    let manifest =
+        "[package]\nname = \"app\"\n\n[dependencies]\nserde = \"1\"\n\n[features]\nschema = []\n";
+    let rewritten = add_chrono_dependency(manifest)
+        .expect("manifest should parse")
+        .expect("chrono should be added");
+    assert!(
+        rewritten
+            .contains("serde = \"1\"\nchrono = { version = \"0.4.45\", features = [\"serde\"] }\n"),
+        "chrono should be appended to [dependencies]: {rewritten}"
+    );
+    assert_eq!(
+        add_chrono_dependency(&rewritten).expect("manifest should parse"),
+        None
+    );
 }

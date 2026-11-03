@@ -1,5 +1,7 @@
 use crate::managed_block;
 
+use super::field_types::field_type_imports;
+
 const CUSTOM_ENTITY_TEMPLATE_PATH: &str = ".solverforge/templates/entity.rs.tmpl";
 const CUSTOM_SOLUTION_TEMPLATE_PATH: &str = ".solverforge/templates/solution.rs.tmpl";
 
@@ -14,10 +16,12 @@ pub(crate) fn generate_entity(
         .map(|(n, t)| format!("pub {}: {}", n, t))
         .collect::<Vec<_>>()
         .join(", ");
+    let imports = field_type_imports(extra_fields, pascal);
     let vars: &[(&str, &str)] = &[
         ("NAME", pascal),
         ("SNAKE_NAME", &snake),
         ("FIELDS", &fields_repr),
+        ("IMPORTS", &imports),
     ];
     if let Some(custom) = crate::template::load_custom("entity", vars) {
         return validate_generated_source(
@@ -62,7 +66,7 @@ pub(crate) fn generate_entity(
         format!(
             r#"use serde::{{Deserialize, Serialize}};
 use solverforge::prelude::*;
-
+{imports}
 /// TODO — describe this entity.
 #[planning_entity]
 #[derive(Serialize, Deserialize)]
@@ -96,10 +100,12 @@ pub(crate) fn generate_fact(pascal: &str, extra_fields: &[(String, String)]) -> 
         .map(|(n, t)| format!("pub {}: {}", n, t))
         .collect::<Vec<_>>()
         .join(", ");
+    let imports = field_type_imports(extra_fields, pascal);
     let vars: &[(&str, &str)] = &[
         ("NAME", pascal),
         ("SNAKE_NAME", &snake),
         ("FIELDS", &fields_repr),
+        ("IMPORTS", &imports),
     ];
     if let Some(custom) = crate::template::load_custom("fact", vars) {
         return custom;
@@ -124,7 +130,7 @@ pub(crate) fn generate_fact(pascal: &str, extra_fields: &[(String, String)]) -> 
     format!(
         r#"use serde::{{Deserialize, Serialize}};
 use solverforge::prelude::*;
-
+{imports}
 /// TODO — describe this fact.
 #[problem_fact]
 #[derive(Serialize, Deserialize)]

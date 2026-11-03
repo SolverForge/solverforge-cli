@@ -896,8 +896,41 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
     );
     assert_cli_success(
         &project_dir,
-        &["generate", "entity", "task", "--field", "label:String"],
+        &[
+            "generate",
+            "fact",
+            "employee",
+            "--field",
+            "skills:BTreeSet<String>",
+            "--field",
+            "unavailable_dates:BTreeSet<NaiveDate>",
+        ],
+        "generate fact with std collection and chrono fields in cli shell",
+    );
+    assert_cli_success(
+        &project_dir,
+        &[
+            "generate",
+            "entity",
+            "task",
+            "--field",
+            "label:String",
+            "--field",
+            "start:NaiveDateTime",
+        ],
         "generate entity in cli shell",
+    );
+    let employee_rs = std::fs::read_to_string(project_dir.join("src/domain/employee.rs")).unwrap();
+    let task_rs = std::fs::read_to_string(project_dir.join("src/domain/task.rs")).unwrap();
+    let cargo_toml_after_generate =
+        std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
+    assert!(
+        employee_rs.contains("use std::collections::BTreeSet;")
+            && employee_rs.contains("use chrono::NaiveDate;")
+            && task_rs.contains("use chrono::NaiveDateTime;")
+            && cargo_toml_after_generate
+                .contains("chrono = { version = \"0.4.45\", features = [\"serde\"] }"),
+        "generated field types should be imported and chrono added to Cargo.toml\nemployee.rs:\n{employee_rs}\ntask.rs:\n{task_rs}\nCargo.toml:\n{cargo_toml_after_generate}"
     );
     assert!(
         !project_dir.join("static").exists()

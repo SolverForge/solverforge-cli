@@ -91,11 +91,15 @@ pub fn run_entity(
     let src =
         generate_entity(&pascal, planning_variable, &parsed_fields).map_err(CliError::general)?;
     let rewrites = preflight_collection_rewrites(name, &pascal, "planning_entity_collection")?;
+    let manifest_rewrite = preflight_chrono_dependency(&parsed_fields)?;
 
     if pretend {
         println!("Would create {}", file_path.display());
         println!("Would update src/domain/mod.rs");
         println!("Would wire into planning solution");
+        if manifest_rewrite.is_some() {
+            println!("Would add the chrono dependency to Cargo.toml");
+        }
         return Ok(());
     }
 
@@ -122,6 +126,7 @@ pub fn run_entity(
     print_diff_verbose("", &src);
     output::print_update("src/domain/mod.rs");
     output::print_update(rewrites.solution_file.to_str().unwrap());
+    write_chrono_dependency(manifest_rewrite)?;
     sync_project_metadata()?;
     Ok(())
 }
@@ -146,11 +151,15 @@ pub fn run_fact(name: &str, fields: &[String], force: bool, pretend: bool) -> Cl
 
     let src = generate_fact(&pascal, &parsed_fields);
     let rewrites = preflight_collection_rewrites(name, &pascal, "problem_fact_collection")?;
+    let manifest_rewrite = preflight_chrono_dependency(&parsed_fields)?;
 
     if pretend {
         println!("Would create {}", file_path.display());
         println!("Would update src/domain/mod.rs");
         println!("Would wire into planning solution");
+        if manifest_rewrite.is_some() {
+            println!("Would add the chrono dependency to Cargo.toml");
+        }
         return Ok(());
     }
 
@@ -177,6 +186,7 @@ pub fn run_fact(name: &str, fields: &[String], force: bool, pretend: bool) -> Cl
     print_diff_verbose("", &src);
     output::print_update("src/domain/mod.rs");
     output::print_update(rewrites.solution_file.to_str().unwrap());
+    write_chrono_dependency(manifest_rewrite)?;
     sync_project_metadata()?;
     Ok(())
 }
@@ -223,6 +233,31 @@ fn preflight_collection_rewrites(
         rewritten_domain_mod,
         rewritten_solution,
     })
+}
+
+/// Computes the `Cargo.toml` rewrite that adds chrono when a field uses a
+/// chrono type, before anything is written.
+fn preflight_chrono_dependency(fields: &[(String, String)]) -> CliResult<Option<String>> {
+    if !field_types::uses_chrono(fields) {
+        return Ok(None);
+    }
+    let manifest = fs::read_to_string("Cargo.toml").map_err(|e| CliError::IoError {
+        context: "failed to read Cargo.toml".to_string(),
+        source: e,
+    })?;
+    field_types::add_chrono_dependency(&manifest).map_err(CliError::general)
+}
+
+fn write_chrono_dependency(manifest_rewrite: Option<String>) -> CliResult {
+    let Some(manifest) = manifest_rewrite else {
+        return Ok(());
+    };
+    fs::write("Cargo.toml", manifest).map_err(|e| CliError::IoError {
+        context: "failed to update Cargo.toml".to_string(),
+        source: e,
+    })?;
+    output::print_update("Cargo.toml");
+    Ok(())
 }
 
 fn parse_fields(fields: &[String]) -> CliResult<Vec<(String, String)>> {
