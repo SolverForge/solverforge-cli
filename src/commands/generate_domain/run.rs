@@ -15,7 +15,8 @@ use super::generators::{generate_entity, generate_fact, generate_solution};
 use super::utils::{ensure_domain_dir, find_file_for_type, snake_to_pascal, validate_score_type};
 use super::wiring::{
     inject_list_variable, inject_scalar_variable, remove_variable_field, replace_score_type,
-    rewrite_domain_mod_source, wire_solution_collection_source, ScalarVariableWiring,
+    rewrite_domain_mod_source, rewrite_score_type_source, wire_solution_collection_source,
+    ScalarVariableWiring,
 };
 
 const NEUTRAL_SOLUTION_SENTINEL: &str = "// @solverforge:neutral-solution";
@@ -563,7 +564,7 @@ fn precompute_constraint_score_rewrites(
             context: format!("failed to read {}", path.display()),
             source: e,
         })?;
-        let updated = replace_score_type_source(&src, old_score, new_score);
+        let updated = rewrite_score_type_source(&src, old_score, new_score);
         if updated != src {
             rewrites.push((path, updated));
         }
@@ -586,7 +587,7 @@ fn precompute_contract_score_rewrites(
             context: format!("failed to read {}", path.display()),
             source: e,
         })?;
-        let updated = replace_score_type_source(&src, old_score, new_score);
+        let updated = rewrite_score_type_source(&src, old_score, new_score);
         if updated != src {
             rewrites.push((path.to_path_buf(), updated));
         }
@@ -721,25 +722,13 @@ fn precompute_generated_contract_references(
             source: e,
         })?;
         let updated = replace_identifier(&src, NEUTRAL_SOLUTION_TYPE, solution_type);
-        let updated = replace_identifier(&updated, NEUTRAL_SCORE_TYPE, score_type);
+        let updated = rewrite_score_type_source(&updated, NEUTRAL_SCORE_TYPE, score_type);
         if updated != src {
             rewrites.push((path.to_path_buf(), updated));
         }
     }
 
     Ok(rewrites)
-}
-
-/// Score replacement for auxiliary files (constraint modules, contract
-/// files): identifier-boundary-safe like `wiring::replace_score_type`, but
-/// non-erroring — an old score that no longer appears means the file is
-/// already current, and callers detect that by comparing against the input.
-fn replace_score_type_source(src: &str, old_score: &str, new_score: &str) -> String {
-    if old_score.chars().all(is_rust_identifier_char) {
-        replace_identifier(src, old_score, new_score)
-    } else {
-        src.replace(old_score, new_score)
-    }
 }
 
 pub(crate) fn remove_neutral_scaffold(solution_type: &str, score_type: &str) -> CliResult {

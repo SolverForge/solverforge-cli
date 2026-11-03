@@ -1251,3 +1251,66 @@ fn test_non_default_chrono_types_get_concrete_values() {
     );
     assert_eq!(super::field_types::non_default_value("NaiveDate"), None);
 }
+
+#[test]
+fn generate_score_imports_the_bare_name_of_a_generic_score() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+
+    write_score_rewrite_project("HardSoftScore");
+    let original_dto = fs::read_to_string("src/api/dto.rs").expect("failed to read dto");
+    let original_service =
+        fs::read_to_string("src/solver/service.rs").expect("failed to read service");
+
+    super::run_score("BendableScore<2, 3>").expect("generic score rewrite should succeed");
+
+    let dto = fs::read_to_string("src/api/dto.rs").expect("failed to read dto");
+    assert!(
+        dto.contains("use solverforge::{BendableScore, SolverStatus};")
+            && dto.contains("SolverStatus<BendableScore<2, 3>>"),
+        "imports must name the bare score type and usages the generic form: {dto}"
+    );
+    let service = fs::read_to_string("src/solver/service.rs").expect("failed to read service");
+    assert!(
+        service.contains("use solverforge::{BendableScore, SolverEventMetadata, SolverStatus};")
+            && service.contains("SolverEventMetadata<BendableScore<2, 3>>"),
+        "service imports must name the bare score type: {service}"
+    );
+    let lib = fs::read_to_string("src/lib.rs").expect("failed to read lib");
+    assert!(
+        lib.contains("use solverforge::BendableScore;"),
+        "a single-item import must name the bare score type: {lib}"
+    );
+
+    super::run_score("HardSoftScore").expect("rewrite back from a generic score");
+    assert_eq!(
+        fs::read_to_string("src/api/dto.rs").expect("failed to read dto"),
+        original_dto
+    );
+    assert_eq!(
+        fs::read_to_string("src/solver/service.rs").expect("failed to read service"),
+        original_service
+    );
+}
+
+#[test]
+fn score_rewrite_keeps_multiline_imports_bare() {
+    let src = "use solverforge::{\n    CandidateTraceExternalDigest, HardSoftScore,\n    SolverStatus,\n};\n\nfn status(s: &SolverStatus<HardSoftScore>) {}\n";
+    let rewritten =
+        super::wiring::rewrite_score_type_source(src, "HardSoftScore", "BendableScore<1, 2>");
+    assert_eq!(
+        rewritten,
+        "use solverforge::{\n    CandidateTraceExternalDigest, BendableScore,\n    SolverStatus,\n};\n\nfn status(s: &SolverStatus<BendableScore<1, 2>>) {}\n"
+    );
+    let resized = super::wiring::rewrite_score_type_source(
+        &rewritten,
+        "BendableScore<1, 2>",
+        "BendableScore<2, 3>",
+    );
+    assert!(
+        resized.contains("CandidateTraceExternalDigest, BendableScore,")
+            && resized.contains("SolverStatus<BendableScore<2, 3>>"),
+        "resizing a bendable score must keep the bare import: {resized}"
+    );
+}

@@ -702,17 +702,98 @@ pub(crate) fn replace_score_type(
     old_score: &str,
     new_score: &str,
 ) -> Result<String, String> {
-    let updated = if old_score.chars().all(is_rust_identifier_char) {
-        replace_identifier(src, old_score, new_score)
-    } else {
-        src.replace(old_score, new_score)
-    };
+    let updated = rewrite_score_type_source(src, old_score, new_score);
     if updated == src {
         return Err(format!(
             "score type '{old_score}' not found in solution file"
         ));
     }
     Ok(updated)
+}
+
+/// Rewrites a score type in Rust source without breaking imports.
+///
+/// A `use` item can only name the bare score type (`BendableScore`), while
+/// every other position needs the full type (`BendableScore<2, 3>`). Inside
+/// `use` items only the bare type name is rewritten; elsewhere the full old
+/// type is replaced by the full new type at identifier boundaries. It never
+/// errors: callers detect an already-current file by comparing the output
+/// against the input.
+pub(crate) fn rewrite_score_type_source(src: &str, old_score: &str, new_score: &str) -> String {
+    let old_base = score_base_name(old_score);
+    let new_base = score_base_name(new_score);
+    let mut out = String::with_capacity(src.len());
+    let mut cursor = 0;
+    for (start, end) in use_item_spans(src) {
+        out.push_str(&replace_score_usage(
+            &src[cursor..start],
+            old_score,
+            new_score,
+        ));
+        out.push_str(&replace_identifier(&src[start..end], old_base, new_base));
+        cursor = end;
+    }
+    out.push_str(&replace_score_usage(&src[cursor..], old_score, new_score));
+    out
+}
+
+fn score_base_name(score: &str) -> &str {
+    score.split('<').next().unwrap_or(score).trim()
+}
+
+/// Replaces the full score type wherever it is used as a type. A generic
+/// form such as `BendableScore<2, 3>` must not be matched as the tail of a
+/// longer identifier, so the leading boundary is checked either way.
+fn replace_score_usage(src: &str, old_score: &str, new_score: &str) -> String {
+    if old_score.chars().all(is_rust_identifier_char) {
+        return replace_identifier(src, old_score, new_score);
+    }
+    let mut out = String::with_capacity(src.len());
+    let mut start = 0;
+    for (idx, _) in src.match_indices(old_score) {
+        if src[..idx]
+            .chars()
+            .next_back()
+            .is_some_and(is_rust_identifier_char)
+        {
+            continue;
+        }
+        out.push_str(&src[start..idx]);
+        out.push_str(new_score);
+        start = idx + old_score.len();
+    }
+    out.push_str(&src[start..]);
+    out
+}
+
+/// Byte spans of `use` items: from a line whose first token is `use` (with an
+/// optional visibility) through the terminating `;`.
+fn use_item_spans(src: &str) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    let mut line_start = 0;
+    while line_start < src.len() {
+        let line_end = src[line_start..]
+            .find('\n')
+            .map_or(src.len(), |offset| line_start + offset + 1);
+        let trimmed = src[line_start..line_end].trim_start();
+        let after_visibility = trimmed
+            .strip_prefix("pub(crate) ")
+            .or_else(|| trimmed.strip_prefix("pub(super) "))
+            .or_else(|| trimmed.strip_prefix("pub "))
+            .unwrap_or(trimmed);
+        if after_visibility.starts_with("use ") {
+            if let Some(offset) = src[line_start..].find(';') {
+                let end = line_start + offset + 1;
+                spans.push((line_start, end));
+                line_start = src[end..]
+                    .find('\n')
+                    .map_or(src.len(), |offset| end + offset + 1);
+                continue;
+            }
+        }
+        line_start = line_end;
+    }
+    spans
 }
 
 fn replace_identifier(src: &str, from: &str, to: &str) -> String {
