@@ -120,10 +120,10 @@ enum Command {
     },
     /// Start the development server
     #[command(
-        after_help = "Examples:\n  solverforge server\n  solverforge server --port 8080\n  solverforge server --debug"
+        after_help = "Examples:\n  solverforge server\n  solverforge server --port 8080\n  PORT=8080 solverforge server\n  solverforge server --debug"
     )]
     Server {
-        /// Port to bind the server to; when omitted, use .solverforgerc and then 7860
+        /// Port to bind the server to; when omitted, use the PORT environment variable, then .solverforgerc, then 7860
         #[arg(long, short)]
         port: Option<u16>,
 
@@ -161,7 +161,7 @@ enum Command {
         #[arg(long, value_enum, value_name = "TARGET")]
         write: Option<crate::commands::connect::ConnectWriteTarget>,
 
-        /// Port used in the printed Streamable HTTP URL; when omitted, use .solverforgerc and then 7860
+        /// Port used in the printed Streamable HTTP URL; when omitted, use the PORT environment variable, then .solverforgerc, then 7860
         #[arg(long, short)]
         port: Option<u16>,
     },
@@ -849,14 +849,16 @@ fn main() {
             resource: DestroyResource::ConflictRepair { name },
         } => commands::destroy::run_conflict_repair(&name, yes),
         Command::Server { port, debug } => {
-            commands::server::run(resolve_server_port(port, rc.port), debug)
+            resolve_server_port(port, env_port().as_deref(), rc.port)
+                .and_then(|port| commands::server::run(port, debug))
         }
         Command::Info => commands::info::run(),
         Command::Check => commands::check::run(),
         Command::Test { extra_args } => commands::test::run(&extra_args),
         Command::Routes => commands::routes::run(),
         Command::Connect { write, port } => {
-            commands::connect::run(resolve_server_port(port, rc.port), write)
+            resolve_server_port(port, env_port().as_deref(), rc.port)
+                .and_then(|port| commands::connect::run(port, write))
         }
         Command::Config {
             subcommand: ConfigSubcommand::Show,
@@ -881,8 +883,32 @@ fn main() {
     }
 }
 
-fn resolve_server_port(cli_port: Option<u16>, rc_port: Option<u16>) -> u16 {
-    cli_port.or(rc_port).unwrap_or(DEFAULT_SERVER_PORT)
+/// Reads the `PORT` environment variable, treating an empty value as unset.
+fn env_port() -> Option<String> {
+    std::env::var("PORT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+}
+
+/// Resolves the generated server port: `--port` flag, then the `PORT`
+/// environment variable, then the `.solverforgerc` preference, then 7860.
+fn resolve_server_port(
+    cli_port: Option<u16>,
+    env_port: Option<&str>,
+    rc_port: Option<u16>,
+) -> error::CliResult<u16> {
+    if let Some(port) = cli_port {
+        return Ok(port);
+    }
+    if let Some(raw) = env_port {
+        return raw.trim().parse::<u16>().map_err(|_| {
+            error::CliError::with_hint(
+                format!("invalid PORT environment variable '{raw}'"),
+                "set PORT to a number between 0 and 65535, or pass --port",
+            )
+        });
+    }
+    Ok(rc_port.unwrap_or(DEFAULT_SERVER_PORT))
 }
 
 #[cfg(test)]
@@ -891,18 +917,39 @@ mod main_tests {
     use clap::{error::ErrorKind, Parser};
 
     #[test]
-    fn explicit_server_port_overrides_rc_port() {
-        assert_eq!(resolve_server_port(Some(9000), Some(8080)), 9000);
+    fn explicit_server_port_overrides_env_and_rc_port() {
+        assert_eq!(
+            resolve_server_port(Some(9000), Some("18731"), Some(8080)).unwrap(),
+            9000
+        );
+    }
+
+    #[test]
+    fn env_server_port_overrides_rc_port() {
+        assert_eq!(
+            resolve_server_port(None, Some("18731"), Some(8080)).unwrap(),
+            18731
+        );
+    }
+
+    #[test]
+    fn invalid_env_server_port_is_rejected() {
+        let error = resolve_server_port(None, Some("http"), Some(8080))
+            .expect_err("a non-numeric PORT must not silently fall back");
+        assert!(error.to_string().contains("PORT"), "{error}");
     }
 
     #[test]
     fn rc_server_port_overrides_builtin_default() {
-        assert_eq!(resolve_server_port(None, Some(8080)), 8080);
+        assert_eq!(resolve_server_port(None, None, Some(8080)).unwrap(), 8080);
     }
 
     #[test]
     fn server_port_uses_builtin_default_without_preference() {
-        assert_eq!(resolve_server_port(None, None), DEFAULT_SERVER_PORT);
+        assert_eq!(
+            resolve_server_port(None, None, None).unwrap(),
+            DEFAULT_SERVER_PORT
+        );
     }
 
     #[test]
