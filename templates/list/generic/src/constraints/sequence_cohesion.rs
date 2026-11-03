@@ -1,6 +1,5 @@
 use crate::domain::{Container, Plan};
 use solverforge::prelude::*;
-use solverforge::stream::vec;
 use solverforge::IncrementalConstraint;
 
 /// SOFT: Keep each container's sequence locally coherent.
@@ -9,7 +8,7 @@ use solverforge::IncrementalConstraint;
 /// visible optimization path after construction.
 pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
     ConstraintFactory::<Plan, HardSoftScore>::new()
-        .for_each(vec(|p: &Plan| &p.containers))
+        .for_each(Plan::containers())
         .penalize(|c: &Container| {
             let gap_penalty: i64 = c
                 .items

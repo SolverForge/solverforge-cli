@@ -556,7 +556,7 @@ path = "src/main.rs"
 [dependencies]
 # The console feature stays off: it prints the runtime banner to stdout,
 # which is the stdio MCP transport channel. Diagnostics go to stderr.
-solverforge = {{ version = "{runtime_version}", features = ["serde", "verbose-logging"] }}
+solverforge = {{ version = "{runtime_version}", features = ["serde"] }}
 
 # MCP server
 rmcp = {{ version = "{mcp_version}", features = ["server", "macros", "transport-io", "transport-streamable-http-server", "transport-streamable-http-server-session"] }}

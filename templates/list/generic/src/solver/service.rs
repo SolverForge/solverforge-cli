@@ -2,11 +2,11 @@ use parking_lot::RwLock;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 
 use solverforge::{
     HardSoftScore, QualifiedCandidateTraceRunProvenance, SolverEvent, SolverEventMetadata,
-    SolverLifecycleState, SolverManager, SolverManagerError, SolverSnapshot,
+    SolverEventReceiver, SolverLifecycleState, SolverManager, SolverManagerError, SolverSnapshot,
     SolverSnapshotAnalysis, SolverStatus, SolverTelemetryDetail, SolverTerminalReason,
 };
 
@@ -64,11 +64,7 @@ impl SolverService {
         Ok(self.retain_job(job_id, receiver))
     }
 
-    fn retain_job(
-        &self,
-        job_id: usize,
-        receiver: mpsc::UnboundedReceiver<SolverEvent<Plan>>,
-    ) -> String {
+    fn retain_job(&self, job_id: usize, receiver: SolverEventReceiver<Plan>) -> String {
         let (sse_tx, _) = broadcast::channel(64);
 
         self.jobs.write().insert(
@@ -166,7 +162,7 @@ async fn drain_receiver(
     jobs: Arc<RwLock<HashMap<usize, JobState>>>,
     job_id: usize,
     sse_tx: broadcast::Sender<String>,
-    mut receiver: mpsc::UnboundedReceiver<SolverEvent<Plan>>,
+    mut receiver: SolverEventReceiver<Plan>,
 ) {
     while let Some(event) = receiver.recv().await {
         let payload = match &event {
