@@ -212,7 +212,7 @@ without turning the neutral scaffold into a domain-specific demo.
 - UI and companion release gates: `cargo info solverforge-ui` confirms
   `solverforge-ui 0.9.0` is published; the web scaffold targets its
   framework-neutral asset release and additionally targets the published
-  `solverforge-maps 2.1.4`. The MCP scaffold targets the published `rmcp 3.8.0`
+  `solverforge-maps 2.1.5`. The MCP scaffold targets the published `rmcp 3.8.0`
   (`ProtocolVersion::LATEST` stays `2026-07-28` and `LATEST_WITH_INITIALIZE`
   stays `2025-11-25` from `3.5.0` through `3.8.0`, so both acceptance-client
   negotiation paths are unaffected).

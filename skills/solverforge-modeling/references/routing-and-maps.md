@@ -16,7 +16,7 @@ range, do not add `solverforge-maps`.
 
 ## The crate
 
-`solverforge-maps` (published 2.1.4; add it with `solverforge-maps = "2.1.4"`)
+`solverforge-maps` (published 2.1.5; add it with `solverforge-maps = "2.1.5"`)
 owns road networks, routing, and matrices. Key surface:
 
 - `Coord::try_new(lat, lng)` and `BoundingBox::from_coords(...).expand_for_routing(...)`

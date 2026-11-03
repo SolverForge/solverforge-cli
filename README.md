@@ -18,7 +18,7 @@ New projects currently target these crate versions:
 
 - `solverforge 0.24.0`
 - `solverforge-ui 0.9.0` for the default web shell
-- `solverforge-maps 2.1.4` for the default web shell
+- `solverforge-maps 2.1.5` for the default web shell
 - `rmcp 3.8.0` for the MCP shell
 
 ```bash

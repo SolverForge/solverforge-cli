@@ -23,7 +23,7 @@ Current generated projects target:
 
 - `solverforge 0.24.0`
 - `solverforge-ui 0.9.0` for the web shell
-- `solverforge-maps 2.1.4` for the web shell
+- `solverforge-maps 2.1.5` for the web shell
 - `rmcp 3.8.0` for the MCP shell
 
 The CLI version is separate from those targets and must remain visible in
