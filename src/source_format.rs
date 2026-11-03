@@ -97,6 +97,11 @@ fn format_file(
 ) -> Result<(), FormatError> {
     let source = fs::read(path).map_err(|err| FormatError::Failed(err.to_string()))?;
     let formatted = rustfmt(program, root, &source, edition)?;
+    if managed_markers(&formatted) != managed_markers(&source) {
+        return Err(FormatError::Failed(
+            "rustfmt would move @solverforge markers off their own lines".to_string(),
+        ));
+    }
     if formatted != source {
         fs::write(path, formatted).map_err(|err| FormatError::Failed(err.to_string()))?;
     }
@@ -156,6 +161,18 @@ fn rustfmt(
         ));
     }
     Ok(output.stdout)
+}
+
+/// Managed blocks are found by marker comments on their own lines. rustfmt
+/// pulls a comment that opens an empty parameter list onto the `(` line, so a
+/// formatting result that changes the standalone markers is rejected.
+fn managed_markers(source: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(source)
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("// @solverforge:"))
+        .map(str::to_string)
+        .collect()
 }
 
 /// Reads `package.edition` from the project manifest, as `cargo fmt` would.

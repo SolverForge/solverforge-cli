@@ -71,6 +71,23 @@ fn format_changed_leaves_unparseable_sources_unchanged() {
 }
 
 #[test]
+fn format_changed_keeps_sources_whose_managed_markers_rustfmt_would_move() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_project(root);
+    let solution = root.join("src/lib.rs");
+    // Without `#[rustfmt::skip]`, rustfmt rewrites this to
+    // `pub fn new(// @solverforge:begin ...`, which hides the begin marker.
+    let source = "pub struct Plan;\n\nimpl Plan {\n    pub fn new(\n        // @solverforge:begin solution-constructor-params\n        // @solverforge:end solution-constructor-params\n    ) -> Self {\n        Plan\n    }\n}\n";
+
+    let snapshot = SourceSnapshot::empty(root);
+    fs::write(&solution, source).unwrap();
+    snapshot.format_changed_with(OsStr::new("rustfmt"));
+
+    assert_eq!(fs::read_to_string(&solution).unwrap(), source);
+}
+
+#[test]
 fn project_edition_follows_the_manifest() {
     let tmp = tempfile::tempdir().unwrap();
     assert_eq!(project_edition(tmp.path()), "2021");
