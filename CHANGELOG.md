@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.8.2](https://github.com/SolverForge/solverforge-cli/compare/v3.8.1...v3.8.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* **scaffold:** target solverforge-maps 2.1.5 ([3eda26b](https://github.com/SolverForge/solverforge-cli/commit/3eda26b3b7e04f113801ae429f20f65109bbe385))
+
+
 ## [3.8.1](https://github.com/SolverForge/solverforge-cli/compare/v3.8.0...v3.8.1) (2026-11-03)
 
 
