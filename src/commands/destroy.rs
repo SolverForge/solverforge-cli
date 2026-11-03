@@ -373,7 +373,7 @@ fn ensure_type_is_unreferenced_in_source(
             .filter(|stem| *stem != "mod");
         match constraint_id {
             Some(id) => constraint_ids.push(id.to_string()),
-            None => other_files.push(file.display().to_string()),
+            None => other_files.push(slash_path(file)),
         }
     }
 
@@ -400,7 +400,7 @@ fn ensure_type_is_unreferenced_in_source(
             "cannot destroy {kind} '{type_name}' because source files still reference it: {}",
             dependents
                 .iter()
-                .map(|file| file.display().to_string())
+                .map(|file| slash_path(file))
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
@@ -628,3 +628,12 @@ pub fn run_conflict_repair(name: &str, skip_confirm: bool) -> CliResult {
 #[cfg(test)]
 #[path = "destroy_tests.rs"]
 mod tests;
+
+/// Renders a project-relative path with `/` separators on every platform, so
+/// messages name files the same way the docs and hints do.
+fn slash_path(path: &Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
