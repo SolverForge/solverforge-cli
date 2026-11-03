@@ -139,6 +139,10 @@ pub fn print_error(message: &str) {
     eprintln!("{}: {}", colorize_red("error"), message);
 }
 
+pub fn print_warning(message: &str) {
+    eprintln!("{}: {}", colorize_yellow("warning"), message);
+}
+
 pub fn print_success(message: &str) {
     if !is_quiet() {
         println!("{}", colorize_green_bold(message));

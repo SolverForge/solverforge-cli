@@ -1,6 +1,7 @@
 use super::{
     field_types::{
-        add_chrono_dependency, field_type_imports, reject_duplicate_fields, uses_chrono,
+        add_chrono_dependency, field_type_imports, reject_duplicate_fields, undefined_domain_types,
+        uses_chrono,
     },
     generators::{generate_entity, generate_fact, generate_solution},
     run::remove_neutral_scaffold,
@@ -1212,5 +1213,27 @@ fn test_add_chrono_dependency_is_added_once() {
     assert_eq!(
         add_chrono_dependency(&rewritten).expect("manifest should parse"),
         None
+    );
+}
+
+#[test]
+fn test_undefined_domain_types_ignores_known_and_declared_types() {
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    fs::write(
+        tmp.path().join("hub.rs"),
+        "#[derive(Clone)]\npub struct CareHub {\n    pub id: String,\n}\npub enum Ward { North }\n",
+    )
+    .unwrap();
+    let specs = fields(&[
+        ("home_hub", "CareHub"),
+        ("ward", "Option<Ward>"),
+        ("dates", "BTreeSet<NaiveDate>"),
+        ("score", "HardSoftScore"),
+        ("depot", "Depot"),
+        ("peer", "Vec<Employee>"),
+    ]);
+    assert_eq!(
+        undefined_domain_types(&specs, "Employee", tmp.path()),
+        vec!["Depot".to_string()]
     );
 }

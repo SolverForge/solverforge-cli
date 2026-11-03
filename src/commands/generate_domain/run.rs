@@ -128,6 +128,7 @@ pub fn run_entity(
     output::print_update(rewrites.solution_file.to_str().unwrap());
     write_chrono_dependency(manifest_rewrite)?;
     sync_project_metadata()?;
+    warn_undefined_field_types(&parsed_fields, &pascal, domain_dir);
     Ok(())
 }
 
@@ -188,6 +189,7 @@ pub fn run_fact(name: &str, fields: &[String], force: bool, pretend: bool) -> Cl
     output::print_update(rewrites.solution_file.to_str().unwrap());
     write_chrono_dependency(manifest_rewrite)?;
     sync_project_metadata()?;
+    warn_undefined_field_types(&parsed_fields, &pascal, domain_dir);
     Ok(())
 }
 
@@ -246,6 +248,12 @@ fn preflight_chrono_dependency(fields: &[(String, String)]) -> CliResult<Option<
         source: e,
     })?;
     field_types::add_chrono_dependency(&manifest).map_err(CliError::general)
+}
+
+fn warn_undefined_field_types(fields: &[(String, String)], own_type: &str, domain_dir: &Path) {
+    for name in field_types::undefined_domain_types(fields, own_type, domain_dir) {
+        output::print_warning(&field_types::undefined_type_warning(&name));
+    }
 }
 
 fn write_chrono_dependency(manifest_rewrite: Option<String>) -> CliResult {

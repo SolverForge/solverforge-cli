@@ -6,6 +6,7 @@
 //! and remaining bare type names are imported from the domain module.
 
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use crate::error::{CliError, CliResult};
 
@@ -176,6 +177,52 @@ pub(crate) fn field_type_imports(fields: &[(String, String)], own_type: &str) ->
         imports.push_str(&format!("use super::{name};\n"));
     }
     imports
+}
+
+/// Domain type names from `fields` that no file under `domain_dir` declares.
+pub(crate) fn undefined_domain_types(
+    fields: &[(String, String)],
+    own_type: &str,
+    domain_dir: &Path,
+) -> Vec<String> {
+    let sources: Vec<String> = std::fs::read_dir(domain_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("rs"))
+        .filter_map(|path| std::fs::read_to_string(path).ok())
+        .collect();
+    domain_type_names(fields, own_type)
+        .into_iter()
+        .filter(|name| !sources.iter().any(|src| declares_type(src, name)))
+        .collect()
+}
+
+fn declares_type(src: &str, name: &str) -> bool {
+    src.lines().any(|line| {
+        let mut words = line
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .filter(|word| !word.is_empty());
+        while let Some(word) = words.next() {
+            if matches!(word, "struct" | "enum" | "type" | "trait" | "union") {
+                return words.next() == Some(name);
+            }
+        }
+        false
+    })
+}
+
+/// Warning printed after generation for each type that does not exist yet.
+pub(crate) fn undefined_type_warning(name: &str) -> String {
+    format!(
+        "type '{name}' is not defined in src/domain and is not a known std/chrono type; \
+the project will not compile until it is defined. Define `{name}` in a file under src/domain \
+(for example `#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)] \
+pub struct {name} {{ ... }}`) and \
+export it inside the `@solverforge:begin domain-exports` block of src/domain/mod.rs \
+(`mod <file>;` plus `pub use <file>::{name};`)"
+    )
 }
 
 /// Returns the rewritten `Cargo.toml` when `chrono` must be added, or `None`

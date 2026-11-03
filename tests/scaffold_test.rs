@@ -920,6 +920,40 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         ],
         "generate entity in cli shell",
     );
+    let undefined_type_output = cli_command()
+        .args(["generate", "fact", "site", "--field", "home_hub:CareHub"])
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run generate fact with an undefined field type");
+    let undefined_type_stderr = String::from_utf8_lossy(&undefined_type_output.stderr);
+    assert!(
+        undefined_type_output.status.success()
+            && undefined_type_stderr.contains(
+                "type 'CareHub' is not defined in src/domain and is not a known std/chrono type"
+            )
+            && undefined_type_stderr.contains("warning"),
+        "an undefined field type should warn without failing ({})\nstdout:\n{}\nstderr:\n{undefined_type_stderr}",
+        undefined_type_output.status,
+        String::from_utf8_lossy(&undefined_type_output.stdout)
+    );
+    // Follow the warning's instructions so the cargo check below proves them.
+    std::fs::write(
+        project_dir.join("src/domain/care_hub.rs"),
+        "use serde::{Deserialize, Serialize};\n\n#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]\npub struct CareHub {\n    pub code: String,\n}\n",
+    )
+    .unwrap();
+    let domain_mod = std::fs::read_to_string(project_dir.join("src/domain/mod.rs")).unwrap();
+    std::fs::write(
+        project_dir.join("src/domain/mod.rs"),
+        domain_mod
+            .replacen("mod site;", "mod care_hub;\nmod site;", 1)
+            .replacen(
+                "pub use site::Site;",
+                "pub use care_hub::CareHub;\npub use site::Site;",
+                1,
+            ),
+    )
+    .unwrap();
     let employee_rs = std::fs::read_to_string(project_dir.join("src/domain/employee.rs")).unwrap();
     let task_rs = std::fs::read_to_string(project_dir.join("src/domain/task.rs")).unwrap();
     let cargo_toml_after_generate =
