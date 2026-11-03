@@ -142,12 +142,17 @@ enum Command {
     Check,
     /// Run `cargo test` with optional passthrough arguments
     #[command(
-        after_help = "Examples:\n  solverforge test\n  solverforge test -- --nocapture\n  solverforge test integration"
+        override_usage = "solverforge test [OPTIONS] [CARGO_ARGS]... [-- <HARNESS_ARGS>...]",
+        after_help = "Arguments before `--` go to `cargo test`; arguments after `--` go to the test binaries.\n\nExamples:\n  solverforge test\n  solverforge test -- --nocapture\n  solverforge test integration\n  solverforge test --release -- --test-threads=1"
     )]
     Test {
-        /// Extra arguments passed directly to `cargo test`
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        extra_args: Vec<String>,
+        /// Arguments passed to `cargo test` (test name filter, cargo flags)
+        #[arg(allow_hyphen_values = true, value_terminator = "--")]
+        cargo_args: Vec<String>,
+
+        /// Arguments after `--`, passed to the test binaries (e.g. --nocapture)
+        #[arg(allow_hyphen_values = true)]
+        harness_args: Vec<String>,
     },
     /// List HTTP routes defined in src/api/
     #[command(after_help = "Examples:\n  solverforge routes")]
@@ -854,7 +859,10 @@ fn main() {
         }
         Command::Info => commands::info::run(),
         Command::Check => commands::check::run(),
-        Command::Test { extra_args } => commands::test::run(&extra_args),
+        Command::Test {
+            cargo_args,
+            harness_args,
+        } => commands::test::run(&cargo_args, &harness_args),
         Command::Routes => commands::routes::run(),
         Command::Connect { write, port } => {
             resolve_server_port(port, env_port().as_deref(), rc.port)
@@ -949,6 +957,48 @@ mod main_tests {
         assert_eq!(
             resolve_server_port(None, None, None).unwrap(),
             DEFAULT_SERVER_PORT
+        );
+    }
+
+    fn parse_test_args(args: &[&str]) -> (Vec<String>, Vec<String>) {
+        let cli = Cli::try_parse_from(["solverforge", "test"].iter().chain(args))
+            .expect("test arguments should parse");
+        match cli.command {
+            super::Command::Test {
+                cargo_args,
+                harness_args,
+            } => (cargo_args, harness_args),
+            _ => panic!("expected the test command"),
+        }
+    }
+
+    #[test]
+    fn test_args_after_separator_reach_the_harness() {
+        assert_eq!(
+            parse_test_args(&["--", "--nocapture"]),
+            (vec![], vec!["--nocapture".to_string()])
+        );
+        assert_eq!(
+            parse_test_args(&["--", "--nocapture", "--exact"]),
+            (
+                vec![],
+                vec!["--nocapture".to_string(), "--exact".to_string()]
+            )
+        );
+    }
+
+    #[test]
+    fn test_args_before_separator_reach_cargo() {
+        assert_eq!(
+            parse_test_args(&["integration", "--release", "--", "--test-threads=1"]),
+            (
+                vec!["integration".to_string(), "--release".to_string()],
+                vec!["--test-threads=1".to_string()]
+            )
+        );
+        assert_eq!(
+            parse_test_args(&["--release"]),
+            (vec!["--release".to_string()], vec![])
         );
     }
 
