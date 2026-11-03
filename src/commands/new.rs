@@ -425,7 +425,7 @@ schema = ["dep:schemars"]
 fn api_main_rs(project_name: &str, crate_name: &str) -> String {
     format!(
         r#"/* {project_name} — SolverForge HTTP API
-   Run with: solverforge server */
+Run with: solverforge server */
 
 use {crate_name}::api;
 
@@ -523,12 +523,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {{
     match cli.command.unwrap_or(Command::DemoData {{ size: None }}) {{
         Command::DemoData {{ size }} => {{
             let demo = match size {{
-                Some(size) => size
-                    .parse::<DemoData>()
-                    .map_err(|_| std::io::Error::new(
+                Some(size) => size.parse::<DemoData>().map_err(|_| {{
+                    std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         format!("unknown demo data size '{{size}}'"),
-                    ))?,
+                    )
+                }})?,
                 None => default_demo_data(),
             }};
             let dto = PlanDto::from_plan(&generate(demo));
@@ -592,8 +592,7 @@ fn mcp_api_mod_rs() -> &'static str {
 pub mod telemetry;
 
 pub use dto::{
-    AnalyzeResponse, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, JobTelemetryDetailDto,
-    PlanDto,
+    AnalyzeResponse, JobAnalysisDto, JobSnapshotDto, JobSummaryDto, JobTelemetryDetailDto, PlanDto,
 };
 pub use telemetry::{CandidateTraceDto, TelemetryDto};
 "#
@@ -624,8 +623,8 @@ pub mod solver;
 fn mcp_main_rs(project_name: &str, crate_name: &str) -> String {
     format!(
         r#"/* {project_name} — SolverForge MCP server
-   stdio (default): register this binary with any MCP client.
-   Streamable HTTP: cargo run -- --http [--host H] [--port N] */
+stdio (default): register this binary with any MCP client.
+Streamable HTTP: cargo run -- --http [--host H] [--port N] */
 
 use {crate_name}::mcp::SolverMcp;
 use {crate_name}::solver::SolverService;
@@ -664,15 +663,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
                 );
             }}
             other => {{
-                return Err(format!(
-                    "unknown argument: {{other}} (use --http, --host, --port)"
-                )
-                .into());
+                return Err(
+                    format!("unknown argument: {{other}} (use --http, --host, --port)").into(),
+                );
             }}
         }}
     }}
     let port = port
-        .or_else(|| std::env::var("PORT").ok().and_then(|value| value.parse().ok()))
+        .or_else(|| {{
+            std::env::var("PORT")
+                .ok()
+                .and_then(|value| value.parse().ok())
+        }})
         .unwrap_or(7860);
     if host.is_unspecified() {{
         return Err("--host must be a concrete IP address, not 0.0.0.0 or ::".into());
@@ -726,8 +728,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
 }}
 
 fn init_stderr_tracing() {{
-    use tracing_subscriber::EnvFilter;
     use tracing_subscriber::fmt;
+    use tracing_subscriber::EnvFilter;
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let _ = fmt()

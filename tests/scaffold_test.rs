@@ -66,6 +66,22 @@ fn assert_cli_success(project_dir: &Path, args: &[&str], context: &str) {
     );
 }
 
+/// Asserts the generated project is already `cargo fmt` clean, so users who
+/// format never see CLI-owned code churn.
+fn assert_cargo_fmt_clean(project_dir: &Path, context: &str) {
+    let output = Command::new("cargo")
+        .args(["fmt", "--all", "--", "--check"])
+        .current_dir(project_dir)
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run cargo fmt for {context}: {err}"));
+    assert!(
+        output.status.success(),
+        "{context}: generated code is not rustfmt-clean\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 fn assert_cli_failure(project_dir: &Path, args: &[&str], context: &str) -> String {
     let output = cli_command()
         .args(args)
@@ -743,6 +759,7 @@ fn test_new_api_shell_excludes_frontend_assets() {
 
     let project_dir = tmp.path().join(project_name);
     apply_generated_project_dependency_overrides(&project_dir);
+    assert_cargo_fmt_clean(&project_dir, "fresh api shell scaffold");
 
     let app_spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
@@ -829,6 +846,7 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
 
     let project_dir = tmp.path().join(project_name);
     apply_generated_project_dependency_overrides(&project_dir);
+    assert_cargo_fmt_clean(&project_dir, "fresh cli shell scaffold");
 
     let app_spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
@@ -1048,6 +1066,7 @@ fn test_new_mcp_shell_exposes_mcp_surface_and_compiles() {
 
     let project_dir = tmp.path().join(project_name);
     apply_generated_project_dependency_overrides(&project_dir);
+    assert_cargo_fmt_clean(&project_dir, "fresh mcp shell scaffold");
 
     let app_spec = std::fs::read_to_string(project_dir.join("solverforge.app.toml")).unwrap();
     let cargo_toml = std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
@@ -1331,6 +1350,7 @@ fn test_new_neutral_cargo_check_passes() {
     assert!(scaffold_status.success(), "scaffolding failed");
 
     let project_dir = tmp.path().join(project_name);
+    assert_cargo_fmt_clean(&project_dir, "fresh web shell scaffold");
     match apply_generated_project_dependency_overrides(&project_dir) {
         DependencyOverrideMode::CratesIo => {
             eprintln!(
