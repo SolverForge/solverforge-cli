@@ -45,7 +45,8 @@ solverforge generate score <Type>
   the API/DTF references.
 
 Score types: `HardSoftScore` (default), `HardSoftDecimalScore`,
-`HardMediumSoftScore`, `SoftScore`, `BendableScore<N, M>`.
+`HardMediumSoftScore`, `SoftScore`. `BendableScore<N, M>` is rejected because
+the runtime target has no `ParseableScore` for it.
 
 ## Facts and entities
 

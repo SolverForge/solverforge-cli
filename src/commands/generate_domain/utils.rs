@@ -7,7 +7,6 @@ pub(crate) const KNOWN_SCORE_TYPES: &[&str] = &[
     "HardSoftDecimalScore",
     "HardMediumSoftScore",
     "SoftScore",
-    "BendableScore<N, M>",
 ];
 
 pub(crate) fn snake_to_pascal(name: &str) -> String {
@@ -47,6 +46,16 @@ pub(crate) fn pluralize(name: &str) -> String {
 pub(crate) fn validate_score_type(score: &str) -> CliResult {
     if is_supported_score_type(score) {
         Ok(())
+    } else if parse_bendable_score(score.trim()).is_some() {
+        // A planning solution's score must implement ParseableScore, which the
+        // runtime target does not provide for BendableScore; accepting it
+        // would generate a project that cannot compile.
+        Err(CliError::general(format!(
+            "score type '{}' is not supported: SolverForge {} planning solutions require a ParseableScore, and BendableScore does not implement it\n\nKnown score types: {}",
+            score.trim(),
+            crate::scaffold_target::RUNTIME_CRATE_VERSION,
+            KNOWN_SCORE_TYPES.join(", ")
+        )))
     } else {
         Err(CliError::InvalidScoreType {
             score: score.to_string(),
@@ -64,7 +73,7 @@ fn is_supported_score_type(score: &str) -> bool {
     matches!(
         score,
         "HardSoftScore" | "HardSoftDecimalScore" | "HardMediumSoftScore" | "SoftScore"
-    ) || parse_bendable_score(score).is_some()
+    )
 }
 
 fn parse_bendable_score(score: &str) -> Option<(usize, usize)> {

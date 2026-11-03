@@ -105,7 +105,8 @@ forbid.
 - `HardSoftDecimalScore` for fractional weights.
 - `SoftScore` for pure optimization; it has no hard level, so every generated
   constraint must be `--soft` (the CLI rejects hard constraints on `SoftScore`).
-- `BendableScore<N, M>` for custom counts of hard/soft levels.
+- `BendableScore<N, M>` is not available: the runtime target cannot use it
+  as a planning solution score, so the CLI rejects it.
 - Soft weights let you express priority: a violation that costs 10 is ten times
   as bad as one that costs 1. Use explicit `one_hard()` / `one_soft()` only when
   all violations are equal.

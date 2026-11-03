@@ -100,7 +100,8 @@ Do not guess the model. Ask the user, in one message, for:
    triggers a violation and what data it reads.
 4. **Score type** — default `HardSoftScore`. Only change it if the user needs a
    medium level (`HardMediumSoftScore`), decimals (`HardSoftDecimalScore`),
-   soft-only (`SoftScore`), or a custom shape (`BendableScore<N, M>`).
+   or soft-only (`SoftScore`). `BendableScore<N, M>` is rejected: the current
+   runtime target cannot use it as a planning solution score.
 
 Use a structured question with concrete choices for the shell question. Then use
 `references/problem-modeling.md` to convert the answer into a concrete model and

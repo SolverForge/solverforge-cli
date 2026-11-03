@@ -331,7 +331,7 @@ enum GenerateResource {
     /// Change the score type in the existing planning solution
     #[command(after_help = "Examples:\n  solverforge generate score HardSoftDecimalScore")]
     Score {
-        /// Score type (e.g. HardSoftScore, HardSoftDecimalScore, HardMediumSoftScore, SoftScore, BendableScore<2, 3>)
+        /// Score type: HardSoftScore, HardSoftDecimalScore, HardMediumSoftScore, or SoftScore
         score_type: String,
     },
     /// Regenerate compiler-owned demo data from the project model

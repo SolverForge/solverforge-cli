@@ -82,7 +82,12 @@ fn test_validate_score_type() {
     assert!(validate_score_type("HardSoftDecimalScore").is_ok());
     assert!(validate_score_type("HardMediumSoftScore").is_ok());
     assert!(validate_score_type("SoftScore").is_ok());
-    assert!(validate_score_type("BendableScore<2, 3>").is_ok());
+    let bendable = validate_score_type("BendableScore<2, 3>")
+        .expect_err("BendableScore cannot be a planning solution score on the runtime target");
+    assert!(
+        bendable.to_string().contains("ParseableScore"),
+        "rejection should name the missing runtime capability: {bendable}"
+    );
     assert!(validate_score_type("SimpleScore").is_err());
     assert!(validate_score_type("BendableScore").is_err());
     assert!(validate_score_type("FakeScore").is_err());
@@ -1263,7 +1268,22 @@ fn generate_score_imports_the_bare_name_of_a_generic_score() {
     let original_service =
         fs::read_to_string("src/solver/service.rs").expect("failed to read service");
 
-    super::run_score("BendableScore<2, 3>").expect("generic score rewrite should succeed");
+    // `generate score` rejects BendableScore on the current runtime target, so
+    // put the project on a generic score through the shared rewrite helper,
+    // as a hand-edited project would be.
+    for path in [
+        "src/domain/plan.rs",
+        "src/constraints/mod.rs",
+        "src/constraints/all_assigned.rs",
+        "src/api/dto.rs",
+        "src/solver/service.rs",
+        "src/lib.rs",
+    ] {
+        let src = fs::read_to_string(path).expect("failed to read score surface");
+        let rewritten =
+            super::wiring::rewrite_score_type_source(&src, "HardSoftScore", "BendableScore<2, 3>");
+        fs::write(path, rewritten).expect("failed to write score surface");
+    }
 
     let dto = fs::read_to_string("src/api/dto.rs").expect("failed to read dto");
     assert!(
