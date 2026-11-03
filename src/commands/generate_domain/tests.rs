@@ -1237,3 +1237,17 @@ fn test_undefined_domain_types_ignores_known_and_declared_types() {
         vec!["Depot".to_string()]
     );
 }
+
+#[test]
+fn test_non_default_chrono_types_get_concrete_values() {
+    let fact = generate_builtin_fact("Employee", &fields(&[("day_off", "Weekday")]));
+    assert!(
+        fact.contains("Employee::new(\"test-id\", \"test\", chrono::Weekday::Mon)"),
+        "generated test should not call Default for Weekday: {fact}"
+    );
+    assert_eq!(
+        super::field_types::non_default_value("chrono::Weekday"),
+        Some("chrono::Weekday::Mon")
+    );
+    assert_eq!(super::field_types::non_default_value("NaiveDate"), None);
+}

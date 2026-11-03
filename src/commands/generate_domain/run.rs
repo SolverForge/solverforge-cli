@@ -1271,7 +1271,9 @@ fn default_value_for_type(ty_name: &str) -> String {
         "bool" => "idx % 2 == 0".to_string(),
         _ if ty_name.starts_with("Option<") => "None".to_string(),
         _ if ty_name.starts_with("Vec<") => "vec![]".to_string(),
-        _ => "Default::default()".to_string(),
+        _ => field_types::non_default_value(ty_name)
+            .unwrap_or("Default::default()")
+            .to_string(),
     }
 }
 

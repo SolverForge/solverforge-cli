@@ -1,6 +1,6 @@
 use crate::managed_block;
 
-use super::field_types::field_type_imports;
+use super::field_types::{field_type_imports, non_default_value};
 
 const CUSTOM_ENTITY_TEMPLATE_PATH: &str = ".solverforge/templates/entity.rs.tmpl";
 const CUSTOM_SOLUTION_TEMPLATE_PATH: &str = ".solverforge/templates/solution.rs.tmpl";
@@ -283,7 +283,7 @@ fn extra_field_test_args(extra_fields: &[(String, String)]) -> String {
             "f32" | "f64" => ", 0.0".to_string(),
             "bool" => ", false".to_string(),
             _ if t.starts_with("Option<") => ", None".to_string(),
-            _ => ", Default::default()".to_string(),
+            _ => format!(", {}", non_default_value(t).unwrap_or("Default::default()")),
         })
         .collect()
 }

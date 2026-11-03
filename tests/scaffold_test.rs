@@ -904,6 +904,8 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
             "skills:BTreeSet<String>",
             "--field",
             "unavailable_dates:BTreeSet<NaiveDate>",
+            "--field",
+            "day_off:Weekday",
         ],
         "generate fact with std collection and chrono fields in cli shell",
     );
@@ -960,7 +962,7 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         std::fs::read_to_string(project_dir.join("Cargo.toml")).unwrap();
     assert!(
         employee_rs.contains("use std::collections::BTreeSet;")
-            && employee_rs.contains("use chrono::NaiveDate;")
+            && employee_rs.contains("use chrono::{NaiveDate, Weekday};")
             && task_rs.contains("use chrono::NaiveDateTime;")
             && cargo_toml_after_generate
                 .contains("chrono = { version = \"0.4.45\", features = [\"serde\"] }"),
@@ -983,6 +985,16 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         "cli shell should preserve runtime metadata without reintroducing ui_source after domain mutations: {app_spec_after_generate}"
     );
 
+    assert_cli_success(
+        &project_dir,
+        &["generate", "data", "--mode", "stub"],
+        "generate stub data with a Weekday field in cli shell",
+    );
+    let data_seed = std::fs::read_to_string(project_dir.join("src/data/data_seed.rs")).unwrap();
+    assert!(
+        data_seed.contains("day_off: chrono::Weekday::Mon"),
+        "stub data must not call Default for Weekday: {data_seed}"
+    );
     let output = cargo_with_network_retry(
         &project_dir,
         &["check"],

@@ -225,6 +225,20 @@ export it inside the `@solverforge:begin domain-exports` block of src/domain/mod
     )
 }
 
+/// A concrete value for well-known field types that do not implement
+/// `Default`, where `Default::default()` would not compile.
+pub(crate) fn non_default_value(ty: &str) -> Option<&'static str> {
+    match ty
+        .trim()
+        .trim_start_matches("::")
+        .trim_start_matches("chrono::")
+    {
+        "Weekday" => Some("chrono::Weekday::Mon"),
+        "Utc" => Some("chrono::Utc"),
+        _ => None,
+    }
+}
+
 /// Returns the rewritten `Cargo.toml` when `chrono` must be added, or `None`
 /// when the manifest already declares it.
 pub(crate) fn add_chrono_dependency(cargo_toml: &str) -> Result<Option<String>, String> {
