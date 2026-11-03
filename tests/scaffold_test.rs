@@ -3558,6 +3558,19 @@ fn test_scalar_group_solver_config_graph_contract_in_generated_app() {
             && solver_toml.contains("# @solverforge:owner scalar-group candidate_group search"),
         "scalar group solver config should be owned by exact-ID managed blocks: {solver_toml}"
     );
+    let parsed_phases = solver_toml
+        .parse::<toml::Table>()
+        .expect("generated solver.toml should parse")["phases"]
+        .as_array()
+        .expect("scalar groups should add phases")
+        .clone();
+    assert!(
+        parsed_phases
+            .iter()
+            .filter(|phase| phase["type"].as_str() == Some("construction_heuristic"))
+            .all(|phase| phase.get("group_name").is_some()),
+        "an ungrouped construction phase would reach the assignment-owned Task.resource_idx, which the runtime rejects: {solver_toml}"
+    );
 
     assert_cli_success(&project_dir, &["check"], "solverforge check");
     let check_status =
@@ -3582,6 +3595,14 @@ fn test_scalar_group_solver_config_graph_contract_in_generated_app() {
     assert!(
         !solver_toml.contains("required_assignment") && !solver_toml.contains("candidate_group"),
         "destroyed scalar groups should leave no stale solver config refs: {solver_toml}"
+    );
+    assert!(
+        solver_toml
+            .parse::<toml::Table>()
+            .expect("solver.toml should parse after destroy")
+            .get("phases")
+            .is_none(),
+        "destroying the last scalar group should restore the runtime default pipeline: {solver_toml}"
     );
     assert_cli_success(&project_dir, &["check"], "solverforge check after destroy");
 }

@@ -140,6 +140,8 @@ impl SolverConfigDocument {
             }
         }
 
+        reject_user_construction_of_assignment_owned_targets(&raw_without_region, spec)?;
+
         let region = render_model_resource_region(spec);
         let raw = insert_managed_region(&raw_without_region, &region)?;
         Self::from_raw(self.path.clone(), raw)
@@ -1063,6 +1065,63 @@ fn render_phase_table(table: &toml::map::Map<String, toml::Value>) -> String {
         .to_string()
 }
 
+/// The runtime rejects a construction phase that reaches a scalar variable an
+/// assignment-backed scalar group owns ("is assignment-owned; use its named
+/// grouped scalar selector/construction"), and every solve fails. A
+/// user-authored scalar construction phase without `group_name` reaches every
+/// scalar variable its `entity_class`/`variable_name` target matches, so
+/// refuse to write a config the runtime would reject.
+fn reject_user_construction_of_assignment_owned_targets(
+    raw_without_region: &str,
+    spec: &AppSpec,
+) -> CliResult {
+    let value = toml::from_str::<toml::Value>(raw_without_region)
+        .map_err(|err| CliError::general(format!("failed to parse solver.toml: {err}")))?;
+    let Some(phases) = value.get("phases").and_then(toml::Value::as_array) else {
+        return Ok(());
+    };
+    for (phase_index, phase) in phases.iter().enumerate() {
+        let Some(phase) = phase.as_table() else {
+            continue;
+        };
+        if table_string(phase, "type").as_deref() != Some("construction_heuristic")
+            || phase.contains_key("group_name")
+            || table_string(phase, "construction_heuristic_type")
+                .is_some_and(|heuristic| heuristic.starts_with("list_"))
+        {
+            continue;
+        }
+        let entity_class = table_string(phase, "entity_class");
+        let variable_name = table_string(phase, "variable_name");
+        for group in spec
+            .scalar_groups
+            .iter()
+            .filter(|group| group.enabled && group.kind == "assignment")
+        {
+            for target in &group.targets {
+                let entity_matches = entity_class.as_deref().is_none_or(|class| {
+                    class
+                        .replace('_', "")
+                        .eq_ignore_ascii_case(&target.entity.replace('_', ""))
+                });
+                let variable_matches = variable_name
+                    .as_deref()
+                    .is_none_or(|name| name == target.field);
+                if entity_matches && variable_matches {
+                    return Err(CliError::with_hint(
+                        format!(
+                            "user-authored solver.toml phases[{phase_index}] is a scalar construction phase that reaches {}.{}, which assignment scalar group '{}' owns; the runtime rejects that phase and every solve fails",
+                            target.entity, target.field, group.name
+                        ),
+                        "remove that construction phase or scope it with entity_class/variable_name to variables outside the group; the generated grouped construction phase covers the group",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn blocked_solver_config_generate(
     kind: &str,
     name: &str,
@@ -1247,11 +1306,55 @@ mod tests {
     }
 
     #[test]
+    fn assignment_group_rejects_user_construction_reaching_its_target() {
+        for construction in [
+            "construction_heuristic_type = \"first_fit\"",
+            "construction_heuristic_type = \"cheapest_insertion\"\nentity_class = \"Task\"",
+            "variable_name = \"resource_idx\"",
+        ] {
+            let raw = format!(
+                "[[phases]]\ntype = \"construction_heuristic\"\n{construction}\n\n[[phases]]\ntype = \"local_search\"\n"
+            );
+            let err = doc(&raw)
+                .plan_sync_model_resources(&spec(vec![assignment_group("paired")], Vec::new()))
+                .expect_err(
+                    "a construction phase reaching an assignment-owned target must be refused",
+                );
+            let message = err.to_string();
+            assert!(
+                message.contains("phases[0]")
+                    && message.contains("task.resource_idx")
+                    && message.contains("'paired'"),
+                "refusal should name the phase, target, and group: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn assignment_group_accepts_user_construction_outside_its_target() {
+        for construction in [
+            "construction_heuristic_type = \"first_fit\"\nentity_class = \"Shift\"",
+            "construction_heuristic_type = \"first_fit\"\nvariable_name = \"employee_idx\"",
+            "construction_heuristic_type = \"list_cheapest_insertion\"",
+            "construction_heuristic_type = \"first_fit\"\ngroup_name = \"other\"",
+        ] {
+            let raw = format!("[[phases]]\ntype = \"construction_heuristic\"\n{construction}\n");
+            doc(&raw)
+                .plan_sync_model_resources(&spec(vec![assignment_group("paired")], Vec::new()))
+                .unwrap_or_else(|err| panic!("{construction} should be accepted: {err}"));
+        }
+        doc("[[phases]]\ntype = \"construction_heuristic\"\n")
+            .plan_sync_model_resources(&spec(vec![candidate_group("paired")], Vec::new()))
+            .expect("candidate groups do not own their targets");
+    }
+
+    #[test]
     fn generated_region_inserts_after_user_construction_before_user_local_search() {
         let planned = doc(r#"
 [[phases]]
 type = "construction_heuristic"
 construction_heuristic_type = "first_fit"
+entity_class = "Shift"
 
 [[phases]]
 type = "local_search"
@@ -1275,6 +1378,7 @@ type = "local_search"
 [[phases]]
 type = "construction_heuristic" # preserved user note
 construction_heuristic_type = "first_fit"
+entity_class = "Shift"
 
 [[phases]]
 type = "local_search"
@@ -1298,6 +1402,7 @@ type = "local_search"
 [[phases]]
 type = 'construction_heuristic'
 construction_heuristic_type = "first_fit"
+entity_class = "Shift"
 
 [[phases]]
 type = 'local_search'
