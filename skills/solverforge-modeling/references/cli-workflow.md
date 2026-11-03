@@ -56,7 +56,16 @@ solverforge generate entity <name> [--planning-variable <field>] [--field <name:
 
 - Names are `snake_case`; structs are PascalCased, collections naively
   pluralized.
-- `--field` is repeatable. `id` (and `name` for facts) are added automatically.
+- `--field` is repeatable. `id` (and `name` for facts) are added automatically;
+  a `--field` repeating them (or another `--field`) is rejected before any
+  file is written.
+- Field types from `std::collections` (`BTreeSet`, `BTreeMap`, `HashSet`,
+  `HashMap`, `VecDeque`) and chrono (`NaiveDate`, `NaiveDateTime`,
+  `NaiveTime`, `DateTime`, `Utc`, `Duration`, `Weekday`) are imported
+  automatically; the first chrono field adds `chrono` (with `serde`) to
+  `Cargo.toml`. Any other bare type is imported via `use super::<Type>`, and
+  the CLI warns when it is not yet defined under `src/domain` — define it there
+  and export it in the `domain-exports` block before building.
 - `--planning-variable` on `generate entity` creates an initial
   `Option<usize>` planning variable with `allows_unassigned = true`; prefer the
   explicit `generate variable` command so you can name the source.
