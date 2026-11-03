@@ -3645,10 +3645,31 @@ fn test_basic_constraint_skeletons_compile_in_generated_app() {
         .status()
         .expect("failed to run cargo fmt");
     assert!(fmt_status.success(), "cargo fmt failed on generated app");
-    assert_cli_success(
-        &project_dir,
-        &["check"],
-        "solverforge check after the user runs cargo fmt",
+    let check_output = cli_command()
+        .args(["check", "--no-color"])
+        .current_dir(&project_dir)
+        .output()
+        .expect("failed to run solverforge check");
+    let check_stdout = String::from_utf8_lossy(&check_output.stdout);
+    assert!(
+        check_output.status.success(),
+        "solverforge check after the user runs cargo fmt failed\nstdout:\n{check_stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&check_output.stderr)
+    );
+    assert!(
+        check_stdout.contains("Structural checks passed")
+            && check_stdout.contains("The project was not compiled. Run `cargo build`")
+            && !check_stdout.contains("All checks passed"),
+        "solverforge check must state that it does not compile the project: {check_stdout}"
+    );
+    let check_help = cli_command()
+        .args(["check", "--help"])
+        .output()
+        .expect("failed to run solverforge check --help");
+    let check_help = String::from_utf8_lossy(&check_help.stdout);
+    assert!(
+        check_help.contains("It does not compile") && check_help.contains("cargo build"),
+        "check --help must describe its structural scope: {check_help}"
     );
 
     let missing_repair = assert_cli_failure(

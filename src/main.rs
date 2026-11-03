@@ -134,7 +134,10 @@ enum Command {
     /// Show project summary: entities, facts, constraints, score type
     #[command(after_help = "Examples:\n  solverforge info")]
     Info,
-    /// Validate project structure and configuration
+    /// Check managed blocks, domain wiring, model resources, and solver.toml (does not compile)
+    ///
+    /// A structural check of the files the CLI manages. It does not compile
+    /// the project; run `cargo build` to compile it.
     #[command(after_help = "Examples:\n  solverforge check")]
     Check,
     /// Run `cargo test` with optional passthrough arguments

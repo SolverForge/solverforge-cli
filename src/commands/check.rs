@@ -11,6 +11,10 @@ use crate::solver_config;
 
 const ENTITY_TEMPLATE_PATH: &str = ".solverforge/templates/entity.rs.tmpl";
 const SOLUTION_TEMPLATE_PATH: &str = ".solverforge/templates/solution.rs.tmpl";
+/// `check` validates structure only; say so instead of implying the project builds.
+const STRUCTURAL_CHECKS_PASSED: &str =
+    "Structural checks passed: managed blocks, domain model, model resources, solver.toml.";
+const NOT_COMPILED_NOTE: &str = "The project was not compiled. Run `cargo build` to compile it.";
 
 pub fn run() -> CliResult {
     let domain_dir = Path::new("src/domain");
@@ -214,7 +218,8 @@ pub fn run() -> CliResult {
     println!();
 
     if errors.is_empty() && warnings.is_empty() {
-        output::print_success("  All checks passed.");
+        output::print_success(&format!("  {STRUCTURAL_CHECKS_PASSED}"));
+        println!("  {NOT_COMPILED_NOTE}");
         return Ok(());
     }
 
@@ -235,6 +240,7 @@ pub fn run() -> CliResult {
     }
 
     println!("  {} warning(s), 0 errors", warnings.len());
+    println!("  {NOT_COMPILED_NOTE}");
     Ok(())
 }
 
