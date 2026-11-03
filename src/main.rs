@@ -219,11 +219,11 @@ enum GenerateResource {
         #[arg(long, conflicts_with = "hard")]
         soft: bool,
 
-        /// Penalize matching entities (for_each + filter + penalize)
+        /// Penalize matching entities (for_each + filter + penalize), hard or soft
         #[arg(long, conflicts_with_all = ["pair", "join", "balance", "reward", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         unary: bool,
 
-        /// Penalize conflicting pairs (for_each_unique_pair)
+        /// Penalize conflicting pairs that share a planning value (for_each + filter assigned + self-join joiner::equal, each unordered pair once, + filter + penalize)
         #[arg(long, conflicts_with_all = ["unary", "join", "balance", "reward", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         pair: bool,
 
@@ -235,7 +235,7 @@ enum GenerateResource {
         #[arg(long, conflicts_with_all = ["unary", "pair", "join", "reward", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         balance: bool,
 
-        /// Reward matching entities (for_each + filter + reward)
+        /// Reward matching entities (for_each + filter + reward); implies soft
         #[arg(long, conflicts_with_all = ["unary", "pair", "join", "balance", "runs", "presence", "collect_vec", "group_complement", "projected_group"])]
         reward: bool,
 

@@ -109,10 +109,11 @@ use solverforge::prelude::*;
 and solved without panic, producing a score). The grouped patterns use the same
 wiring rule; treat their collectors as stubs and verify each with a real solve.
 
-### unary — penalize or reward matching entities
+### unary — penalize matching entities
 
-When: one entity's own state is illegal or desirable (unassigned, over a
-threshold, on a bad day). No join, no grouping.
+When: one entity's own state is illegal or undesirable (over a threshold, on a
+bad day). No join, no grouping. `--unary` generates this shape for both
+`--hard` and `--soft`; use `reward` below for incentives.
 
 ```rust
 use crate::domain::{Plan, Task};
@@ -123,18 +124,22 @@ use solverforge::IncrementalConstraint;
 pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
     ConstraintFactory::<Plan, HardSoftScore>::new()
         .for_each(Plan::tasks())
+        .filter(unary_condition)
         .penalize(hard_weight(unary_weight))
         .named("required_positive")
 }
 
-fn unary_weight(task: &Task) -> HardSoftScore {
-    if task.priority < 0 { <HardSoftScore as Score>::one_hard() }
-    else { <HardSoftScore as Score>::zero() }
+fn unary_condition(task: &Task) -> bool {
+    task.priority < 0
+}
+
+fn unary_weight(_task: &Task) -> HardSoftScore {
+    <HardSoftScore as Score>::one_hard()
 }
 ```
 
-For soft: `.reward(unary_weight)` (or `.penalize(unary_weight)`) with a
-`one_soft()` body and no `hard_weight`.
+For soft: `.penalize(unary_weight)` with a `one_soft()` body and no
+`hard_weight`.
 
 ### unassigned — hard "every entity must be assigned"
 
@@ -153,35 +158,35 @@ The variable must allow unassigned values (`--allows-unassigned`).
 ### pair — penalize conflicting pairs of the same entity type
 
 When: two entities with the same assigned value conflict (double-booking,
-overlap, same resource twice). Uses a self-join keyed by the planning variable.
+overlap, same resource twice). Uses a self-join keyed by the planning variable,
+after filtering out unassigned entities.
 
 ```rust
 use crate::domain::{Plan, Task};
 use solverforge::prelude::*;
-use solverforge::stream::joiner::equal;
 use solverforge::IncrementalConstraint;
 
 /// HARD: two distinct high-priority tasks must not share a resource.
 pub fn constraint() -> impl IncrementalConstraint<Plan, HardSoftScore> {
     ConstraintFactory::<Plan, HardSoftScore>::new()
         .for_each(Plan::tasks())
-        .join(equal(|task: &Task| task.resource_idx))
+        .filter(|task: &Task| task.resource_idx.is_some())
+        .join(joiner::equal(|task: &Task| task.resource_idx))
+        .filter(|left: &Task, right: &Task| left.priority >= 3 && right.priority >= 3)
         .penalize(hard_weight(pair_weight))
         .named("no_double_book")
 }
 
-fn pair_weight(left: &Task, right: &Task) -> HardSoftScore {
-    if left.priority >= 3 && right.priority >= 3 {
-        <HardSoftScore as Score>::one_hard()
-    } else {
-        <HardSoftScore as Score>::zero()
-    }
+fn pair_weight(_left: &Task, _right: &Task) -> HardSoftScore {
+    <HardSoftScore as Score>::one_hard()
 }
 ```
 
 A self-join visits each unordered pair **exactly once** and never pairs an
 entity with itself, so one match is one violation. Do not add a self-pair guard
-and do not halve the weight.
+and do not halve the weight. Keep the assigned filter before the join: an
+`Option` key makes every two unassigned entities an equal-key pair, so six
+tasks with four unassigned would score three extra violations.
 
 ### join — penalize an entity against a joined fact
 
@@ -231,12 +236,16 @@ When: a desirable property should be maximized. `--reward` implies soft.
 ```rust
 ConstraintFactory::<Plan, HardSoftScore>::new()
     .for_each(Plan::tasks())
+    .filter(reward_condition)
     .reward(reward_weight)
     .named("prefer_high_priority")
 
-fn reward_weight(task: &Task) -> HardSoftScore {
-    if task.priority >= 0 { <HardSoftScore as Score>::one_soft() }
-    else { <HardSoftScore as Score>::zero() }
+fn reward_condition(task: &Task) -> bool {
+    task.priority >= 0
+}
+
+fn reward_weight(_task: &Task) -> HardSoftScore {
+    <HardSoftScore as Score>::one_soft()
 }
 ```
 

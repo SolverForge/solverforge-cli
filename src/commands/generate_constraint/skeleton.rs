@@ -15,7 +15,7 @@ pub enum Pattern {
 }
 
 pub(crate) fn generate_skeleton(
-    _name: &str,
+    name: &str,
     pattern: Pattern,
     is_soft: bool,
     solution_type: &str,
@@ -107,62 +107,60 @@ pub(crate) fn generate_skeleton(
     let projected_group_penalty = dynamic_penalty_arg("projected_group_weight", is_soft);
 
     let (body, helpers) = match pattern {
-        Pattern::Unary => {
-            let action = if is_soft {
-                "        .reward(unary_weight)".to_string()
-            } else {
-                format!("        .penalize({unary_penalty})")
-            };
-            (
-                format!(
-                    r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
+        Pattern::Unary => (
+            format!(
+                r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
         .for_each({entity_source})
-{action}
+        .filter(unary_condition)
+        .penalize({unary_penalty})
         .named("{constraint_name}")"#
-                ),
-                format!(
-                    r#"
+            ),
+            format!(
+                r#"
 
+/// Selects each {entity_type} this constraint penalizes.
 fn unary_condition(_entity: &{entity_type}) -> bool {{
-    panic!("replace placeholder condition before enabling this constraint")
+    panic!("replace placeholder condition in `unary_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
-fn unary_weight(entity: &{entity_type}) -> {score_type} {{
-    if unary_condition(entity) {{
-        {penalty_expr}
-    }} else {{
-        <{score_type} as Score>::zero()
-    }}
+/// Penalty for one {entity_type} selected by `unary_condition`.
+fn unary_weight(_entity: &{entity_type}) -> {score_type} {{
+    {penalty_expr}
 }}"#
-                ),
-            )
-        }
+            ),
+        ),
 
         Pattern::Pair => (
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
         .for_each({entity_source})
+        .filter(has_{planning_var})
         .join(joiner::equal({planning_var}_join_key))
+        .filter(pair_condition)
         .penalize({pair_penalty})
         .named("{constraint_name}")"#
             ),
             format!(
                 r#"
 
+/// Unassigned entities share no value, so they never form a pair.
+fn has_{planning_var}(entity: &{entity_type}) -> bool {{
+    entity.{planning_var}.is_some()
+}}
+
+/// A self-join on this key yields each unordered pair once.
 fn {planning_var}_join_key(entity: &{entity_type}) -> Option<usize> {{
     entity.{planning_var}
 }}
 
+/// Selects each pair sharing a {planning_var} that this constraint penalizes.
 fn pair_condition(_left: &{entity_type}, _right: &{entity_type}) -> bool {{
-    panic!("replace placeholder pair condition before enabling this constraint")
+    panic!("replace placeholder pair condition in `pair_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
-fn pair_weight(left: &{entity_type}, right: &{entity_type}) -> {score_type} {{
-    if pair_condition(left, right) {{
-        {penalty_expr}
-    }} else {{
-        <{score_type} as Score>::zero()
-    }}
+/// Penalty for one pair selected by `pair_condition`.
+fn pair_weight(_left: &{entity_type}, _right: &{entity_type}) -> {score_type} {{
+    {penalty_expr}
 }}"#
             ),
         ),
@@ -189,11 +187,11 @@ fn entity_join_key(entity: &{entity_type}) -> Option<usize> {{
 }}
 
 fn fact_join_key(_fact: &{fact_type}) -> Option<usize> {{
-    panic!("replace placeholder join key extractor before enabling this constraint")
+    panic!("replace placeholder join key extractor in `fact_join_key` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn join_condition(_entity: &{entity_type}, _fact: &{fact_type}) -> bool {{
-    panic!("replace placeholder join condition before enabling this constraint")
+    panic!("replace placeholder join condition in `join_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn join_weight(entity: &{entity_type}, fact: &{fact_type}) -> {score_type} {{
@@ -233,7 +231,7 @@ fn balance_metric(_entity: &{entity_type}) -> i64 {{
 }}
 
 fn balance_condition(_scope: &usize, _load: &LoadBalance<Option<usize>>) -> bool {{
-    panic!("replace placeholder balance condition before enabling this constraint")
+    panic!("replace placeholder balance condition in `balance_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn balance_weight(scope: &usize, load: &LoadBalance<Option<usize>>) -> {score_type} {{
@@ -250,22 +248,21 @@ fn balance_weight(scope: &usize, load: &LoadBalance<Option<usize>>) -> {score_ty
             format!(
                 r#"    ConstraintFactory::<{solution_type}, {score_type}>::new()
         .for_each({entity_source})
+        .filter(reward_condition)
         .reward(reward_weight)
         .named("{constraint_name}")"#
             ),
             format!(
                 r#"
 
+/// Selects each {entity_type} this constraint rewards.
 fn reward_condition(_entity: &{entity_type}) -> bool {{
-    panic!("replace placeholder reward condition before enabling this constraint")
+    panic!("replace placeholder reward condition in `reward_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
-fn reward_weight(entity: &{entity_type}) -> {score_type} {{
-    if reward_condition(entity) {{
-        {penalty_expr}
-    }} else {{
-        <{score_type} as Score>::zero()
-    }}
+/// Reward for one {entity_type} selected by `reward_condition`.
+fn reward_weight(_entity: &{entity_type}) -> {score_type} {{
+    {penalty_expr}
 }}"#
             ),
         ),
@@ -294,11 +291,11 @@ fn {planning_var}_group_key(entity: &{entity_type}) -> usize {{
 }}
 
 fn {planning_var}_run_index(_entity: &{entity_type}) -> i64 {{
-    panic!("replace placeholder run index extractor before enabling this constraint")
+    panic!("replace placeholder run index extractor in `{planning_var}_run_index` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn runs_condition(_value_idx: &usize, _runs: &Runs) -> bool {{
-    panic!("replace placeholder runs condition before enabling this constraint")
+    panic!("replace placeholder runs condition in `runs_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn runs_weight(value_idx: &usize, runs: &Runs) -> {score_type} {{
@@ -335,11 +332,11 @@ fn {planning_var}_group_key(entity: &{entity_type}) -> usize {{
 }}
 
 fn {planning_var}_presence_index(_entity: &{entity_type}) -> i64 {{
-    panic!("replace placeholder presence index extractor before enabling this constraint")
+    panic!("replace placeholder presence index extractor in `{planning_var}_presence_index` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn indexed_presence_condition(_value_idx: &usize, _presence: &IndexedPresence) -> bool {{
-    panic!("replace placeholder presence condition before enabling this constraint")
+    panic!("replace placeholder presence condition in `indexed_presence_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn indexed_presence_weight(value_idx: &usize, presence: &IndexedPresence) -> {score_type} {{
@@ -376,11 +373,11 @@ fn {planning_var}_group_key(entity: &{entity_type}) -> usize {{
 }}
 
 fn collected_value(_entity: &{entity_type}) -> usize {{
-    panic!("replace placeholder collected value before enabling this constraint")
+    panic!("replace placeholder collected value in `collected_value` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn collected_values_condition(_value_idx: &usize, _items: &CollectedVec<usize>) -> bool {{
-    panic!("replace placeholder collected-vector condition before enabling this constraint")
+    panic!("replace placeholder collected-vector condition in `collected_values_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn collected_values_weight(value_idx: &usize, items: &CollectedVec<usize>) -> {score_type} {{
@@ -422,7 +419,7 @@ fn {planning_var}_group_key(entity: &{entity_type}) -> usize {{
 }}
 
 fn complement_group_key(_fact: &{fact_type}) -> usize {{
-    panic!("replace placeholder complement key extractor before enabling this constraint")
+    panic!("replace placeholder complement key extractor in `complement_group_key` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn complement_default_count(_fact: &{fact_type}) -> usize {{
@@ -430,7 +427,7 @@ fn complement_default_count(_fact: &{fact_type}) -> usize {{
 }}
 
 fn group_complement_condition(_key: &usize, _count: &usize) -> bool {{
-    panic!("replace placeholder complement condition before enabling this constraint")
+    panic!("replace placeholder complement condition in `group_complement_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn group_complement_weight(key: &usize, count: &usize) -> {score_type} {{
@@ -474,11 +471,11 @@ fn entity_join_key(entity: &{entity_type}) -> Option<usize> {{
 }}
 
 fn fact_join_key(_fact: &{fact_type}) -> Option<usize> {{
-    panic!("replace placeholder join key extractor before enabling this constraint")
+    panic!("replace placeholder join key extractor in `fact_join_key` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn projected_group_entry(_entity: &{entity_type}, _fact: &{fact_type}) -> ProjectedGroupEntry {{
-    panic!("replace placeholder projected-group entry before enabling this constraint")
+    panic!("replace placeholder projected-group entry in `projected_group_entry` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn projected_group_key(entry: &ProjectedGroupEntry) -> usize {{
@@ -486,7 +483,7 @@ fn projected_group_key(entry: &ProjectedGroupEntry) -> usize {{
 }}
 
 fn projected_group_condition(_key: &usize, _count: &usize) -> bool {{
-    panic!("replace placeholder projected-group condition before enabling this constraint")
+    panic!("replace placeholder projected-group condition in `projected_group_condition` (src/constraints/{name}.rs) before enabling this constraint")
 }}
 
 fn projected_group_weight(key: &usize, count: &usize) -> {score_type} {{

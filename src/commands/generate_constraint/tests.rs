@@ -506,13 +506,31 @@ fn test_generate_skeleton_unary_hard() {
     assert!(result.contains(".for_each(EmployeeSchedule::shifts())"));
     assert!(result.contains("<HardSoftDecimalScore as Score>::one_hard()"));
     assert!(result.contains("HARD:"));
-    assert!(result.contains(".penalize(hard_weight(unary_weight))"));
+    assert!(result.contains(
+        ".for_each(EmployeeSchedule::shifts())\n        .filter(unary_condition)\n        .penalize(hard_weight(unary_weight))"
+    ));
     assert!(result.contains("fn unary_weight"));
     assert!(result.contains(".named(\"no_overlap\")"));
-    assert!(!result.contains(".filter("));
     assert!(!result.contains("todo!"));
-    assert!(result
-        .contains("panic!(\"replace placeholder condition before enabling this constraint\")"));
+    assert!(result.contains(
+        "panic!(\"replace placeholder condition in `unary_condition` (src/constraints/no_overlap.rs) before enabling this constraint\")"
+    ));
+
+    let soft = generate_skeleton(
+        "late_start",
+        Pattern::Unary,
+        true,
+        "EmployeeSchedule",
+        "HardSoftDecimalScore",
+        "late_start",
+        Some(&domain),
+    );
+    assert!(
+        soft.contains(".filter(unary_condition)\n        .penalize(unary_weight)")
+            && soft.contains("<HardSoftDecimalScore as Score>::one_soft()")
+            && !soft.contains(".reward("),
+        "a soft unary constraint must penalize, not reward: {soft}"
+    );
 }
 
 #[test]
@@ -545,13 +563,13 @@ fn test_generate_skeleton_pair_hard() {
         "no_overlap",
         Some(&domain),
     );
-    assert!(result.contains(".for_each(EmployeeSchedule::shifts())"));
-    assert!(result.contains(".join(joiner::equal(employee_idx_join_key))"));
-    assert!(result.contains(".penalize(hard_weight(pair_weight))"));
-    assert!(result.contains(".named(\"no_overlap\")"));
-    assert!(!result.contains(".filter("));
     assert!(result.contains(
-        "panic!(\"replace placeholder pair condition before enabling this constraint\")"
+        ".for_each(EmployeeSchedule::shifts())\n        .filter(has_employee_idx)\n        .join(joiner::equal(employee_idx_join_key))\n        .filter(pair_condition)\n        .penalize(hard_weight(pair_weight))"
+    ));
+    assert!(result.contains("entity.employee_idx.is_some()"));
+    assert!(result.contains(".named(\"no_overlap\")"));
+    assert!(result.contains(
+        "panic!(\"replace placeholder pair condition in `pair_condition` (src/constraints/no_overlap.rs) before enabling this constraint\")"
     ));
     assert!(!result.contains("todo!"));
 }
@@ -597,10 +615,12 @@ fn test_generate_skeleton_join_hard() {
     assert!(result.contains(".penalize(hard_weight(join_weight))"));
     assert!(result.contains(".named(\"required_skill\")"));
     assert!(!result.contains(".filter("));
-    assert!(
-        result.contains("replace placeholder join key extractor before enabling this constraint")
-    );
-    assert!(result.contains("replace placeholder join condition before enabling this constraint"));
+    assert!(result.contains(
+        "replace placeholder join key extractor in `fact_join_key` (src/constraints/required_skill.rs) before enabling this constraint"
+    ));
+    assert!(result.contains(
+        "replace placeholder join condition in `join_condition` (src/constraints/required_skill.rs) before enabling this constraint"
+    ));
     assert!(!result.contains("todo!"));
 }
 
@@ -671,12 +691,11 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
         "preferred_assignment",
         Some(&domain),
     );
-    assert!(result.contains(".reward(reward_weight)"));
+    assert!(result.contains(".filter(reward_condition)\n        .reward(reward_weight)"));
     assert!(result.contains(".named(\"preferred_assignment\")"));
     assert!(result.contains("fn reward_weight"));
-    assert!(!result.contains(".filter("));
     assert!(result.contains(
-        "panic!(\"replace placeholder reward condition before enabling this constraint\")"
+        "panic!(\"replace placeholder reward condition in `reward_condition` (src/constraints/preferred_assignment.rs) before enabling this constraint\")"
     ));
     assert!(!result.contains("todo!"));
 }

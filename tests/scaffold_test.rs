@@ -3792,12 +3792,12 @@ fn test_basic_constraint_skeletons_compile_in_generated_app() {
     );
     assert_cargo_fmt_clean(&project_dir, "constraint and conflict repair destroy");
 
-    for name in [
-        "unary_placeholder",
-        "pair_placeholder",
-        "join_placeholder",
-        "balance_placeholder",
-        "reward_placeholder",
+    for (name, expected_filter) in [
+        ("unary_placeholder", Some(".filter(unary_condition)")),
+        ("pair_placeholder", Some(".filter(pair_condition)")),
+        ("join_placeholder", None),
+        ("balance_placeholder", None),
+        ("reward_placeholder", Some(".filter(reward_condition)")),
     ] {
         let src = std::fs::read_to_string(
             project_dir
@@ -3806,11 +3806,15 @@ fn test_basic_constraint_skeletons_compile_in_generated_app() {
                 .join(format!("{name}.rs")),
         )
         .unwrap();
+        let shape_matches = match expected_filter {
+            Some(filter) => src.contains(filter) && !src.contains("Score>::zero()"),
+            None => !src.contains(".filter(") && src.contains("Score>::zero()"),
+        };
         assert!(
-            !src.contains(".filter(")
-                && src.contains("Score>::zero()")
+            shape_matches
+                && src.contains(&format!("(src/constraints/{name}.rs)"))
                 && src.contains(&format!(".named(\"{name}\")")),
-            "{name} skeleton should use typed scoring closures and canonical IDs: {src}"
+            "{name} skeleton should match its documented stream shape, name its file in the placeholder, and use its canonical ID: {src}"
         );
     }
 
