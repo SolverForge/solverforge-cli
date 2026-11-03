@@ -66,6 +66,63 @@ mod assemble {
     assert!(result.contains("max_hours::constraint(),"));
 }
 
+/// `cargo fmt` sorts consecutive `mod` items alphabetically, while the
+/// constraint calls keep their insertion order. Both shapes must stay valid.
+const RUSTFMT_SORTED_CONSTRAINTS_MOD: &str = r#"pub use self::assemble::create_constraints;
+
+// @solverforge:begin constraint-modules
+mod all_assigned;
+mod max_hours;
+mod zone_cover;
+// @solverforge:end constraint-modules
+
+mod assemble {
+    use super::*;
+
+    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
+        // @solverforge:begin constraint-calls
+        (
+            zone_cover::constraint(),
+            all_assigned::constraint(),
+            max_hours::constraint(),
+        )
+        // @solverforge:end constraint-calls
+    }
+}
+"#;
+
+#[test]
+fn test_validate_constraint_mod_source_accepts_rustfmt_sorted_modules() {
+    let modules = validate_constraint_mod_source(RUSTFMT_SORTED_CONSTRAINTS_MOD)
+        .expect("rustfmt-sorted module list should validate");
+    assert_eq!(modules, ["all_assigned", "max_hours", "zone_cover"]);
+}
+
+#[test]
+fn test_rewrite_mod_keeps_modules_sorted_and_calls_in_insertion_order() {
+    let result =
+        rewrite_mod(RUSTFMT_SORTED_CONSTRAINTS_MOD, "capacity").expect("rewrite should succeed");
+    assert!(
+        result.contains(
+            "// @solverforge:begin constraint-modules\nmod all_assigned;\nmod capacity;\nmod max_hours;\nmod zone_cover;\n// @solverforge:end constraint-modules"
+        ),
+        "modules must stay in rustfmt's sorted order:\n{result}"
+    );
+    assert!(
+        result.contains(
+            "            zone_cover::constraint(),\n            all_assigned::constraint(),\n            max_hours::constraint(),\n            capacity::constraint(),\n"
+        ),
+        "calls must keep insertion order with the new call appended:\n{result}"
+    );
+
+    let removed =
+        remove_constraint_from_source(&result, "all_assigned").expect("remove should succeed");
+    assert!(removed.contains("mod capacity;\nmod max_hours;\nmod zone_cover;\n"));
+    assert!(removed.contains(
+        "            zone_cover::constraint(),\n            max_hours::constraint(),\n            capacity::constraint(),\n"
+    ));
+}
+
 #[test]
 fn test_remove_constraint_from_source_preserves_empty_tuple_shape() {
     let src = r#"pub use self::assemble::create_constraints;

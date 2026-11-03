@@ -105,7 +105,11 @@ fn parse_constraint_calls(src: &str) -> Result<Vec<String>, String> {
     Ok(calls)
 }
 
+/// Renders module declarations in rustfmt's `reorder_modules` order so a
+/// later `cargo fmt` leaves the managed block untouched.
 fn render_constraint_modules(modules: &[String]) -> String {
+    let mut modules = modules.to_vec();
+    modules.sort();
     modules
         .iter()
         .map(|module| format!("mod {module};"))
@@ -196,11 +200,11 @@ impl ConstraintSurface {
                 ));
             }
         }
-        if modules != calls {
-            return Err(format!(
-                "managed constraint modules and '{CONSTRAINT_CALLS_BLOCK}' must use the same order"
-            ));
-        }
+        // Module declarations are matched to calls by name, never by position:
+        // `cargo fmt` sorts consecutive `mod` items, while the call order is
+        // the constraint set's evaluation order and must stay as inserted.
+        let mut modules = modules;
+        modules.sort();
 
         Ok(Self { modules, calls })
     }
