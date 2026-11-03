@@ -289,6 +289,9 @@ testing. It should not pretend to be domain-specific business data.
 ## Configuration
 
 `solver.toml` owns solver behavior, including phases and termination settings.
+The neutral scaffold declares no `[[phases]]`, so a fresh app runs the
+runtime's model-aware default pipeline, which also completes a model with no
+planning variables; declaring any phase replaces that whole pipeline.
 `solverforge config show|set` edits non-phase settings in that file through
 dotted TOML paths such as `termination.seconds_spent_limit`. Ordered `phases`
 are the solver execution graph and are not edited through `config set`.

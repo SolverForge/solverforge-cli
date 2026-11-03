@@ -614,6 +614,15 @@ fn test_new_creates_neutral_project_files() {
         "neutral scaffold should project the complete compact and diagnostic SolverForge telemetry surfaces: {telemetry_rs}"
     );
     assert!(
+        solver_toml
+            .parse::<toml::Table>()
+            .expect("neutral solver.toml should parse")
+            .get("phases")
+            .is_none()
+            && solver_toml.contains("model-aware default"),
+        "neutral solver config must defer to the runtime default pipeline, because an explicit local_search without move_selector cannot compile for a model without planning variables: {solver_toml}"
+    );
+    assert!(
         solver_toml.contains("[candidate_trace]")
             && solver_toml.contains("max_entries = 100000")
             && solver_toml.contains("retained separately"),

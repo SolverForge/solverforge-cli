@@ -1,18 +1,25 @@
-[[phases]]
-type = "construction_heuristic"
-construction_heuristic_type = "first_fit"
-
-[[phases]]
-type = "local_search"
-[phases.acceptor]
-type = "late_acceptance"
-late_acceptance_size = 400
-[phases.forager]
-type = "accepted_count"
-limit = 4
-
 [termination]
 seconds_spent_limit = 30
+
+# No [[phases]] are declared, so the runtime runs its model-aware default
+# pipeline: construction for every scalar, scalar-group, and list variable,
+# then local search when the model has moves to make. That pipeline also
+# completes a model with no planning variables yet. Declaring any [[phases]]
+# replaces the whole default pipeline, and an explicit `local_search` phase
+# that omits `move_selector` is only valid once the model has planning
+# variables, for example:
+# [[phases]]
+# type = "construction_heuristic"
+# construction_heuristic_type = "first_fit"
+#
+# [[phases]]
+# type = "local_search"
+# [phases.acceptor]
+# type = "late_acceptance"
+# late_acceptance_size = 400
+# [phases.forager]
+# type = "accepted_count"
+# limit = 4
 
 # Opt in to bounded candidate-pull diagnostics when needed. Trace detail is
 # retained separately from ordinary status, snapshot, and SSE telemetry.

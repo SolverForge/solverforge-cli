@@ -98,6 +98,13 @@ fn neutral_shell_pipeline() {
     let large_demo = fetch_demo_data(&client, &base_url, "LARGE");
     assert!(large_demo["score"].is_null());
 
+    // PHASE 3: the untouched scaffold solver.toml must solve the empty model.
+    app.phase("Solve the neutral demo data with the scaffold solver config");
+    let job_id = app.create_job_from_demo(&client, port, "STANDARD");
+    let completed = wait_for_job_state(&client, &base_url, &job_id, "COMPLETED");
+    assert_eq!(completed["terminalReason"], "completed");
+    assert_eq!(completed["bestScore"], "0hard/0soft");
+
     app.mark_success();
 }
 
