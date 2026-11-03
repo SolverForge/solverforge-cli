@@ -9,11 +9,11 @@
 Current scaffold policy:
 - current CLI package version is `3.7.1`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
-- generated projects currently target `solverforge 0.23.0`; the default web shell additionally targets `solverforge-ui 0.9.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.8.0`
+- generated projects currently target `solverforge 0.24.0`; the default web shell additionally targets `solverforge-ui 0.9.0` and `solverforge-maps 2.1.4`; the MCP shell additionally targets `rmcp 3.8.0`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
 - `--shell web|api|cli|mcp` is the current public shell selector; `web` is the default, `api` omits frontend assets, `cli` omits Axum/SSE routes and frontend assets, and `mcp` delivers the solver as an MCP server over stdio and stateless Streamable HTTP
 - API/CLI/MCP app specs omit `ui_source`, and subsequent CLI mutations must preserve that absence
-- the MCP shell keeps the shared core (`domain/`, `constraints/`, `solver/`, `data/`, DTOs) and adds `src/mcp/`; `solve` is task-backed with retained `jobId` metadata for task-capable clients, tasks have no TTL and remain for the server process lifetime, failed/cancelled solves map to corresponding MCP task states, stdio is the default transport, concrete `--host` IPs preserve rmcp Host validation but the HTTP transport is unauthenticated with a single shared solver/task store so a non-loopback bind is a documented trusted-network-only limitation, and the runtime `console` feature stays off so the banner never corrupts the stdio channel
+- the MCP shell keeps the shared core (`domain/`, `constraints/`, `solver/`, `data/`, DTOs) and adds `src/mcp/`; `solve` is task-backed with retained `jobId` metadata for task-capable clients, tasks have no TTL and remain for the server process lifetime, failed/cancelled solves map to corresponding MCP task states, stdio is the default transport, concrete `--host` IPs preserve rmcp Host validation but the HTTP transport is unauthenticated with a single shared solver/task store so a non-loopback bind is a documented trusted-network-only limitation, and the MCP shell enables only the `serde` feature of `solverforge`: `console` would write the runtime banner to stdout, the stdio channel, and `verbose-logging` enables `console` (the web, API, and CLI shells enable `serde`, `console`, and `verbose-logging`)
 - `solverforge connect` prints MCP client configuration and writes in-project config for the harness target (`--write opencode|claude|cursor|vscode`; each merges instead of clobbering)
 - Tauri scaffolding is deferred; do not document or implement a public Tauri shell unless that work is explicitly reopened
 - users shape the app afterward through facts, entities, solution/score metadata, variables, constraints, and generated data
@@ -23,6 +23,10 @@ Current scaffold policy:
 - ordered sequences and routes use list variables; do not model sequence topology as a scalar predecessor field
 - `standard` is a demo size label only; do not reintroduce it as a variable kind or scaffold family
 - `templates/scalar/generic` is the embedded neutral scaffold used by `solverforge new`; `templates/list/generic` is not a public `new` selector
+- the neutral `solver.toml` declares no `[[phases]]`, so a fresh app solves through the runtime's model-aware default pipeline; `generate scalar-group` refuses a user-authored scalar construction phase that reaches its assignment-owned target
+- `generate`, `destroy`, and `new` rustfmt every Rust file they write (rustfmt is optional; a missing one leaves files as generated), fresh scaffolds pass `cargo fmt --check`, and managed constraint `mod` lines stay in rustfmt's sorted order so `cargo fmt` never breaks `check`
+- `solverforge check` is structural and says it did not compile the project; generated constraint skeletons compile but their placeholders panic with the function and file to edit, so a solve that reaches one ends `FAILED`
+- generated constraint analysis DTOs carry `weightMultiplier`; selector telemetry DTOs carry no `conflictRepair*` counters (the run-level telemetry keeps them)
 - generated `Cargo.toml` files must carry `rust-version = "1.95"` plus the current explicit dependency baselines for the selected shell from the template/materialization code
 - the repository ships portable agent skills at `skills/solverforge-modeling/` and `skills/solverforge-ui/` with an agent-centric installer at `scripts/install-skill`; keep their documented shell set, scaffold targets, and command surface aligned with the live CLI
 
@@ -67,7 +71,7 @@ Both runtime and browser suites must:
 
 Current end-to-end scenario policy:
 
-- neutral shell is covered as a bootable empty app
+- neutral shell is covered as a bootable empty app whose demo data solves to `COMPLETED` with the untouched scaffold `solver.toml`
 - mixed is covered as a seeded generated solve in both runtime and browser
   scenarios, with required scalar assignment and complete list placement
 - the mixed runtime scenario also proves fixed-work parallel evaluation: a seeded, step-bounded solve rerun with `move_thread_count` 4 (set through `solverforge config set`) on a pinned Rayon pool must match the sequential solution, logical counters, and consumed candidate pulls, with speculative work only in the parallel run
@@ -75,12 +79,14 @@ Current end-to-end scenario policy:
 - the scalar-only runtime scenario covers full compact telemetry, bounded candidate detail, and qualified trace provenance
 - the MCP scenario models a mixed scalar-plus-list problem, generates the sample data, and drives both stdio and stateless Streamable HTTP through the real `rmcp` client: annotated tool surface, task-backed solve to a terminal snapshot with scalar assignment and complete list placement, retained lifecycle via a legacy client, and byte-level stdio stdout purity during a solve, all with parallel evaluation enabled on a pinned Rayon pool
 
-SolverForge `0.23.0` uses list variables as the sequence and route model. The
+SolverForge `0.24.0` uses list variables as the sequence and route model. The
 generated-app runtime and browser scenarios must continue to start and observe
 a real mixed scalar/list solve.
 
 For scaffold changes, prefer assertions that check the generated contract directly:
-- dependency wiring for the selected shell: `solverforge` everywhere, `solverforge-ui` and `solverforge-maps` only for web-shell projects, `rmcp` only for the mcp shell, and the optional `schemars`/`schema` feature enabled only for the mcp shell
+- dependency wiring for the selected shell: `solverforge` everywhere (features `serde` only on the mcp shell), `solverforge-ui` and `solverforge-maps` only for web-shell projects, `rmcp` only for the mcp shell, and the optional `schemars`/`schema` feature enabled only for the mcp shell
+- fresh web, api, cli, and mcp scaffolds pass `cargo fmt --all -- --check`, the cli shell's `cargo check` prints no warnings, and the mcp shell compiles without deprecated rmcp API
+- the neutral `solver.toml` declares no `[[phases]]`
 - CLI version vs runtime target messaging
 - generated README version/runtime source disclosure
 - typed solver SSE payload shape and typed frontend hooks

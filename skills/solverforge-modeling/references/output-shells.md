@@ -92,8 +92,9 @@ solverforge connect              # ready-to-paste client configs
   it off loopback on an untrusted network. `solverforge connect` prints client
   config and `--write opencode|claude|cursor|vscode` merges the in-project
   config for that harness.
-- The runtime `console` feature stays off because the banner would corrupt the
-  stdio channel; diagnostics go to stderr.
+- `solverforge` is built with the `serde` feature only: `console` would print
+  the banner on the stdio channel, and `verbose-logging` enables `console`.
+  Diagnostics go to stderr.
 
 ## Choosing for the user
 

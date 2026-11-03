@@ -71,6 +71,10 @@ solverforge generate entity <name> [--planning-variable <field>] [--field <name:
   `Option<usize>` planning variable with `allows_unassigned = true`; prefer the
   explicit `generate variable` command so you can name the source.
 - `--force` overwrites an existing file, `--pretend` previews without writing.
+- Generated and rewritten Rust files are passed through `rustfmt` when it is
+  installed, so `cargo fmt --check` passes after any `generate`/`destroy`.
+  Running `cargo fmt` yourself is safe: the CLI accepts rustfmt-sorted
+  constraint module lists.
 
 ## Variables
 
@@ -141,6 +145,10 @@ validated: unary/pair/balance/reward need an entity; join/group-complement/
 projected-group also need a fact; pair/join/balance/etc. need a scalar variable
 on the first entity.
 
+Every generated placeholder panics with its function and file name. The
+project still passes `check` and builds, but any solve that reaches a
+placeholder ends `FAILED`; replace them before running a solve.
+
 ## Data
 
 ```bash
@@ -167,10 +175,12 @@ solverforge config set termination.seconds_spent_limit 60
 solverforge config set candidate_trace.max_entries 100000
 solverforge config set move_thread_count.count 4   # parallel local-search evaluation
 solverforge test                 # delegates to `cargo test`
+solverforge test my_filter -- --nocapture   # before `--`: cargo; after: test binaries
 solverforge completions <shell>
 ```
 
-`check` never compiles or runs the model. Pair it with `cargo check` and a real
+`check` never compiles or runs the model, and its output says the project was
+not compiled. Pair it with `cargo check` and a real
 solve for web/API. The generated CLI only serializes demo data; extend it before
 claiming that a terminal solve works. For mcp, register the server in the running
 harness (`solverforge connect --write <harness>`), reload, and verify by calling
@@ -183,6 +193,7 @@ harness (`solverforge connect --write <harness>`), reload, and verify by calling
 solverforge server                # release
 solverforge server --debug        # faster first compile
 solverforge server --port 8080
+PORT=8080 solverforge server     # port: --port, then PORT, then .solverforgerc, then 7860
 
 # mcp
 cargo run --release               # stdio MCP server (default transport)
@@ -216,5 +227,8 @@ solverforge destroy --yes conflict-repair <id>
 
 Destroy re-renders the affected managed blocks and projections. It blocks when a
 dependent scalar group or conflict repair still references the resource; destroy
-the dependents first. `--yes` skips the confirmation prompt (required in
+the dependents first. `destroy fact` and `destroy entity` also refuse while
+other code under `src/` names the type or streams its collection; the error
+lists the files and the `destroy constraint` commands for dependent
+constraints. `--yes` skips the confirmation prompt (required in
 non-interactive shells).

@@ -16,7 +16,7 @@ Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.23.0`
+- `solverforge 0.24.0`
 - `solverforge-ui 0.9.0` for the default web shell
 - `solverforge-maps 2.1.4` for the default web shell
 - `rmcp 3.8.0` for the MCP shell
@@ -121,6 +121,21 @@ solverforge generate data --size large
 solverforge server
 ```
 
+A fresh scaffold solves as-is: its `solver.toml` declares no `[[phases]]`, so
+the runtime runs its model-aware default pipeline, which completes an empty
+model and adapts construction and local search as scalar, scalar-group, and
+list variables are added. Declaring any `[[phases]]` replaces that whole
+pipeline; the template keeps an explicit construction plus local-search pair
+as a commented example.
+
+Generated constraints are skeletons. Each one streams from the generated
+collection accessors and leaves its condition, key, or collector functions as
+`panic!` placeholders that name the function and the
+`src/constraints/<name>.rs` file to edit. `solverforge check` and
+`cargo build` pass with placeholders in place, but a solve that reaches one
+fails: the job ends `FAILED` and the server log shows the placeholder panic.
+Replace every placeholder before you expect a solve to complete.
+
 Shell variants:
 
 ```bash
@@ -163,12 +178,42 @@ Core commands:
   `--skip-readme` skips the generated project README.
 - `solverforge generate fact|entity|variable|constraint|solution|score|data`
   mutates the current project through the canonical generated surfaces.
+  `generate`, `destroy`, and `new` pipe every Rust file they create or change
+  through the toolchain's `rustfmt` (honouring `$RUSTFMT`, the manifest
+  edition, and the project's `rustfmt.toml`), so a generated project passes
+  `cargo fmt --check`. rustfmt is optional: when it is missing or cannot parse
+  a file, the file is left as generated and the command still succeeds.
+  Running `cargo fmt` on a project does not break later CLI commands; managed
+  constraint `mod` lines are kept in rustfmt's sorted order, while the
+  constraint-calls block keeps insertion order because it is the constraint
+  set's evaluation order.
+- `generate fact|entity --field name:Type` rejects a field that repeats a
+  built-in field (`id` and `name` on facts, `id` and the
+  `--planning-variable` field on entities) or another `--field`. Field types
+  from `std::collections` and chrono are imported automatically, and the first
+  chrono field adds `chrono` (with `serde`) to `Cargo.toml`. Any other bare
+  type is imported with `use super::<Type>`; when it is not defined under
+  `src/domain`, the command warns and still succeeds. Generated data uses
+  `chrono::Weekday::Mon` and `chrono::Utc` for the chrono types that have no
+  `Default`.
+- `generate score` and `generate solution --score` accept `HardSoftScore`,
+  `HardSoftDecimalScore`, `HardMediumSoftScore`, and `SoftScore`.
+  `BendableScore` is rejected because `#[planning_solution]` requires a
+  `ParseableScore`, which SolverForge `0.24.0` does not implement for it.
 - `solverforge generate scalar-group|conflict-repair` wires opt-in model
   resources by exact ID.
 - `solverforge destroy fact|entity|variable|constraint|solution|scalar-group|conflict-repair`
   removes generated resources and rewrites the app spec/UI projection.
+  `destroy fact` and `destroy entity` refuse, before writing anything, while
+  other source under `src/` still names the type or streams its collection;
+  the error lists the dependent files and the `destroy constraint` commands
+  for dependent constraints.
 - `solverforge check`, `solverforge info`, and `solverforge routes` inspect the
-  generated project. `routes` applies only to web/API shells.
+  generated project. `check` is structural: it validates managed blocks, the
+  domain model, model resources, and `solver.toml`, and says that it did not
+  compile the project; run `cargo build` for a build verdict. `routes`
+  applies only to web/API shells and lists every method of a chained router
+  (`get(...).delete(...)`) and `.route(` calls that span several lines.
 - `solverforge connect` prints ready-to-paste MCP client configuration for an
   MCP-shell project (stdio command plus Streamable HTTP URL for Claude Code,
   Claude Desktop, Cursor, VS Code, and other clients). `--write vscode` merges
@@ -187,8 +232,14 @@ Core commands:
 - `solverforge server` runs web/API generated apps through Cargo, and boots the
   MCP-shell project's stateless Streamable HTTP transport. CLI-shell projects
   run directly with `cargo run -- demo-data`; MCP-shell projects default to the
-  stdio transport with `cargo run`.
-- `solverforge test` delegates to `cargo test`.
+  stdio transport with `cargo run`. The port is `--port`, then the `PORT`
+  environment variable, then the `.solverforgerc` `port`, then `7860`;
+  `solverforge connect` resolves the same port for the URL it prints, and a
+  non-numeric `PORT` is an error.
+- `solverforge test [ARGS] [-- HARNESS_ARGS]` runs `cargo test`: arguments
+  before `--` (test name filters, cargo flags) go to cargo, and arguments
+  after `--` go to the test binaries, as in
+  `solverforge test -- --nocapture`.
 - `solverforge completions <shell>` emits shell completions.
 
 Generated project manifests include `rust-version = "1.95"` and dependencies
@@ -212,11 +263,14 @@ serialization, and `parking_lot`, but excludes `solverforge-ui`,
 Axum, `tower-http`, `tokio-stream`, `solverforge-ui`, `solverforge-maps`, and
 `static/`. The MCP shell keeps `solverforge`, `rmcp`, Axum, Tokio,
 `tracing`, `tracing-subscriber`, serialization, and `parking_lot`, but
-excludes `solverforge-ui`, `solverforge-maps`, and `static/`; it also keeps
-the runtime `console` feature off because the runtime banner writes to stdout,
-which is the stdio MCP transport channel. Every shell declares `schemars` as
-an optional dependency behind a `schema` feature; only the MCP shell enables it
-to publish typed tool schemas over the shared DTO contract.
+excludes `solverforge-ui`, `solverforge-maps`, and `static/`. The web, API,
+and CLI shells enable the `solverforge` features `serde`, `console`, and
+`verbose-logging`; the MCP shell enables only `serde`. `console` writes the
+runtime banner to stdout, which is the stdio MCP transport channel, and
+`verbose-logging` enables `console`, so the MCP shell leaves both off. Every
+shell declares `schemars` as an optional dependency behind a `schema` feature;
+only the MCP shell enables it to publish typed tool schemas over the shared
+DTO contract.
 
 Every shell shares one generated core (`domain/`, `constraints/`, `solver/`,
 `data/`, and the DTO contract), so `solverforge generate` and
@@ -270,14 +324,18 @@ then from `~/.solverforgerc`. Recognized preferences are intentionally narrow:
 
 Generated web/API apps expose every compact `SolverTelemetry` aggregate,
 including applied/not-doable/rejected moves, hard-score direction counts,
-conflict-repair counters, construction counters, one record per started phase
-(`phases`, in execution order), per-selector and per-move breakdowns, and the
-bounded applied-move trace. These fields are carried consistently by status,
-snapshot, and typed SSE payloads.
+construction counters, one record per started phase (`phases`, in execution
+order), per-selector and per-move breakdowns, and the bounded applied-move
+trace. The six `conflictRepair*` counters are run-level totals; selector
+records do not carry them because SolverForge `0.24.0` `SelectorTelemetry`
+has no such fields. These fields are carried consistently by status,
+snapshot, and typed SSE payloads. Constraint analysis reports each
+constraint's `name`, `weightMultiplier` (the bound constraint weight, a
+`u32`), `score`, and `matchCount`.
 
 ## Parallel Evaluation
 
-SolverForge `0.23.0` can score each local-search step's candidates on several
+The SolverForge runtime can score each local-search step's candidates on several
 cores while one coordinator keeps the sequential acceptance order. Generated
 `solver.toml` files document the setting and leave it off:
 
@@ -379,7 +437,8 @@ after the target is published.
 
 Current scenario coverage:
 
-- neutral shell: scaffold, boot, and verify the empty production shell
+- neutral shell: scaffold, boot, verify the empty production shell, and solve
+  its demo data to `COMPLETED` with the scaffold `solver.toml`
 - mixed app: scaffold mixed shape, seed non-empty mixed demo data, start a real
   retained solve, verify required scalar assignment and complete list placement,
   then cancel and delete the job through the generated runtime/browser surface;
@@ -398,7 +457,8 @@ Current scenario coverage:
   complete list placement, the retained lifecycle through a legacy client, and a
   byte-level stdio check that the transport channel stays pure JSON-RPC; every
   MCP phase runs with parallel evaluation enabled
-SolverForge `0.23.0` supports mixed scalar/list construction, canonical mixed
+
+SolverForge `0.24.0` supports mixed scalar/list construction, canonical mixed
 local-search defaults, and list-based sequence modeling. The CLI suite proves
 the mixed path in both runtime and browser pipelines; the scalar-only scenario keeps the deeper
 pause/resume, analysis, reconnect, and qualified-trace checks.

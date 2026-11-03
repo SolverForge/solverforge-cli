@@ -25,7 +25,7 @@ required source/collector rules for the grouped patterns.
   `solverforge --version`, `solverforge new --help`,
   `solverforge generate variable --help`.
 
-This skill describes CLI `3.7.1` (scaffold runtime target `solverforge 0.23.0`,
+This skill describes CLI `3.7.1` (scaffold runtime target `solverforge 0.24.0`,
 UI `solverforge-ui 0.9.0`, maps `solverforge-maps 2.1.4`, MCP `rmcp 3.8.0`).
 Re-derive specifics from the CLI if the version differs.
 
@@ -118,6 +118,9 @@ cd <name>
 - `--skip-git` skips `git init`; `--skip-readme` skips the README.
 - The scaffold is the same neutral model for every shell; the shell only changes
   which adapters (Axum routes, static UI, Clap, or MCP tools) are generated.
+- The scaffold `solver.toml` declares no `[[phases]]`, so the runtime's
+  model-aware default pipeline solves whatever variables you add. Declaring
+  any `[[phases]]` replaces that whole pipeline.
 
 ## Step 2 — Establish the solution identity first
 
@@ -145,7 +148,14 @@ solverforge generate entity task --field demand:i32 --field ready_at:i64
 - Names are `snake_case`; the CLI PascalCases the struct (`task` → `Task`) and
   naively pluralizes the collection (`task` → `tasks`).
 - `--field name:Type` is repeatable. Every fact/entity gets `id: String` (and
-  facts get `name: String`) automatically; do not declare them yourself.
+  facts get `name: String`) automatically; the CLI rejects a `--field` that
+  repeats one of them, the entity's `--planning-variable`, or another
+  `--field`.
+- `std::collections` and chrono field types are imported for you, and the
+  first chrono field adds `chrono` to `Cargo.toml`. Any other type is imported
+  with `use super::<Type>`; if the CLI warns that it is not defined, define it
+  under `src/domain` and export it in the `domain-exports` block before
+  building.
 - Watch irregular plurals: the collection name is used verbatim by variables
   (`--range`, `--elements`, data generation), so prefer regular nouns.
 
@@ -200,10 +210,19 @@ Patterns: `--unary --pair --join --balance --reward --runs --presence
 ### The localizing-source rule (read this even if you read nothing else)
 
 The generated skeleton is a **compiling stub full of `panic!` placeholders**.
-Replace every placeholder function body with real domain logic before enabling
-the constraint. The stream sources are already correct: the skeleton streams
-from the `#[planning_solution]`-generated collection accessors, never from a
-hand-written extractor.
+Each panic names its function and `src/constraints/<id>.rs` file. They pass
+`solverforge check` and `cargo build`, but a solve that reaches one **fails**:
+the job ends `FAILED` and the server log shows the placeholder panic. Replace
+every placeholder function body with real domain logic before expecting a
+solve to complete. The stream sources are already correct: the skeleton
+streams from the `#[planning_solution]`-generated collection accessors, never
+from a hand-written extractor.
+
+The common skeletons are `--unary` = `for_each` + `filter` + `penalize` (hard
+or soft), `--reward` = `for_each` + `filter` + `reward`, and `--pair` =
+`for_each` + `filter` (variable assigned) + `joiner::equal` self-join +
+`filter` + `penalize`. SolverForge `0.24.0` has no `for_each_unique_pair`;
+the self-join already yields each unordered pair once.
 
 `#[planning_solution]` generates a public associated accessor for each
 collection: `Plan::tasks()` for `#[planning_entity_collection] pub tasks:
@@ -279,9 +298,12 @@ solverforge check          # structure, managed blocks, model resources, solver.
 cargo check                # the code must actually compile
 ```
 
-`check` passing does **not** prove the model works: it never runs the solver and
-never sees placeholder `panic!`s. Run a real solve through web/API or through a
-CLI solve entry point/integration test you add.
+`check` is structural and says so: its output ends with "The project was not
+compiled." Passing it does **not** prove the model works: it never compiles,
+never runs the solver, and never sees placeholder `panic!`s. Run a real solve
+through web/API or through a CLI solve entry point/integration test you add.
+`solverforge test -- --nocapture` runs `cargo test` and forwards the
+arguments after `--` to the test binaries.
 
 Also add one per-constraint test per rule with exact score-delta assertions
 (`(constraint(),).evaluate_all(&plan)`); it is the only fast gate that catches a

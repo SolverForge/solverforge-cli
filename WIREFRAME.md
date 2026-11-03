@@ -21,7 +21,7 @@ Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.23.0`
+- `solverforge 0.24.0`
 - `solverforge-ui 0.9.0` for the web shell
 - `solverforge-maps 2.1.4` for the web shell
 - `rmcp 3.8.0` for the MCP shell
@@ -165,11 +165,13 @@ across every stateless HTTP negotiation, and the transport has no authentication
 or per-caller isolation: a non-loopback `--host` exposes the full job lifecycle
 (start, inspect, cancel, delete) to anyone who can reach the port, and Host
 validation only rejects DNS-rebinding headers. Documented as a known limitation;
-keep the bind on loopback unless the network is trusted. The MCP shell keeps the runtime
-`console` feature off because the runtime banner writes to stdout, which is the
-stdio MCP transport channel;
-diagnostics go to stderr. Every shell declares `schemars` as an optional
-dependency behind a `schema` feature, and only the MCP shell enables it.
+keep the bind on loopback unless the network is trusted. The MCP shell enables
+only the `serde` feature of `solverforge`: `console` writes the runtime banner
+to stdout, which is the stdio MCP transport channel, and `verbose-logging`
+enables `console`, so both stay off; diagnostics go to stderr. The web, API,
+and CLI shells enable `serde`, `console`, and `verbose-logging`. Every shell
+declares `schemars` as an optional dependency behind a `schema` feature, and
+only the MCP shell enables it.
 
 `solverforge connect` prints MCP client configuration derived from the project
 (app name, resolved binary profile, and server port) and writes only in-project
@@ -201,6 +203,20 @@ Required managed surfaces:
 
 Commands that add or remove generated resources should fail clearly when those
 current markers are missing or duplicated.
+
+`constraint-modules` holds `mod` lines in rustfmt's sorted order and matches
+them to calls by name; `constraint-calls` keeps insertion order because it is
+the constraint set's evaluation order. `generate`, `destroy`, and `new` pipe
+each Rust file they create or change through the toolchain's `rustfmt`
+(honouring `$RUSTFMT`, the manifest edition, and `rustfmt.toml`), so generated
+projects pass `cargo fmt --check` and `cargo fmt` leaves the managed blocks
+valid. rustfmt is optional: a missing rustfmt or an unparseable file leaves
+the file as generated, and a rustfmt result that would move a standalone
+`// @solverforge:` marker line is discarded.
+
+`destroy fact` and `destroy entity` refuse before writing anything while other
+source under `src/` still names the type or streams its collection (comments
+and string literals are ignored), and name the dependent files.
 Project-local entity and solution override templates are only valid when they
 emit the same managed block set; free-form overrides are intentionally rejected.
 
@@ -253,7 +269,11 @@ Generated apps should behave like production references:
 - status endpoints expose `currentScore`, `bestScore`, solver status, and latest
   snapshot revision
 - status, snapshot, and SSE payloads expose every compact SolverForge telemetry
-  aggregate and phase/selector/move/applied-move breakdown
+  aggregate and phase/selector/move/applied-move breakdown; the six
+  `conflictRepair*` counters are run-level only, because SolverForge `0.24.0`
+  `SelectorTelemetry` does not carry them
+- constraint analysis carries `name`, `weightMultiplier` (the bound constraint
+  weight), `score`, and `matchCount` per constraint
 - `GET /jobs/{id}/telemetry` exposes the atomically paired retained status and
   opt-in bounded candidate-pull trace; candidate pulls never ride normal SSE,
   status, or snapshot traffic
@@ -284,7 +304,46 @@ Generated apps should behave like production references:
   from `/demo-data/{id}`
 
 Generated data should be deterministic and structurally useful for optimization
-testing. It should not pretend to be domain-specific business data.
+testing. It should not pretend to be domain-specific business data. Field
+types without a `Default` get a concrete value (`chrono::Weekday::Mon`,
+`chrono::Utc`).
+
+## Domain Fields
+
+`generate fact|entity --field name:Type` rejects a field that repeats a
+generated field (`id` and `name` on facts, `id` and the `--planning-variable`
+field on entities) or another `--field`, before any file is written. The
+generators import `std::collections` and chrono field types, add
+`chrono = { version = "0.4.45", features = ["serde"] }` to the app's
+dependencies when a field first needs it, and import any other bare type
+with `use super::<Type>`. A type that is not defined under `src/domain` is a
+warning, not an error, so the user can define it afterward.
+
+## Score Types
+
+`generate score` and `generate solution --score` accept `HardSoftScore`,
+`HardSoftDecimalScore`, `HardMediumSoftScore`, and `SoftScore`.
+`BendableScore` is rejected: `#[planning_solution]` requires a
+`ParseableScore`, and SolverForge `0.24.0` does not implement it for
+`BendableScore`. Score rewrites change only the bare type name inside `use`
+items.
+
+## Constraint Skeletons
+
+`generate constraint` writes a stream that compiles and placeholder
+functions that panic with the function name and the
+`src/constraints/<name>.rs` path. The common shapes are:
+
+- `--unary`: `for_each` + `filter(unary_condition)` + `penalize`, for both
+  `--hard` and `--soft`
+- `--reward`: `for_each` + `filter(reward_condition)` + `reward`
+- `--pair`: `for_each` + `filter` (variable assigned) + `join(joiner::equal(key))`
+  self-join, which yields each unordered pair once, + `filter(pair_condition)`
+  + `penalize`; SolverForge `0.24.0` has no `for_each_unique_pair`
+
+Weight helpers return the unit penalty or reward. A solve that reaches a
+placeholder fails: the job ends `FAILED` and the panic names the file and
+function to edit. `solverforge check` and `cargo build` do not catch this.
 
 ## Configuration
 
@@ -292,6 +351,10 @@ testing. It should not pretend to be domain-specific business data.
 The neutral scaffold declares no `[[phases]]`, so a fresh app runs the
 runtime's model-aware default pipeline, which also completes a model with no
 planning variables; declaring any phase replaces that whole pipeline.
+`generate scalar-group` refuses a user-authored scalar construction phase that
+reaches the group's assignment-owned target (untargeted, or matching its
+`entity_class`/`variable_name`), because the runtime rejects that config and
+every solve would fail; the error names the phase path and how to scope it.
 `solverforge config show|set` edits non-phase settings in that file through
 dotted TOML paths such as `termination.seconds_spent_limit`. Ordered `phases`
 are the solver execution graph and are not edited through `config set`.
@@ -328,6 +391,20 @@ preferences:
 - `no_color`
 - `quiet`
 
+`solverforge server` and `solverforge connect` resolve the port as
+`--port`, then the `PORT` environment variable, then the `.solverforgerc`
+`port`, then `7860`. A non-numeric `PORT` is an error.
+
+## Inspection And Tests
+
+- `solverforge check` is structural: it validates managed blocks, the domain
+  model, model resources, and `solver.toml`, and its output states that the
+  project was not compiled
+- `solverforge routes` lists every method of a chained router and `.route(`
+  calls that span several lines, and ignores `//` comments
+- `solverforge test` passes arguments before `--` to `cargo test` and
+  arguments after `--` to the test binaries
+
 ## Validation Shape
 
 Validation should use ephemeral generated apps rather than checked-in sample
@@ -341,7 +418,8 @@ projects:
 
 Current scenario policy:
 
-- neutral shell: bootable empty app
+- neutral shell: bootable empty app whose demo data solves to `COMPLETED`
+  with the scaffold `solver.toml`
 - mixed app: seeded scalar-plus-list solve through the runtime and browser,
   including required scalar assignment, complete list placement, cancel, and
   terminal cleanup; the runtime pipeline also proves fixed-work parallel
@@ -358,7 +436,7 @@ Current scenario policy:
   legacy client, and byte-level stdio stdout purity during a solve, all with
   parallel evaluation enabled
 
-SolverForge `0.23.0` uses list variables for ordered sequences and routes. Both
+SolverForge `0.24.0` uses list variables for ordered sequences and routes. Both
 generated-app end-to-end suites start and observe the real mixed scalar/list
 path.
 

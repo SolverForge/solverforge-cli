@@ -10,7 +10,8 @@ Validates `src/domain/mod.rs`, `src/constraints/mod.rs`, the domain model,
 solution, entities, model resources, and `solver.toml` refs. It does **not**
 compile Rust and does **not** run the solver, so it cannot see placeholder
 `panic!`s or a broken stream source. Exit code 0 means the managed structure is
-well-formed.
+well-formed; the output says so and adds "The project was not compiled. Run
+`cargo build` to compile it."
 
 ## 2. `cargo check` — compiles
 
@@ -21,7 +22,7 @@ cargo check
 Catches wrong field names, missing imports, wrong score types, and closure
 signature mismatches. It will **not** catch the runtime localizing-source panic
 (that is a runtime assertion, not a compile error). The generated scaffolds
-target `solverforge 0.23.0`; the first build downloads and compiles the runtime
+target `solverforge 0.24.0`; the first build downloads and compiles the runtime
 and web dependencies, which can take a few minutes. `SF_USE_LOCAL_PATCHES=1`
 exists in the CLI's own test harness for prerelease targets — do not set it for
 ordinary app builds.
@@ -58,6 +59,7 @@ solver termination needs more or less than the default 120 seconds.
 ```bash
 cd my-app
 solverforge server --port 7860 &     # or `--debug` for a faster build
+# without --port: PORT, then .solverforgerc `port`, then 7860
 
 curl -s localhost:7860/health                                   # {"status":"UP"}
 curl -s localhost:7860/demo-data                                # defaultId + availableIds
@@ -89,6 +91,13 @@ constraint `no_double_book` received descriptor 0, but source Unknown cannot loc
 
 That is the localizing-source defect. Fix it by using `Plan::<collection>()` (see
 `constraint-patterns.md`).
+
+An unreplaced generated placeholder fails the job the same way (`FAILED`, null
+scores) and names the function and file to edit:
+
+```
+replace placeholder condition in `unary_condition` (src/constraints/no_overlap.rs) before enabling this constraint
+```
 
 ### Manual flow (cli)
 

@@ -84,7 +84,13 @@ solverforge generate scalar-group paired_assignment \
 - Unless `--skip-solver-config` is passed, the CLI writes grouped construction
   and grouped local-search refs into the CLI-managed `solver-config` region of
   `solver.toml`. `solverforge check` validates those refs across the config
-  graph.
+  graph. The neutral `solver.toml` declares no phases, so a fresh project gets
+  only the grouped phases; destroying the last group restores the runtime
+  default pipeline.
+- An assignment group owns its target. The command refuses a user-authored
+  scalar construction phase that reaches the target (untargeted, or matching
+  its `entity_class`/`variable_name`), because the runtime would reject it and
+  every solve would fail. Scope such a phase to other variables.
 - The solution must declare `scalar_groups = "scalar_groups"` in
   `#[planning_solution(...)]`; the CLI adds this when the first group is created.
 - Destroy blocks while targets still reference the group.

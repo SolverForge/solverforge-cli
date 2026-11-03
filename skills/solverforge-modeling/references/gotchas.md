@@ -43,10 +43,11 @@ web-shell config seam.
 ## Generated constraints are stubs that compile
 
 `solverforge generate constraint` writes real structure plus `panic!`
-placeholders. `check` and `cargo check` both pass on an untouched stub. A stub
-that is not on any hot path may even let a solve complete with a wrong score.
-Replace every placeholder and verify a real solve through web/API or a solve
-entry point/integration test you add.
+placeholders that name their function and file. `check` and `cargo check` both
+pass on an untouched stub, but a solve that evaluates one fails: the job ends
+`FAILED` with null scores and the log shows the placeholder panic. Replace
+every placeholder and verify a real solve through web/API or a solve entry
+point/integration test you add.
 
 ## Hard constraints are penalties, not filters
 
@@ -105,8 +106,9 @@ pattern.
 An mcp-shell project exposes solver tools over MCP, not Axum routes. There is no
 `/health`, `/jobs`, or SSE endpoint, and `solverforge routes` is rejected. The
 binary's default transport is stdio (stdout is the protocol channel, so the
-runtime `console` banner is disabled); use `--http` or `solverforge server` for
-stateless Streamable HTTP at `/mcp`.
+shell enables only the `serde` feature of `solverforge`; `console` and
+`verbose-logging`, which enables `console`, would print the banner there); use
+`--http` or `solverforge server` for stateless Streamable HTTP at `/mcp`.
 
 The HTTP transport is unauthenticated and has no per-caller isolation: every
 connection shares one solver and task store, so `--host` on a non-loopback
@@ -134,12 +136,25 @@ does not itself require unassigned values. Pair an allowed `None` state with an
 
 `solverforge destroy` refuses to remove an entity/variable/constraint that a
 scalar group or conflict repair still references. Destroy dependents first
-(`--yes scalar-group <name>` / `--yes conflict-repair <id>`).
+(`--yes scalar-group <name>` / `--yes conflict-repair <id>`). `destroy fact`
+and `destroy entity` also refuse while constraints or other code under `src/`
+still name the type or stream its collection; destroy or edit those first.
+
+## Scalar groups own their target's construction
+
+An assignment-backed scalar group owns its target variable. If you add a
+scalar construction phase to `solver.toml` that reaches that target
+(untargeted, or matching its `entity_class`/`variable_name`), the runtime
+rejects the config and every solve fails, so `generate scalar-group` refuses
+it. Scope your phase to variables outside the group; the generated grouped
+construction phase covers the group.
 
 ## Score-type constraints
 
 - `SoftScore` has no hard level: only `--soft` constraints are allowed.
 - `generate score <Type>` must name a supported type, or the CLI rejects it.
+  `BendableScore<N, M>` is rejected: SolverForge `0.24.0` has no
+  `ParseableScore` for it, which `#[planning_solution]` requires.
 
 ## `solverforge.app.toml` is a projection, not an input
 
@@ -150,4 +165,5 @@ targets) that the CLI manages; leave managed fields alone.
 ## Persistent prefs
 
 `.solverforgerc` (project root, then `~/.solverforgerc`) recognizes only `port`,
-`no_color`, `quiet`. CLI flags override it.
+`no_color`, `quiet`. CLI flags override it, and the `PORT` environment variable
+overrides its `port`.
