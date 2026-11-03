@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.8.0](https://github.com/SolverForge/solverforge-cli/compare/v3.7.1...v3.8.0) (2026-11-03)
+
+
+### Features
+
+* **scaffold:** target SolverForge 0.24.0 ([658064e](https://github.com/SolverForge/solverforge-cli/commit/658064e65cec7321e67398c73a0d679d45886b20))
+
+
+### Bug Fixes
+
+* **check:** state that `solverforge check` is structural and does not compile ([4762de4](https://github.com/SolverForge/solverforge-cli/commit/4762de4d9856305434b54f04227cdb387d4dd532))
+* **constraints:** accept rustfmt-sorted constraint module lists ([615227b](https://github.com/SolverForge/solverforge-cli/commit/615227bd21dc41281b724211368ba1303d4fcf02))
+* **destroy:** refuse to destroy types that source still references ([d9b54d8](https://github.com/SolverForge/solverforge-cli/commit/d9b54d822edf21926f0d8494ec9721ad0c47a062))
+* **generate:** import --field types and add chrono when a field needs it ([9804ed7](https://github.com/SolverForge/solverforge-cli/commit/9804ed73d36ac7c923293c28ced2ac57d1791d4d))
+* **generate:** import the bare name when rewriting a generic score type ([9c4b7f8](https://github.com/SolverForge/solverforge-cli/commit/9c4b7f8757cb3903f4c7ca10dbec7620ede724f8))
+* **generate:** make unary, pair, and reward skeletons score as their help says ([128bfc5](https://github.com/SolverForge/solverforge-cli/commit/128bfc557802368b840857da213ba57a1872f310))
+* **generate:** never let the rustfmt pass move managed block markers ([e0f7f3f](https://github.com/SolverForge/solverforge-cli/commit/e0f7f3f64f87a0e8be68bf1c4e849cb7376a858a))
+* **generate:** reject --field names that duplicate generated fields ([ae8606e](https://github.com/SolverForge/solverforge-cli/commit/ae8606ef09c4b2406d944a241f1bf9f797bf3f76))
+* **generate:** reject BendableScore as a planning solution score ([ec9eeda](https://github.com/SolverForge/solverforge-cli/commit/ec9eeda680139c993f6fd216a7edf04b52b9985e))
+* **generate:** rustfmt the Rust sources generators and destroyers write ([1d130b1](https://github.com/SolverForge/solverforge-cli/commit/1d130b1a8c4f8adf90e75a4ff8c1a07ec6938fbc))
+* **generate:** seed chrono Weekday and Utc fields without Default ([3ee96c3](https://github.com/SolverForge/solverforge-cli/commit/3ee96c3237e4be412fc4096924f276311b0802f2))
+* **generate:** warn when a --field type is not defined in the domain ([393446c](https://github.com/SolverForge/solverforge-cli/commit/393446ce63a03ba3a3a2b85dd1ebf278f2f5abae))
+* **routes:** list chained methods and multi-line route calls ([70a2983](https://github.com/SolverForge/solverforge-cli/commit/70a29836c3a55114ba8af2a105e609ebd4f5e2b9))
+* **scaffold:** compile the CLI shell without dead-code warnings ([efbc593](https://github.com/SolverForge/solverforge-cli/commit/efbc593210a7acff0836b7723e7d84db73d336cc))
+* **scaffold:** emit rustfmt-clean shell sources from `solverforge new` ([9e3807c](https://github.com/SolverForge/solverforge-cli/commit/9e3807c79e0f37934bd492f5de4bce97d674ea85))
+* **scaffold:** let a fresh app solve through the runtime default pipeline ([77cbac1](https://github.com/SolverForge/solverforge-cli/commit/77cbac1cf52a389e19a849f4e9462066024faa9b))
+* **scalar-group:** refuse solver configs whose construction reaches an assignment-owned target ([426260a](https://github.com/SolverForge/solverforge-cli/commit/426260a89c55d48c9581d71c07162ba4f3a49cc5))
+* **server:** honor the PORT environment variable ([2e9487b](https://github.com/SolverForge/solverforge-cli/commit/2e9487b965486f3e892ad6b90a74356e2629d67a))
+* **test:** pass arguments after -- to the test harness ([f6c9b31](https://github.com/SolverForge/solverforge-cli/commit/f6c9b316a239fc46b78f71d1912c824844fc2edb))
+
+
 ## [3.7.1](https://github.com/SolverForge/solverforge-cli/compare/v3.7.0...v3.7.1) (2026-10-27)
 
 
