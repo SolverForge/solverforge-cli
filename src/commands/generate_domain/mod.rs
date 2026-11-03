@@ -1,3 +1,4 @@
+mod field_types;
 mod generators;
 mod run;
 mod utils;

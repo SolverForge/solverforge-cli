@@ -1,4 +1,5 @@
 use super::{
+    field_types::reject_duplicate_fields,
     generators::{generate_entity, generate_fact, generate_solution},
     run::remove_neutral_scaffold,
     utils::{pluralize, snake_to_pascal, validate_score_type},
@@ -1108,4 +1109,43 @@ fn generate_score_is_idempotent_and_failure_safe() {
         "HardSoftDecimalScore",
         "HardSoftScore",
     );
+}
+
+fn fields(specs: &[(&str, &str)]) -> Vec<(String, String)> {
+    specs
+        .iter()
+        .map(|(name, ty)| (name.to_string(), ty.to_string()))
+        .collect()
+}
+
+#[test]
+fn test_reject_duplicate_fields_names_the_builtin() {
+    let err = reject_duplicate_fields(
+        "fact",
+        &fields(&[("skills", "String"), ("name", "String")]),
+        &["id", "name"],
+    )
+    .expect_err("a --field named like a built-in must be rejected")
+    .to_string();
+    assert!(
+        err.contains("'name'") && err.contains("built-in"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        reject_duplicate_fields("entity", &fields(&[("id", "String")]), &["id"]).is_err(),
+        "entity --field id must be rejected"
+    );
+}
+
+#[test]
+fn test_reject_duplicate_fields_rejects_repeated_field() {
+    let err = reject_duplicate_fields(
+        "entity",
+        &fields(&[("start", "i64"), ("start", "i64")]),
+        &["id"],
+    )
+    .expect_err("a repeated --field must be rejected")
+    .to_string();
+    assert!(err.contains("'start'"), "unexpected error: {err}");
+    assert!(reject_duplicate_fields("entity", &fields(&[("start", "i64")]), &["id"]).is_ok());
 }

@@ -878,6 +878,22 @@ fn test_new_cli_shell_excludes_axum_frontend_and_compiles() {
         "server should explain why CLI-shell projects do not run an Axum server: {server_error}"
     );
 
+    let domain_mod_before = std::fs::read_to_string(project_dir.join("src/domain/mod.rs")).unwrap();
+    let duplicate_error = assert_cli_failure(
+        &project_dir,
+        &["generate", "fact", "employee", "--field", "name:String"],
+        "generate fact with a --field duplicating a built-in",
+    );
+    assert!(
+        duplicate_error.contains("--field 'name' duplicates the built-in 'name' field"),
+        "duplicate --field should name the built-in field: {duplicate_error}"
+    );
+    assert!(
+        !project_dir.join("src/domain/employee.rs").exists()
+            && std::fs::read_to_string(project_dir.join("src/domain/mod.rs")).unwrap()
+                == domain_mod_before,
+        "a rejected --field must not write any file"
+    );
     assert_cli_success(
         &project_dir,
         &["generate", "entity", "task", "--field", "label:String"],

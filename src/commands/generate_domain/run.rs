@@ -10,6 +10,7 @@ use crate::list_variable_metadata::ListVariableMetadata;
 use crate::output;
 use crate::scalar_variable_hooks::ScalarVariableHooks;
 
+use super::field_types;
 use super::generators::{generate_entity, generate_fact, generate_solution};
 use super::utils::{ensure_domain_dir, find_file_for_type, snake_to_pascal, validate_score_type};
 use super::wiring::{
@@ -70,6 +71,9 @@ pub fn run_entity(
         validate_name(var)?;
     }
     let parsed_fields = parse_fields(fields)?;
+    let mut entity_builtins = vec!["id"];
+    entity_builtins.extend(planning_variable);
+    field_types::reject_duplicate_fields("entity", &parsed_fields, &entity_builtins)?;
 
     let domain_dir = Path::new("src/domain");
     ensure_domain_dir(domain_dir)?;
@@ -125,6 +129,7 @@ pub fn run_entity(
 pub fn run_fact(name: &str, fields: &[String], force: bool, pretend: bool) -> CliResult {
     validate_name(name)?;
     let parsed_fields = parse_fields(fields)?;
+    field_types::reject_duplicate_fields("fact", &parsed_fields, &["id", "name"])?;
 
     let domain_dir = Path::new("src/domain");
     ensure_domain_dir(domain_dir)?;
