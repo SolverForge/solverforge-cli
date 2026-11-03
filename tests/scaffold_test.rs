@@ -3638,6 +3638,18 @@ fn test_basic_constraint_skeletons_compile_in_generated_app() {
             &format!("basic constraint generation {name}"),
         );
     }
+    assert_cargo_fmt_clean(&project_dir, "basic constraint generators");
+    let fmt_status = Command::new("cargo")
+        .args(["fmt", "--all"])
+        .current_dir(&project_dir)
+        .status()
+        .expect("failed to run cargo fmt");
+    assert!(fmt_status.success(), "cargo fmt failed on generated app");
+    assert_cli_success(
+        &project_dir,
+        &["check"],
+        "solverforge check after the user runs cargo fmt",
+    );
 
     let missing_repair = assert_cli_failure(
         &project_dir,
@@ -3727,6 +3739,7 @@ fn test_basic_constraint_skeletons_compile_in_generated_app() {
         &["check"],
         "solverforge check after conflict repair destroy",
     );
+    assert_cargo_fmt_clean(&project_dir, "constraint and conflict repair destroy");
 
     for name in [
         "unary_placeholder",
@@ -3819,6 +3832,7 @@ fn test_grouped_constraint_skeletons_compile_in_generated_app() {
             &format!("grouped constraint generation {name}"),
         );
     }
+    assert_cargo_fmt_clean(&project_dir, "grouped constraint generators");
 
     let run_segments = std::fs::read_to_string(
         project_dir
@@ -4067,6 +4081,7 @@ fn test_generate_data_creates_direct_compiler_owned_data_module() {
         .status()
         .expect("failed to generate data");
     assert!(data_status.success(), "data generation failed");
+    assert_cargo_fmt_clean(&project_dir, "generate data");
 
     let data_mod =
         std::fs::read_to_string(project_dir.join("src").join("data").join("mod.rs")).unwrap();

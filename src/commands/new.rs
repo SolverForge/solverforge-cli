@@ -143,6 +143,8 @@ fn scaffold(
 
     template::render(template_dir, dest, vars)?;
     materialize_shell(dest, project_name, crate_name, shell)?;
+    // Project names land in line-width-sensitive code; let rustfmt settle it.
+    crate::source_format::SourceSnapshot::empty(dest).format_changed();
 
     let gitignore_content = "/target\n**/*.rs.bk\n";
     fs::write(dest.join(".gitignore"), gitignore_content).map_err(|e| CliError::IoError {

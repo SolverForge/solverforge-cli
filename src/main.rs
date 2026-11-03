@@ -14,6 +14,7 @@ mod rc;
 mod scaffold_target;
 mod scalar_variable_hooks;
 mod solver_config;
+mod source_format;
 mod template;
 #[cfg(test)]
 mod test_support;
@@ -615,6 +616,14 @@ fn main() {
         output::set_no_color(true);
     }
 
+    // Generators and destroyers rewrite Rust sources in place; rustfmt them
+    // afterwards so the project stays `cargo fmt --check` clean.
+    let source_snapshot = matches!(
+        cli.command,
+        Command::Generate { .. } | Command::Destroy { .. }
+    )
+    .then(|| source_format::SourceSnapshot::capture(std::path::Path::new(".")));
+
     let result: CliResult = match cli.command {
         Command::New {
             name,
@@ -858,6 +867,10 @@ fn main() {
             Ok(())
         }
     };
+
+    if let Some(snapshot) = source_snapshot {
+        snapshot.format_changed();
+    }
 
     if let Err(e) = result {
         output::print_error(&e.to_string());
