@@ -242,6 +242,26 @@ fn destroy_constraint_resyncs_data_seed() {
 }
 
 #[test]
+fn destroy_constraint_keeps_hand_written_data_seed() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+    write_minimal_domain_project(true);
+    write_all_assigned_constraint();
+    let hand_written = "// Hand-written benchmark data.\nmod large;\npub use large::generate;\n";
+    fs::create_dir_all("src/data").expect("failed to create data dir");
+    fs::write("src/data/data_seed.rs", hand_written).expect("failed to write data seed");
+
+    run_constraint("all_assigned", true).expect("destroy constraint should succeed");
+
+    assert_eq!(
+        fs::read_to_string("src/data/data_seed.rs").expect("failed to read data seed"),
+        hand_written,
+        "a seed without the @generated header belongs to the app and must not be rewritten"
+    );
+}
+
+#[test]
 fn destroy_solution_skips_data_seed_resync_without_a_solution() {
     let _cwd_guard = test_support::lock_cwd();
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
