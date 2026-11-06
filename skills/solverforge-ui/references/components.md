@@ -146,7 +146,7 @@ Use `projectIndex`/`custom_class` for project colours and
 
 Load Leaflet + `/sf/modules/sf-map.js` + `sf-map.css`, then
 `SF.map.create({ container, center: [lat,lng], zoom })`. Returns an instance with
-`addVehicleMarker`, `addVisitMarker`, `addStopNumber`, `drawRoute({points})`,
+`addVehicleMarker`, `addVisitMarker`, `addStopNumber`, `drawRoute({points, dashArray?})`,
 `drawEncodedRoute({encoded, color, opacity?, weight?})`, `fitBounds`,
 `highlight(color)`, `clearHighlight`, `clearRoutes`, `clearStops`,
 `clearMarkers`, `clearAll`. Also `SF.map.decodePolyline(str)`.
