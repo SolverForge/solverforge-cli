@@ -147,8 +147,9 @@ Use `projectIndex`/`custom_class` for project colours and
 Load Leaflet + `/sf/modules/sf-map.js` + `sf-map.css`, then
 `SF.map.create({ container, center: [lat,lng], zoom })`. Returns an instance with
 `addVehicleMarker`, `addVisitMarker`, `addStopNumber`, `drawRoute({points})`,
-`drawEncodedRoute({encoded, color, opacity?, weight?})`, `fitBounds`,
-`highlight(color)`, `clearHighlight`, `clearRoutes`, `clearStops`,
+`drawEncodedRoute({encoded, color, opacity?, weight?})`, `drawRouteLegs({legs, weight?, directionPaint?})`
+(composite ribbon scene with travel-direction arrow paint; see the README Map section),
+`fitBounds`, `highlight(color)`, `clearHighlight`, `clearRoutes`, `clearStops`,
 `clearMarkers`, `clearAll`. Also `SF.map.decodePolyline(str)`.
 
 ## Utilities
