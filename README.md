@@ -17,9 +17,9 @@ Required Rust version: `1.95` or later.
 New projects currently target these crate versions:
 
 - `solverforge 0.24.0`
-- `solverforge-ui 0.9.0` for the default web shell
-- `solverforge-maps 2.1.5` for the default web shell
-- `rmcp 3.8.0` for the MCP shell
+- `solverforge-ui 0.9.1` for the default web shell
+- `solverforge-maps 2.3.3` for the default web shell
+- `rmcp 3.9.0` for the MCP shell
 
 ```bash
 cargo install solverforge-cli
@@ -161,7 +161,7 @@ dataset size defaults in `solverforge.app.toml`. `sample` is the default mode;
 rather than domain-specific fake business data.
 
 The default web-shell frontend is intentionally thin. It composes shipped
-`solverforge-ui 0.9.0` primitives such as `SF.createBackend(...)`,
+`solverforge-ui 0.9.1` primitives such as `SF.createBackend(...)`,
 `SF.createSolver(...)`, and `SF.rail.createTimeline(...)` instead of vendoring
 app-specific UI frameworks. Domain-specific examples belong in quickstarts, not
 in the built-in scaffold catalog. API-shell, CLI-shell, and MCP-shell projects

@@ -16,14 +16,19 @@ range, do not add `solverforge-maps`.
 
 ## The crate
 
-`solverforge-maps` (published 2.1.5; add it with `solverforge-maps = "2.1.5"`)
+`solverforge-maps` (published 2.3.3; add it with `solverforge-maps = "2.3.3"`)
 owns road networks, routing, and matrices. Key surface:
 
 - `Coord::try_new(lat, lng)` and `BoundingBox::from_coords(...).expand_for_routing(...)`
 - `NetworkConfig`, `SpeedProfile`
 - `RoadNetwork::load_or_fetch(&bbox, &config, cache_dir).await` — OSM via Overpass, cached on disk
 - `network.compute_matrix(&locations, None).await` → `TravelTimeMatrix` (all-pairs times + same-path route distances)
-- `network.route(a, b)` → duration/distance/geometry for one pair
+- `network.compute_matrix_with_access(&locations, &access, None).await` — same matrix, but each
+  location snaps to a node it can actually be reached from or left by (`SnapAccess::Both` for
+  ordinary stops, `Outgoing` for a pure start, `Incoming` for a pure end), so a stop never lands
+  on a one-directional fragment or a closed stub
+- `network.route(a, b)` → duration/distance/geometry for one pair, plus `streets`
+  (`Vec<StreetRun>`: consecutive named streets with the distance driven on each)
 - `RouteResult` / route geometry with Douglas-Peucker simplification, polyline encoding
 - `CacheStats`, `RoutingProgress`, connectivity analysis for unreachable diagnostics
 
@@ -35,7 +40,7 @@ on the site for the pipeline and caching detail.
 The web shell generates with `solverforge-maps` but with no routing data. A real
 maps-backed app replaces the generated seed flow in `src/data/data_seed.rs`
 with an async preparation step. The reference implementation is the FSR use case
-(`solverforge-usecases/uc-fsr`, `solverforge-fsr@2.0.8`), which:
+(`solverforge-usecases/uc-fsr`, `solverforge-fsr@3.0.1`), which:
 
 1. Collects the plan's locations.
 2. Builds a bounding box and loads/fetches the road network into a stable cache

@@ -1,6 +1,6 @@
 # SolverForge Upstream Feature Audit
 
-Audit date: 2026-11-03
+Audit date: 2026-11-07
 
 This audit compares the current `solverforge-cli` scaffold surface against the
 live SolverForge upstream checkout at `/srv/lab/dev/solverforge/solverforge`
@@ -209,13 +209,21 @@ without turning the neutral scaffold into a domain-specific demo.
   phase (task-backed solve, legacy lifecycle with pause/resume/cancel, and
   byte-level stdio purity) runs with parallel evaluation enabled and asserts
   positive speculative work.
-- UI and companion release gates: `cargo info solverforge-ui` confirms
-  `solverforge-ui 0.9.0` is published; the web scaffold targets its
+- UI and companion release gates: the crates.io index confirms
+  `solverforge-ui 0.9.1` is published; the web scaffold targets its
   framework-neutral asset release and additionally targets the published
-  `solverforge-maps 2.1.5`. The MCP scaffold targets the published `rmcp 3.8.0`
+  `solverforge-maps 2.3.3`. The MCP scaffold targets the published `rmcp 3.9.0`
   (`ProtocolVersion::LATEST` stays `2026-07-28` and `LATEST_WITH_INITIALIZE`
-  stays `2025-11-25` from `3.5.0` through `3.8.0`, so both acceptance-client
+  stays `2025-11-25` from `3.5.0` through `3.9.0`, so both acceptance-client
   negotiation paths are unaffected).
+- UI `0.9.0` to `0.9.1`: `drawRoute` forwards an optional `dashArray` to the
+  Leaflet polyline. The generated web shell does not draw maps, so no template
+  changes; the bundled `solverforge-ui` skill documents the option.
+- Maps `2.1.5` to `2.3.3`: road graphs keep only car-legal ways, edges and
+  route results carry street names, access-aware snapping keeps itinerary stops
+  off one-directional fragments and closed stubs, and the unused single-metric
+  Dijkstra is removed. Generated projects only declare the dependency and call
+  no maps API, so the retarget changes the declared version alone.
   The UI, maps, and MCP versions are independent of the `solverforge` runtime
   target.
 - MCP SDK upgrade (`rmcp 3.4.0` to `3.5.0`, through `3.4.1`): the SDK-wide
@@ -246,6 +254,15 @@ without turning the neutral scaffold into a domain-specific demo.
   since `3.4.0`, and the scaffold contract asserts the generated MCP app compiles
   without deprecated rmcp API. The CLI's acceptance client moves to `3.8.0` with
   the template target.
+- MCP SDK upgrade (`rmcp 3.8.0` to `3.9.0`): the SDK adds the Skills extension
+  (SEP-2640), structured protected-resource discovery errors, and transport and
+  model fixes. The server-side changes were checked against the generated shell:
+  discover sessions now reject server-to-client requests (the generated server
+  issues none), stateful session workers honour cancellation (the generated HTTP
+  transport is stateless), and tool `outputSchema` generation follows the
+  serialize contract. The task-backed and legacy lifecycle flows over stdio and
+  Streamable HTTP pass against `3.9.0`, and the CLI's acceptance client moves to
+  `3.9.0` with the template target.
 - Local checkout note: `/srv/lab/dev/solverforge/solverforge` remains the
   source gate used to inspect the current release notes and feature surface.
 
