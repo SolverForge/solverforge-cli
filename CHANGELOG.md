@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [3.8.3](https://github.com/SolverForge/solverforge-cli/compare/v3.8.2...v3.8.3) (2026-11-07)
+
+
+### Bug Fixes
+
+* **scaffold:** target solverforge-ui 0.9.1, solverforge-maps 2.3.3 and rmcp 3.9.0 ([32f1969](https://github.com/SolverForge/solverforge-cli/commit/32f19697cc0ceadd9f8b8f151a0f746329c87a37))
+
+
 ## [3.8.2](https://github.com/SolverForge/solverforge-cli/compare/v3.8.1...v3.8.2) (2026-11-03)
 
 
