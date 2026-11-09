@@ -481,6 +481,7 @@ fn test_generate_skeleton_unary_hard() {
         scalar_groups_path: None,
         conflict_repairs_path: None,
         entities: vec![EntityInfo {
+            entity_value_ranges: Vec::new(),
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
@@ -541,6 +542,7 @@ fn test_generate_skeleton_pair_hard() {
         scalar_groups_path: None,
         conflict_repairs_path: None,
         entities: vec![EntityInfo {
+            entity_value_ranges: Vec::new(),
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
@@ -582,6 +584,7 @@ fn test_generate_skeleton_join_hard() {
         scalar_groups_path: None,
         conflict_repairs_path: None,
         entities: vec![EntityInfo {
+            entity_value_ranges: Vec::new(),
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
@@ -632,6 +635,7 @@ fn test_generate_skeleton_balance_soft() {
         scalar_groups_path: None,
         conflict_repairs_path: None,
         entities: vec![EntityInfo {
+            entity_value_ranges: Vec::new(),
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
@@ -669,6 +673,7 @@ fn test_generate_skeleton_reward_soft_is_compile_safe() {
         scalar_groups_path: None,
         conflict_repairs_path: None,
         entities: vec![EntityInfo {
+            entity_value_ranges: Vec::new(),
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {
@@ -819,6 +824,7 @@ fn grouped_skeleton_domain() -> DomainModel {
         scalar_groups_path: None,
         conflict_repairs_path: None,
         entities: vec![EntityInfo {
+            entity_value_ranges: Vec::new(),
             field_name: "shifts".to_string(),
             item_type: "Shift".to_string(),
             scalar_vars: vec![ScalarVarInfo {

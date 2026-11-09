@@ -259,6 +259,66 @@ impl Task {
 }
 
 #[test]
+fn check_accepts_entity_scoped_value_range_providers() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+    write_project_layout();
+
+    fs::write(
+        "src/domain/task.rs",
+        r#"use serde::{Deserialize, Serialize};
+use solverforge::prelude::*;
+
+#[planning_entity]
+#[derive(Serialize, Deserialize)]
+pub struct Task {
+    #[planning_id]
+    pub id: String,
+    pub allowed_resources: Vec<usize>,
+    // @solverforge:begin entity-variables
+    #[planning_variable(value_range_provider = "allowed_resources", allows_unassigned = true)]
+    pub resource_idx: Option<usize>,
+    // @solverforge:end entity-variables
+}
+
+impl Task {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            allowed_resources: Vec::new(),
+            // @solverforge:begin entity-variable-init
+            resource_idx: None,
+            // @solverforge:end entity-variable-init
+        }
+    }
+}
+"#,
+    )
+    .expect("failed to rewrite task");
+
+    run().expect("a Vec<usize> field on the entity is a valid value range");
+
+    fs::write(
+        "src/domain/task.rs",
+        fs::read_to_string("src/domain/task.rs")
+            .expect("failed to read task")
+            .replace(
+                "pub allowed_resources: Vec<usize>,",
+                "pub allowed_resources: Vec<String>,",
+            ),
+    )
+    .expect("failed to retype allowed_resources");
+
+    let err = run().expect_err("a non-index field is not a value range");
+    let err = err.to_string();
+    assert!(
+        err.contains("1 error(s), 0 warning(s)"),
+        "unexpected summary: {err}"
+    );
+}
+
+#[test]
 fn check_rejects_stale_scalar_group_variable_targets() {
     let _cwd_guard = test_support::lock_cwd();
     let tmp = tempfile::tempdir().expect("failed to create temp dir");

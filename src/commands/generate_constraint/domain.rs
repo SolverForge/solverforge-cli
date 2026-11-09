@@ -31,6 +31,8 @@ pub(crate) struct ListVarInfo {
 pub(crate) struct EntityInfo {
     pub field_name: String,
     pub item_type: String,
+    /// `Vec<usize>` fields that can serve as this entity's own value range.
+    pub entity_value_ranges: Vec<String>,
     pub scalar_vars: Vec<ScalarVarInfo>,
     pub list_vars: Vec<ListVarInfo>,
 }
@@ -81,6 +83,7 @@ struct SolutionInfo {
 }
 
 struct EntityStructInfo {
+    entity_value_ranges: Vec<String>,
     scalar_vars: Vec<ScalarVarInfo>,
     list_vars: Vec<ListVarInfo>,
 }
@@ -342,6 +345,7 @@ fn collect_domain_model(
         domain_entities.push(EntityInfo {
             field_name: field_name.clone(),
             item_type: collection_type.to_string(),
+            entity_value_ranges: entity.entity_value_ranges.clone(),
             scalar_vars: entity.scalar_vars.clone(),
             list_vars: entity.list_vars.clone(),
         });
@@ -439,10 +443,16 @@ fn parse_solution(item_struct: &ItemStruct) -> Result<SolutionInfo, String> {
 
 fn parse_entity(item_struct: &ItemStruct) -> Result<EntityStructInfo, String> {
     let fields = named_fields(item_struct, "#[planning_entity] requires named fields")?;
+    let mut entity_value_ranges = Vec::new();
     let mut scalar_vars = Vec::new();
     let mut list_vars = Vec::new();
 
     for field in fields {
+        if collection_type_name(&field.ty).as_deref() == Some("usize") {
+            if let Some(field_ident) = field.ident.as_ref() {
+                entity_value_ranges.push(field_ident.to_string());
+            }
+        }
         if has_attribute(&field.attrs, "planning_variable") {
             if !field_is_option_usize(&field.ty) {
                 continue;
@@ -482,6 +492,7 @@ fn parse_entity(item_struct: &ItemStruct) -> Result<EntityStructInfo, String> {
     }
 
     Ok(EntityStructInfo {
+        entity_value_ranges,
         scalar_vars,
         list_vars,
     })

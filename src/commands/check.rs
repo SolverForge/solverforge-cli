@@ -118,11 +118,19 @@ pub fn run() -> CliResult {
                     }
 
                     for variable in &entity.scalar_vars {
-                        if !variable.value_range_provider.is_empty()
-                            && !fact_fields.contains(variable.value_range_provider.as_str())
+                        let provider = variable.value_range_provider.as_str();
+                        // A provider names a solution fact collection or a
+                        // `Vec<usize>` field on the same entity, which gives
+                        // each entity its own legal domain.
+                        if !provider.is_empty()
+                            && !fact_fields.contains(provider)
+                            && !entity
+                                .entity_value_ranges
+                                .iter()
+                                .any(|field| field == provider)
                         {
                             errors.push(format!(
-                            "Entity '{}.{}' references missing fact collection '{}' via value_range_provider",
+                            "Entity '{}.{}' references value_range_provider '{}', which is neither a fact collection nor a Vec<usize> field on the entity",
                             entity.item_type, variable.field, variable.value_range_provider
                         ));
                         }

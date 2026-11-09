@@ -808,6 +808,7 @@ mod tests {
                 scalar_groups_path: Some("scalar_groups".to_string()),
                 conflict_repairs_path: None,
                 entities: vec![EntityInfo {
+                    entity_value_ranges: Vec::new(),
                     field_name: "tasks".to_string(),
                     item_type: "Task".to_string(),
                     scalar_vars: vec![ScalarVarInfo {
