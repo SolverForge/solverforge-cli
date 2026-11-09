@@ -854,8 +854,11 @@ pub fn custom_source() -> &'static str {
     let constraints_mod = std::fs::read_to_string(tmp.path().join("src/constraints/mod.rs"))
         .expect("failed to read rewritten constraints mod");
     assert!(constraints_mod.contains("@solverforge:begin constraint-modules"));
-    assert!(constraints_mod.contains("use crate::domain::Schedule;"));
-    assert!(constraints_mod.contains("ConstraintSet<Schedule, HardSoftDecimalScore>"));
+    assert!(constraints_mod.contains("pub use assemble::create_constraints;"));
+    let assembly = std::fs::read_to_string(tmp.path().join("src/constraints/assemble.rs"))
+        .expect("failed to read rewritten constraint assembly");
+    assert!(assembly.contains("use crate::domain::Schedule;"));
+    assert!(assembly.contains("ConstraintSet<Schedule, HardSoftDecimalScore>"));
 
     let dto = std::fs::read_to_string(tmp.path().join("src/api/dto.rs"))
         .expect("failed to read rewritten dto");
@@ -964,31 +967,14 @@ impl Plan {{
         ),
     )
     .expect("failed to write plan");
-    fs::write(
-        "src/constraints/mod.rs",
-        format!(
-            r#"use crate::domain::Plan;
-use solverforge::prelude::*;
-
-pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod all_assigned;
-// @solverforge:end constraint-modules
-
-mod assemble {{
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, {score}> {{
-        // @solverforge:begin constraint-calls
-        all_assigned::constraint()
-        // @solverforge:end constraint-calls
-    }}
-}}
-"#
-        ),
-    )
-    .expect("failed to write constraints mod");
+    let mut sources = test_support::constraint_sources(
+        "mod all_assigned;\n",
+        "    super::all_assigned::constraint()\n",
+    );
+    sources.assemble = sources.assemble.replace("HardSoftScore", score);
+    sources
+        .write(std::path::Path::new("."))
+        .expect("failed to write constraint sources");
     fs::write(
         "src/constraints/all_assigned.rs",
         format!(
@@ -1064,7 +1050,7 @@ fn generate_score_rewrites_constraints_and_contract_files() {
     score_rewrite_assertions(
         &[
             "src/domain/plan.rs",
-            "src/constraints/mod.rs",
+            "src/constraints/assemble.rs",
             "src/constraints/all_assigned.rs",
             "src/api/dto.rs",
             "src/solver/service.rs",
@@ -1090,12 +1076,11 @@ fn generate_score_is_idempotent_and_failure_safe() {
     write_score_rewrite_project("HardSoftScore");
 
     super::run_score("HardSoftScore").expect("same-score run should be a no-op");
-    let constraints_mod =
-        fs::read_to_string("src/constraints/mod.rs").expect("failed to read constraints mod");
+    let assembly =
+        fs::read_to_string("src/constraints/assemble.rs").expect("failed to read assembly");
     assert!(
-        constraints_mod.contains("HardSoftScore")
-            && !constraints_mod.contains("HardMediumSoftScore"),
-        "same-score run must not mutate constraint files: {constraints_mod}"
+        assembly.contains("HardSoftScore") && !assembly.contains("HardMediumSoftScore"),
+        "same-score run must not mutate constraint files: {assembly}"
     );
 
     fs::write("src/api/dto.rs", "pub struct Broken {").expect("failed to break dto");
@@ -1109,7 +1094,7 @@ fn generate_score_is_idempotent_and_failure_safe() {
     score_rewrite_assertions(
         &[
             "src/domain/plan.rs",
-            "src/constraints/mod.rs",
+            "src/constraints/assemble.rs",
             "src/constraints/all_assigned.rs",
             "src/solver/service.rs",
             "src/lib.rs",
@@ -1273,7 +1258,7 @@ fn generate_score_imports_the_bare_name_of_a_generic_score() {
     // as a hand-edited project would be.
     for path in [
         "src/domain/plan.rs",
-        "src/constraints/mod.rs",
+        "src/constraints/assemble.rs",
         "src/constraints/all_assigned.rs",
         "src/api/dto.rs",
         "src/solver/service.rs",

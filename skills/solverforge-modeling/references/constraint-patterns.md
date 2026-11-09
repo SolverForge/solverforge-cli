@@ -1,8 +1,8 @@
 # Constraint patterns
 
 Every `solverforge generate constraint <id> --<pattern> [--hard|--soft]` writes
-`src/constraints/<id>.rs` and wires it into `src/constraints/mod.rs` (managed
-blocks) and, for web shells, `static/sf-config.json`. Do not wire constraints by
+`src/constraints/<id>.rs` and wires it into `src/constraints/mod.rs` and
+`src/constraints/assemble.rs` (managed blocks) and, for web shells, `static/sf-config.json`. Do not wire constraints by
 hand.
 
 The generated file is a **stub**: a real `ConstraintFactory` call streaming from

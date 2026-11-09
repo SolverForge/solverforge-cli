@@ -749,7 +749,7 @@ pub(crate) fn list_constraints(dir: &Path) -> Vec<String> {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("rs") {
                 let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-                if name != "mod" {
+                if super::sources::is_constraint_file_stem(name) {
                     constraints.push(name.to_string());
                 }
             }

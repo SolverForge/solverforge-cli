@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::commands::generate_constraint::parse_domain;
+use crate::commands::generate_constraint::{domain::list_constraints, parse_domain};
 use crate::error::{CliError, CliResult};
 use crate::output;
 
@@ -89,21 +89,4 @@ fn read_project_name() -> Option<String> {
         }
     }
     None
-}
-
-fn list_constraints(dir: &Path) -> Vec<String> {
-    let mut constraints = Vec::new();
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-                if name != "mod" {
-                    constraints.push(name.to_string());
-                }
-            }
-        }
-    }
-    constraints.sort();
-    constraints
 }

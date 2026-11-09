@@ -34,7 +34,7 @@ Re-derive specifics from the CLI if the version differs.
 Decide this before anything else; it changes which parts of this skill apply.
 
 - **Scaffolded project** — produced by `solverforge new`, so the CLI owns the
-  model through `src/domain/mod.rs`, `src/constraints/mod.rs`, managed blocks,
+  model through `src/domain/mod.rs`, `src/constraints/{mod,assemble}.rs`, managed blocks,
   `solverforge.app.toml`, and `solver.toml`. Follow Steps 0–8 below.
 - **Existing model** — a hand-written app that already depends on `solverforge`
   directly (the
@@ -397,7 +397,7 @@ small conventional commits if the user asks for commits.
 - Explain a plan with framework analysis (`analyze()`, `analyze_snapshot`,
   `evaluate_detailed`), not by re-deriving constraint predicates in application
   code.
-- Never hand-wire managed blocks, `src/constraints/mod.rs`, or the solution's
+- Never hand-wire managed blocks, `src/constraints/{mod,assemble}.rs`, or the solution's
   collections. Use the CLI commands. (Scaffolded projects only; an existing
   hand-written model is edited as ordinary Rust — see
   `references/existing-model.md`.)

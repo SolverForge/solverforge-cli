@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::app_spec;
 use crate::commands::generate_constraint::validate_name;
 use crate::commands::generate_constraint::{domain::DomainModel, parse_domain};
+use crate::commands::generate_constraint::{ConstraintSources, CONSTRAINTS_MOD_PATH};
 use crate::error::{CliError, CliResult};
 use crate::list_variable_metadata::ListVariableMetadata;
 use crate::output;
@@ -44,7 +45,7 @@ struct CollectionRewritePlan {
 
 struct NeutralReplacementPlan {
     neutral_plan_path: PathBuf,
-    rewritten_constraints_mod: Option<String>,
+    rewritten_constraints_mod: Option<ConstraintSources>,
     contract_rewrites: Vec<(PathBuf, String)>,
 }
 
@@ -668,17 +669,13 @@ fn neutral_domain_exports() -> CliResult<bool> {
 }
 
 fn neutral_constraint_blocks() -> CliResult<bool> {
-    let constraints_mod = Path::new("src/constraints/mod.rs");
-    if !constraints_mod.exists() {
+    if !Path::new(CONSTRAINTS_MOD_PATH).exists() {
         return Ok(false);
     }
-    let src = fs::read_to_string(constraints_mod).map_err(|e| CliError::IoError {
-        context: "failed to read src/constraints/mod.rs".to_string(),
-        source: e,
-    })?;
-    let modules = crate::managed_block::read_block(&src, CONSTRAINT_MODULES_BLOCK)
+    let sources = ConstraintSources::read(Path::new("."))?;
+    let modules = crate::managed_block::read_block(&sources.module, CONSTRAINT_MODULES_BLOCK)
         .map_err(CliError::general)?;
-    let calls = crate::managed_block::read_block(&src, CONSTRAINT_CALLS_BLOCK)
+    let calls = crate::managed_block::read_block(&sources.assemble, CONSTRAINT_CALLS_BLOCK)
         .map_err(CliError::general)?;
 
     Ok(modules.trim().is_empty() && calls.trim() == "()")
@@ -689,9 +686,8 @@ fn precompute_neutral_replacement(
     score_type: &str,
 ) -> CliResult<NeutralReplacementPlan> {
     let neutral_plan_path = Path::new("src/domain").join(format!("{NEUTRAL_SOLUTION_MODULE}.rs"));
-    let constraints_mod = Path::new("src/constraints/mod.rs");
-    let rewritten_constraints_mod = if constraints_mod.exists() {
-        Some(empty_constraints_mod_source(solution_type, score_type))
+    let rewritten_constraints_mod = if Path::new(CONSTRAINTS_MOD_PATH).exists() {
+        Some(ConstraintSources::empty(solution_type, score_type))
     } else {
         None
     };
@@ -753,12 +749,7 @@ fn apply_neutral_replacement(plan: NeutralReplacementPlan) -> CliResult {
     }
 
     if let Some(rewritten_constraints_mod) = plan.rewritten_constraints_mod {
-        fs::write("src/constraints/mod.rs", rewritten_constraints_mod).map_err(|e| {
-            CliError::IoError {
-                context: "failed to update constraints/mod.rs".to_string(),
-                source: e,
-            }
-        })?;
+        rewritten_constraints_mod.write(Path::new("."))?;
     }
 
     for (path, rewritten) in plan.contract_rewrites {
@@ -805,34 +796,6 @@ fn empty_domain_mod_source() -> &'static str {
 // @solverforge:end domain-exports
 }
 "#
-}
-
-fn empty_constraints_mod_source(solution_type: &str, score_type: &str) -> String {
-    format!(
-        r#"/* Constraint definitions.
-
-Add constraint modules with `solverforge generate constraint ...`.
-The neutral shell starts with an empty constraint set. */
-
-use crate::domain::{solution_type};
-use solverforge::prelude::*;
-
-pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-// @solverforge:end constraint-modules
-
-mod assemble {{
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<{solution_type}, {score_type}> {{
-        // @solverforge:begin constraint-calls
-        ()
-        // @solverforge:end constraint-calls
-    }}
-}}
-"#
-    )
 }
 
 fn sync_project_metadata() -> CliResult {

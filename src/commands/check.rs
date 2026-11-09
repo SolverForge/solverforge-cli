@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::Path;
 
-use crate::commands::generate_constraint::{parse_domain, validate_constraint_mod_source};
+use crate::commands::generate_constraint::{
+    parse_domain, validate_constraint_mod_source, ConstraintSources, CONSTRAINTS_ASSEMBLE_PATH,
+    CONSTRAINTS_MOD_PATH,
+};
 use crate::commands::generate_domain::{find_file_for_type, validate_domain_mod_source};
 use crate::error::{CliError, CliResult};
 use crate::managed_block;
@@ -55,23 +58,23 @@ pub fn run() -> CliResult {
 
     let constraints_dir = Path::new("src/constraints");
     if constraints_dir.exists() {
-        output::print_status("check", "src/constraints/mod.rs");
-        let mod_path = constraints_dir.join("mod.rs");
-        let constraints_mod_src = read_path(&mod_path, &mut errors);
-        if let Some(src) = constraints_mod_src.as_deref() {
-            if validate_managed_source(&mod_path, src, &mut errors, validate_constraint_mod_source)
-            {
-                if let Ok(module_names) = validate_constraint_mod_source(src) {
+        output::print_status("check", CONSTRAINTS_MOD_PATH);
+        output::print_status("check", CONSTRAINTS_ASSEMBLE_PATH);
+        let module = read_path(Path::new(CONSTRAINTS_MOD_PATH), &mut errors);
+        let assemble = read_path(Path::new(CONSTRAINTS_ASSEMBLE_PATH), &mut errors);
+        if let (Some(module), Some(assemble)) = (module, assemble) {
+            match validate_constraint_mod_source(&ConstraintSources { module, assemble }) {
+                Ok(module_names) => {
                     for mod_name in module_names {
                         let file = constraints_dir.join(format!("{mod_name}.rs"));
                         if !file.exists() {
                             errors.push(format!(
-                                "Constraint module '{}' declared in src/constraints/mod.rs but file not found",
-                                mod_name
+                                "Constraint module '{mod_name}' declared in {CONSTRAINTS_MOD_PATH} but file not found"
                             ));
                         }
                     }
                 }
+                Err(err) => errors.push(err),
             }
         }
     } else {

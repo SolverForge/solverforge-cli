@@ -1,8 +1,11 @@
 use std::fs;
 use std::path::Path;
 
-use crate::commands::generate_constraint::remove_constraint_from_source;
 use crate::commands::generate_constraint::{domain::DomainModel, parse_domain};
+use crate::commands::generate_constraint::{
+    is_constraint_file_stem, remove_constraint_from_source, ConstraintSources,
+    CONSTRAINTS_ASSEMBLE_PATH, CONSTRAINTS_MOD_PATH,
+};
 use crate::commands::generate_domain::{find_file_for_type, snake_to_pascal};
 use crate::commands::generate_domain::{
     remove_domain_mod_entry_source, sync_demo_data_module, unwire_collection_from_solution_source,
@@ -370,7 +373,7 @@ fn ensure_type_is_unreferenced_in_source(
         let constraint_id = (file.parent() == Some(constraints_dir))
             .then(|| file.file_stem().and_then(|stem| stem.to_str()))
             .flatten()
-            .filter(|stem| *stem != "mod");
+            .filter(|stem| is_constraint_file_stem(stem));
         match constraint_id {
             Some(id) => constraint_ids.push(id.to_string()),
             None => other_files.push(slash_path(file)),
@@ -562,7 +565,6 @@ pub fn run_variable(field: &str, entity: &str, skip_confirm: bool) -> CliResult 
 pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
     let constraint_id = ConstraintId::parse(name)?;
     let file_path = Path::new("src/constraints").join(format!("{}.rs", constraint_id.as_str()));
-    let mod_path = Path::new("src/constraints/mod.rs");
 
     if !file_path.exists() {
         return Err(CliError::ResourceNotFound {
@@ -576,24 +578,12 @@ pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
         return Ok(());
     }
 
-    if !mod_path.exists() {
-        return Err(CliError::NotInProject {
-            missing: "src/constraints/mod.rs",
-        });
-    }
-
-    let mod_src = fs::read_to_string(mod_path).map_err(|e| CliError::IoError {
-        context: "failed to read src/constraints/mod.rs".to_string(),
-        source: e,
-    })?;
-    let new_mod_src = remove_constraint_from_source(&mod_src, constraint_id.as_str())
+    let sources = ConstraintSources::read(Path::new("."))?;
+    let rewritten = remove_constraint_from_source(&sources, constraint_id.as_str())
         .map_err(CliError::general)?;
     model_contract::ensure_constraint_has_no_conflict_repair_refs(constraint_id.as_str())?;
 
-    fs::write(mod_path, new_mod_src).map_err(|e| CliError::IoError {
-        context: "failed to update src/constraints/mod.rs".to_string(),
-        source: e,
-    })?;
+    rewritten.write(Path::new("."))?;
     fs::remove_file(&file_path).map_err(|e| CliError::IoError {
         context: format!("failed to delete {}", file_path.display()),
         source: e,
@@ -603,7 +593,8 @@ pub fn run_constraint(name: &str, skip_confirm: bool) -> CliResult {
     sync_demo_data_module()?;
 
     output::print_remove(&file_path.display().to_string());
-    output::print_update("src/constraints/mod.rs");
+    output::print_update(CONSTRAINTS_MOD_PATH);
+    output::print_update(CONSTRAINTS_ASSEMBLE_PATH);
     Ok(())
 }
 

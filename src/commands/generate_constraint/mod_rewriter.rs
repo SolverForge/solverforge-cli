@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use super::sources::{ConstraintSources, CONSTRAINTS_ASSEMBLE_PATH, CONSTRAINTS_MOD_PATH};
 use crate::managed_block;
 
 const CONSTRAINT_MODULES_BLOCK: &str = "constraint-modules";
@@ -18,48 +19,38 @@ struct ConstraintSurface {
     calls: Vec<String>,
 }
 
-pub(crate) fn rewrite_mod(src: &str, name: &str) -> Result<String, String> {
-    let mut surface = ConstraintSurface::parse(src)?;
+/// Declares constraint module `name` and appends its call to the constraint
+/// set, leaving an already-wired constraint untouched.
+pub(crate) fn rewrite_mod(
+    sources: &ConstraintSources,
+    name: &str,
+) -> Result<ConstraintSources, String> {
+    let mut surface = ConstraintSurface::parse(sources)?;
     if !surface.modules.iter().any(|existing| existing == name) {
         surface.modules.push(name.to_string());
     }
-
     if !surface.calls.iter().any(|existing| existing == name) {
         surface.calls.push(name.to_string());
     }
-
-    let src = managed_block::replace_block(
-        src,
-        CONSTRAINT_MODULES_BLOCK,
-        &render_constraint_modules(&surface.modules),
-    )?;
-    managed_block::replace_block(
-        &src,
-        CONSTRAINT_CALLS_BLOCK,
-        &render_constraint_calls(&surface.calls),
-    )
+    surface.render(sources)
 }
 
-pub(crate) fn remove_constraint_from_source(src: &str, name: &str) -> Result<String, String> {
-    let mut surface = ConstraintSurface::parse(src)?;
+/// Removes constraint module `name` and its call from the constraint set.
+pub(crate) fn remove_constraint_from_source(
+    sources: &ConstraintSources,
+    name: &str,
+) -> Result<ConstraintSources, String> {
+    let mut surface = ConstraintSurface::parse(sources)?;
     surface.modules.retain(|existing| existing != name);
-
     surface.calls.retain(|existing| existing != name);
-
-    let src = managed_block::replace_block(
-        src,
-        CONSTRAINT_MODULES_BLOCK,
-        &render_constraint_modules(&surface.modules),
-    )?;
-    managed_block::replace_block(
-        &src,
-        CONSTRAINT_CALLS_BLOCK,
-        &render_constraint_calls(&surface.calls),
-    )
+    surface.render(sources)
 }
 
-pub(crate) fn validate_constraint_mod_source(src: &str) -> Result<Vec<String>, String> {
-    Ok(ConstraintSurface::parse(src)?.modules)
+/// Validates the constraint wiring and returns the declared module names.
+pub(crate) fn validate_constraint_mod_source(
+    sources: &ConstraintSources,
+) -> Result<Vec<String>, String> {
+    Ok(ConstraintSurface::parse(sources)?.modules)
 }
 
 fn parse_constraint_modules(src: &str) -> Result<Vec<String>, String> {
@@ -119,7 +110,7 @@ fn render_constraint_modules(modules: &[String]) -> String {
 
 fn render_constraint_calls(calls: &[String]) -> String {
     if calls.is_empty() {
-        return "        ()".to_string();
+        return "    ()".to_string();
     }
 
     let tree = build_constraint_tree(
@@ -129,7 +120,7 @@ fn render_constraint_calls(calls: &[String]) -> String {
             .map(ConstraintExpr::Call)
             .collect::<Vec<_>>(),
     );
-    render_constraint_expr(&tree, 8, false).join("\n")
+    render_constraint_expr(&tree, 4, false).join("\n")
 }
 
 fn build_constraint_tree(exprs: &[ConstraintExpr]) -> ConstraintExpr {
@@ -156,7 +147,7 @@ fn render_constraint_expr(
     let pad = " ".repeat(indent);
     match expr {
         ConstraintExpr::Call(module) => vec![format!(
-            "{pad}{module}::constraint(){}",
+            "{pad}super::{module}::constraint(){}",
             if as_tuple_item { "," } else { "" }
         )],
         ConstraintExpr::Tuple(items) => {
@@ -182,9 +173,11 @@ fn is_simple_ident(value: &str) -> bool {
 }
 
 impl ConstraintSurface {
-    fn parse(src: &str) -> Result<Self, String> {
-        let modules = parse_constraint_modules(src)?;
-        let calls = parse_constraint_calls(src)?;
+    fn parse(sources: &ConstraintSources) -> Result<Self, String> {
+        let in_mod = |err: String| format!("{CONSTRAINTS_MOD_PATH}: {err}");
+        let modules = parse_constraint_modules(&sources.module).map_err(in_mod)?;
+        let calls = parse_constraint_calls(&sources.assemble)
+            .map_err(|err| format!("{CONSTRAINTS_ASSEMBLE_PATH}: {err}"))?;
 
         for module in &modules {
             if !calls.iter().any(|call| call == module) {
@@ -207,6 +200,21 @@ impl ConstraintSurface {
         modules.sort();
 
         Ok(Self { modules, calls })
+    }
+
+    fn render(&self, sources: &ConstraintSources) -> Result<ConstraintSources, String> {
+        Ok(ConstraintSources {
+            module: managed_block::replace_block(
+                &sources.module,
+                CONSTRAINT_MODULES_BLOCK,
+                &render_constraint_modules(&self.modules),
+            )?,
+            assemble: managed_block::replace_block(
+                &sources.assemble,
+                CONSTRAINT_CALLS_BLOCK,
+                &render_constraint_calls(&self.calls),
+            )?,
+        })
     }
 }
 
@@ -285,6 +293,7 @@ impl<'a> ConstraintCallParser<'a> {
     }
 
     fn parse_call(&mut self) -> Result<String, String> {
+        self.expect_str("super::")?;
         let module = self.parse_ident()?;
         self.expect_str("::constraint")?;
         self.skip_ws();

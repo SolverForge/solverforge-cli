@@ -100,18 +100,14 @@ impl Plan {
     .expect("failed to corrupt plan");
     fs::write(
         "src/constraints/mod.rs",
-        r#"pub use self::assemble::create_constraints;
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        ()
-    }
-}
-"#,
+        "mod assemble;\n\npub use assemble::create_constraints;\n",
     )
     .expect("failed to corrupt constraints mod");
+    fs::write(
+        "src/constraints/assemble.rs",
+        "pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {\n    ()\n}\n",
+    )
+    .expect("failed to corrupt constraint assembly");
 
     let err = run().expect_err("malformed managed files should fail check");
     let err = err.to_string();
@@ -171,29 +167,7 @@ pub use plan::Plan;
 "#,
     )
     .expect("failed to rewrite domain mod");
-    fs::write(
-        "src/constraints/mod.rs",
-        r#"use crate::domain::Plan;
-use solverforge::prelude::*;
-
-pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod coverage_gap;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        ()
-        // @solverforge:end constraint-calls
-    }
-}
-"#,
-    )
-    .expect("failed to rewrite constraints mod");
+    test_support::write_constraint_sources("mod coverage_gap;\n", "    ()\n");
     fs::write(
         "src/constraints/coverage_gap.rs",
         "pub fn constraint() {}\n",
@@ -760,29 +734,10 @@ fn check_rejects_constraint_named_value_that_differs_from_module_id() {
 "#,
     )
     .expect("failed to write constraint");
-    fs::write(
-        "src/constraints/mod.rs",
-        r#"use crate::domain::Plan;
-use solverforge::prelude::*;
-
-pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod unary_placeholder;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        unary_placeholder::constraint()
-        // @solverforge:end constraint-calls
-    }
-}
-"#,
-    )
-    .expect("failed to write constraints mod");
+    test_support::write_constraint_sources(
+        "mod unary_placeholder;\n",
+        "    super::unary_placeholder::constraint()\n",
+    );
 
     let err = run().expect_err("constraint ID drift should fail check");
     let err = err.to_string();
@@ -901,27 +856,6 @@ impl Plan {
 "#,
     )
     .expect("failed to write plan");
-    fs::write(
-        "src/constraints/mod.rs",
-        r#"use crate::domain::Plan;
-use solverforge::prelude::*;
-
-pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        ()
-        // @solverforge:end constraint-calls
-    }
-}
-"#,
-    )
-    .expect("failed to write constraints mod");
+    test_support::write_constraint_sources("", "    ()\n");
     fs::write("solver.toml", "# test config\n").expect("failed to write solver.toml");
 }

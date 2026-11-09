@@ -6,7 +6,8 @@ compilation, and real runtime failures.
 
 ## 1. `solverforge check` — structural
 
-Validates `src/domain/mod.rs`, `src/constraints/mod.rs`, the domain model,
+Validates `src/domain/mod.rs`, `src/constraints/mod.rs`,
+`src/constraints/assemble.rs`, the domain model,
 solution, entities, model resources, and `solver.toml` refs. It does **not**
 compile Rust and does **not** run the solver, so it cannot see placeholder
 `panic!`s or a broken stream source. Exit code 0 means the managed structure is

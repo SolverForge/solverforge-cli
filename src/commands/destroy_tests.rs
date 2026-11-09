@@ -25,58 +25,30 @@ impl Drop for CwdGuard {
 
 #[test]
 fn removes_constraint_from_managed_tuple_entry() {
-    let src = r#"pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod all_assigned;
-mod extra;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            all_assigned::constraint(),
-            extra::constraint(),
-        )
-        // @solverforge:end constraint-calls
-    }
-}
-"#;
+    let src = test_support::constraint_sources(
+        "mod all_assigned;\nmod extra;\n",
+        "    (\n        super::all_assigned::constraint(),\n        super::extra::constraint(),\n    )\n",
+    );
 
     let updated =
-        remove_constraint_from_source(src, "all_assigned").expect("source should be rewritten");
-    assert!(!updated.contains("mod all_assigned;"));
-    assert!(!updated.contains("all_assigned::constraint(),"));
-    assert!(updated.contains("extra::constraint(),"));
+        remove_constraint_from_source(&src, "all_assigned").expect("source should be rewritten");
+    assert!(!updated.module.contains("mod all_assigned;"));
+    assert!(!updated.assemble.contains("all_assigned::constraint()"));
+    assert!(updated.assemble.contains("super::extra::constraint(),"));
 }
 
 #[test]
 fn removes_last_constraint_to_empty_tuple() {
-    let src = r#"pub use self::assemble::create_constraints;
+    let src = test_support::constraint_sources(
+        "mod extra;\n",
+        "    (\n        super::extra::constraint(),\n    )\n",
+    );
 
-// @solverforge:begin constraint-modules
-mod extra;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            extra::constraint(),
-        )
-        // @solverforge:end constraint-calls
-    }
-}
-"#;
-
-    let updated = remove_constraint_from_source(src, "extra").expect("source should be rewritten");
-    assert!(!updated.contains("mod extra;"));
-    assert!(updated.contains("        ()"));
+    let updated = remove_constraint_from_source(&src, "extra").expect("source should be rewritten");
+    assert!(!updated.module.contains("mod extra;"));
+    assert!(updated
+        .assemble
+        .contains("    // @solverforge:begin constraint-calls\n    ()\n"));
 }
 
 #[test]
@@ -661,19 +633,8 @@ fn destroy_constraint_preflights_constraint_mod_before_delete() {
     let _cwd_guard = test_support::lock_cwd();
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
     let _dir_guard = CwdGuard::enter(tmp.path());
-    fs::create_dir_all("src/constraints").expect("failed to create constraints dir");
-    let invalid_mod = r#"pub use self::assemble::create_constraints;
-
-mod all_assigned;
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        all_assigned::constraint()
-    }
-}
-"#;
+    test_support::write_constraint_sources("", "    super::all_assigned::constraint()\n");
+    let invalid_mod = "mod all_assigned;\nmod assemble;\n\npub use assemble::create_constraints;\n";
     fs::write("src/constraints/mod.rs", invalid_mod).expect("failed to write constraints mod");
     fs::write(
         "src/constraints/all_assigned.rs",
@@ -1065,30 +1026,10 @@ impl Plan {
 }
 
 fn write_all_assigned_constraint() {
-    fs::create_dir_all("src/constraints").expect("failed to create constraints dir");
-    fs::write(
-        "src/constraints/mod.rs",
-        r#"use crate::domain::Plan;
-use solverforge::prelude::*;
-
-pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod all_assigned;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        all_assigned::constraint()
-        // @solverforge:end constraint-calls
-    }
-}
-"#,
-    )
-    .expect("failed to write constraints mod");
+    test_support::write_constraint_sources(
+        "mod all_assigned;\n",
+        "    super::all_assigned::constraint()\n",
+    );
     fs::write(
         "src/constraints/all_assigned.rs",
         r#"pub fn constraint() {

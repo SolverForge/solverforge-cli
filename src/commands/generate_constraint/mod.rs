@@ -2,6 +2,7 @@ pub(crate) mod domain;
 mod mod_rewriter;
 mod run;
 mod skeleton;
+pub(crate) mod sources;
 mod utils;
 mod wizard;
 
@@ -11,4 +12,7 @@ mod tests;
 pub(crate) use domain::parse_domain;
 pub(crate) use mod_rewriter::{remove_constraint_from_source, validate_constraint_mod_source};
 pub(crate) use run::run;
+pub(crate) use sources::{
+    is_constraint_file_stem, ConstraintSources, CONSTRAINTS_ASSEMBLE_PATH, CONSTRAINTS_MOD_PATH,
+};
 pub(crate) use utils::validate_name;

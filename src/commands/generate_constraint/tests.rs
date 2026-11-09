@@ -3,6 +3,7 @@ use super::{
     mod_rewriter::{remove_constraint_from_source, rewrite_mod, validate_constraint_mod_source},
     run::run as run_generate_constraint,
     skeleton::{generate_skeleton, Pattern},
+    sources::ConstraintSources,
     utils::validate_name,
 };
 use crate::scalar_variable_hooks::ScalarVariableHooks;
@@ -41,59 +42,32 @@ fn test_validate_name() {
     assert!(validate_name("").is_err());
 }
 
+use crate::test_support::constraint_sources as sources;
+
 #[test]
 fn test_rewrite_mod_appends_module_and_call_to_managed_blocks() {
-    let src = r#"pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod all_assigned;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            all_assigned::constraint(),
-        )
-        // @solverforge:end constraint-calls
-    }
-}
-"#;
-    let result = rewrite_mod(src, "max_hours").expect("rewrite should succeed");
-    assert!(result.contains("mod max_hours;"));
-    assert!(result.contains("max_hours::constraint(),"));
+    let src = sources(
+        "mod all_assigned;\n",
+        "    (\n        super::all_assigned::constraint(),\n    )\n",
+    );
+    let result = rewrite_mod(&src, "max_hours").expect("rewrite should succeed");
+    assert!(result.module.contains("mod max_hours;"));
+    assert!(result.assemble.contains("super::max_hours::constraint(),"));
+    assert!(!result.module.contains("constraint()"));
 }
 
 /// `cargo fmt` sorts consecutive `mod` items alphabetically, while the
 /// constraint calls keep their insertion order. Both shapes must stay valid.
-const RUSTFMT_SORTED_CONSTRAINTS_MOD: &str = r#"pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod all_assigned;
-mod max_hours;
-mod zone_cover;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            zone_cover::constraint(),
-            all_assigned::constraint(),
-            max_hours::constraint(),
-        )
-        // @solverforge:end constraint-calls
-    }
+fn rustfmt_sorted_sources() -> ConstraintSources {
+    sources(
+        "mod all_assigned;\nmod max_hours;\nmod zone_cover;\n",
+        "    (\n        super::zone_cover::constraint(),\n        super::all_assigned::constraint(),\n        super::max_hours::constraint(),\n    )\n",
+    )
 }
-"#;
 
 #[test]
 fn test_validate_constraint_mod_source_accepts_rustfmt_sorted_modules() {
-    let modules = validate_constraint_mod_source(RUSTFMT_SORTED_CONSTRAINTS_MOD)
+    let modules = validate_constraint_mod_source(&rustfmt_sorted_sources())
         .expect("rustfmt-sorted module list should validate");
     assert_eq!(modules, ["all_assigned", "max_hours", "zone_cover"]);
 }
@@ -101,142 +75,84 @@ fn test_validate_constraint_mod_source_accepts_rustfmt_sorted_modules() {
 #[test]
 fn test_rewrite_mod_keeps_modules_sorted_and_calls_in_insertion_order() {
     let result =
-        rewrite_mod(RUSTFMT_SORTED_CONSTRAINTS_MOD, "capacity").expect("rewrite should succeed");
+        rewrite_mod(&rustfmt_sorted_sources(), "capacity").expect("rewrite should succeed");
     assert!(
-        result.contains(
+        result.module.contains(
             "// @solverforge:begin constraint-modules\nmod all_assigned;\nmod capacity;\nmod max_hours;\nmod zone_cover;\n// @solverforge:end constraint-modules"
         ),
-        "modules must stay in rustfmt's sorted order:\n{result}"
+        "modules must stay in rustfmt's sorted order:\n{}",
+        result.module
     );
     assert!(
-        result.contains(
-            "            zone_cover::constraint(),\n            all_assigned::constraint(),\n            max_hours::constraint(),\n            capacity::constraint(),\n"
+        result.assemble.contains(
+            "        super::zone_cover::constraint(),\n        super::all_assigned::constraint(),\n        super::max_hours::constraint(),\n        super::capacity::constraint(),\n"
         ),
-        "calls must keep insertion order with the new call appended:\n{result}"
+        "calls must keep insertion order with the new call appended:\n{}",
+        result.assemble
     );
 
     let removed =
         remove_constraint_from_source(&result, "all_assigned").expect("remove should succeed");
-    assert!(removed.contains("mod capacity;\nmod max_hours;\nmod zone_cover;\n"));
-    assert!(removed.contains(
-        "            zone_cover::constraint(),\n            max_hours::constraint(),\n            capacity::constraint(),\n"
+    assert!(removed
+        .module
+        .contains("mod capacity;\nmod max_hours;\nmod zone_cover;\n"));
+    assert!(removed.assemble.contains(
+        "        super::zone_cover::constraint(),\n        super::max_hours::constraint(),\n        super::capacity::constraint(),\n"
     ));
 }
 
 #[test]
 fn test_remove_constraint_from_source_preserves_empty_tuple_shape() {
-    let src = r#"pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod all_assigned;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            all_assigned::constraint(),
-        )
-        // @solverforge:end constraint-calls
-    }
-}
-"#;
-    let result = remove_constraint_from_source(src, "all_assigned").expect("remove should succeed");
-    assert!(!result.contains("mod all_assigned;"));
-    assert!(result.contains("        ()"));
+    let src = sources(
+        "mod all_assigned;\n",
+        "    (\n        super::all_assigned::constraint(),\n    )\n",
+    );
+    let result =
+        remove_constraint_from_source(&src, "all_assigned").expect("remove should succeed");
+    assert!(!result.module.contains("mod all_assigned;"));
+    assert!(result
+        .assemble
+        .contains("    // @solverforge:begin constraint-calls\n    ()\n"));
 }
 
 #[test]
 fn test_rewrite_mod_flattens_nested_constraint_tuples() {
-    let src = r#"pub use self::assemble::create_constraints;
+    let src = sources(
+        "mod all_assigned;\nmod extra;\n",
+        "    (\n        (\n            super::all_assigned::constraint(),\n            super::extra::constraint(),\n        ),\n    )\n",
+    );
 
-// @solverforge:begin constraint-modules
-mod all_assigned;
-mod extra;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            (
-                all_assigned::constraint(),
-                extra::constraint(),
-            ),
-        )
-        // @solverforge:end constraint-calls
+    let result = rewrite_mod(&src, "capacity").expect("rewrite should succeed");
+    assert!(result.module.contains("mod capacity;"));
+    for call in ["capacity", "all_assigned", "extra"] {
+        assert!(result
+            .assemble
+            .contains(&format!("super::{call}::constraint(),")));
     }
-}
-"#;
-
-    let result = rewrite_mod(src, "capacity").expect("rewrite should succeed");
-    assert!(result.contains("mod capacity;"));
-    assert!(result.contains("capacity::constraint(),"));
-    assert!(result.contains("all_assigned::constraint(),"));
-    assert!(result.contains("extra::constraint(),"));
 }
 
 #[test]
 fn test_remove_constraint_from_source_handles_nested_tuple_calls() {
-    let src = r#"pub use self::assemble::create_constraints;
+    let src = sources(
+        "mod one;\nmod two;\nmod three;\n",
+        "    (\n        (\n            super::one::constraint(),\n            super::two::constraint(),\n        ),\n        super::three::constraint(),\n    )\n",
+    );
 
-// @solverforge:begin constraint-modules
-mod one;
-mod two;
-mod three;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            (
-                one::constraint(),
-                two::constraint(),
-            ),
-            three::constraint(),
-        )
-        // @solverforge:end constraint-calls
-    }
-}
-"#;
-
-    let result = remove_constraint_from_source(src, "two").expect("remove should succeed");
-    assert!(!result.contains("mod two;"));
-    assert!(!result.contains("two::constraint(),"));
-    assert!(result.contains("one::constraint(),"));
-    assert!(result.contains("three::constraint(),"));
+    let result = remove_constraint_from_source(&src, "two").expect("remove should succeed");
+    assert!(!result.module.contains("mod two;"));
+    assert!(!result.assemble.contains("two::constraint()"));
+    assert!(result.assemble.contains("super::one::constraint(),"));
+    assert!(result.assemble.contains("super::three::constraint(),"));
 }
 
 #[test]
 fn test_rewrite_mod_requires_every_declared_constraint_to_be_wired() {
-    let src = r#"pub use self::assemble::create_constraints;
+    let src = sources(
+        "mod all_assigned;\nmod max_hours;\n",
+        "    (\n        super::all_assigned::constraint(),\n    )\n",
+    );
 
-// @solverforge:begin constraint-modules
-mod all_assigned;
-mod max_hours;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            all_assigned::constraint(),
-        )
-        // @solverforge:end constraint-calls
-    }
-}
-"#;
-
-    let err = rewrite_mod(src, "capacity").expect_err("missing constraint wiring should fail");
+    let err = rewrite_mod(&src, "capacity").expect_err("missing constraint wiring should fail");
 
     assert_eq!(
         err,
@@ -246,33 +162,30 @@ mod assemble {
 
 #[test]
 fn test_validate_constraint_mod_source_rejects_undeclared_call() {
-    let src = r#"pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-mod all_assigned;
-// @solverforge:end constraint-modules
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        // @solverforge:begin constraint-calls
-        (
-            all_assigned::constraint(),
-            extra::constraint(),
-        )
-        // @solverforge:end constraint-calls
-    }
-}
-"#;
+    let src = sources(
+        "mod all_assigned;\n",
+        "    (\n        super::all_assigned::constraint(),\n        super::extra::constraint(),\n    )\n",
+    );
 
     let err =
-        validate_constraint_mod_source(src).expect_err("undeclared constraint call should fail");
+        validate_constraint_mod_source(&src).expect_err("undeclared constraint call should fail");
 
     assert_eq!(
         err,
         "managed constraint block invokes undeclared module 'extra' in 'constraint-calls'"
     );
+}
+
+#[test]
+fn test_validate_constraint_mod_source_rejects_calls_without_super_prefix() {
+    let src = sources(
+        "mod all_assigned;\n",
+        "    (\n        all_assigned::constraint(),\n    )\n",
+    );
+
+    let err = validate_constraint_mod_source(&src).expect_err("calls must name super::<id>");
+
+    assert!(err.contains("unsupported constraint call"), "{err}");
 }
 
 #[test]
@@ -282,17 +195,12 @@ fn test_run_preflights_managed_constraint_mod_before_creating_file() {
     let _dir_guard = CwdGuard::enter(tmp.path());
     write_minimal_domain_project();
     fs::create_dir_all("src/constraints").expect("failed to create constraints dir");
-    let invalid_mod = r#"pub use self::assemble::create_constraints;
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        ()
-    }
-}
-"#;
-    fs::write("src/constraints/mod.rs", invalid_mod).expect("failed to write constraints mod");
+    let invalid_mod = "mod assemble;\n\npub use assemble::create_constraints;\n";
+    let mut sources = ConstraintSources::empty("Plan", "HardSoftScore");
+    sources.module = invalid_mod.to_string();
+    sources
+        .write(Path::new("."))
+        .expect("failed to write constraint sources");
 
     let err = run_generate_constraint(
         "capacity", false, true, false, false, false, false, false, false, false, false, false,
@@ -449,28 +357,9 @@ fn rewrite_plan_score(score_type: &str) {
 
 fn write_minimal_constraints_mod(score_type: &str) {
     fs::create_dir_all("src/constraints").expect("failed to create constraints dir");
-    fs::write(
-        "src/constraints/mod.rs",
-        format!(
-            r#"pub use self::assemble::create_constraints;
-
-// @solverforge:begin constraint-modules
-// @solverforge:end constraint-modules
-
-mod assemble {{
-    use solverforge::prelude::*;
-    use crate::domain::Plan;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, {score_type}> {{
-        // @solverforge:begin constraint-calls
-        ()
-        // @solverforge:end constraint-calls
-    }}
-}}
-"#
-        ),
-    )
-    .expect("failed to write constraints mod");
+    ConstraintSources::empty("Plan", score_type)
+        .write(Path::new("."))
+        .expect("failed to write constraint sources");
 }
 
 #[test]

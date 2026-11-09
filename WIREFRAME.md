@@ -195,7 +195,11 @@ Required managed surfaces:
 - solution files: `solution-imports`, `solution-collections`,
   `solution-constructor-params`, and `solution-constructor-init`
 - entity files: `entity-variables` and `entity-variable-init`
-- `src/constraints/mod.rs`: `constraint-modules` and `constraint-calls`
+- `src/constraints/mod.rs`: the `constraint-modules` block, `mod assemble;`, and
+  `pub use assemble::create_constraints;`, with no code
+- `src/constraints/assemble.rs`: `create_constraints` and the
+  `constraint-calls` block, which calls each module as
+  `super::<id>::constraint()`
 - `solver.toml`: one generated model-resource region marked with
   `# @solverforge:begin solver-config` and
   `# @solverforge:end solver-config`; each generated phase has an exact-ID

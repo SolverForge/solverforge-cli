@@ -1533,6 +1533,13 @@ fn test_generate_solution_replaces_neutral_scaffold_and_cargo_check_passes() {
     let constraints_mod =
         std::fs::read_to_string(project_dir.join("src").join("constraints").join("mod.rs"))
             .unwrap();
+    let assembly = std::fs::read_to_string(
+        project_dir
+            .join("src")
+            .join("constraints")
+            .join("assemble.rs"),
+    )
+    .unwrap();
     let data_seed =
         std::fs::read_to_string(project_dir.join("src").join("data").join("data_seed.rs")).unwrap();
     let dto_rs =
@@ -1561,10 +1568,16 @@ fn test_generate_solution_replaces_neutral_scaffold_and_cargo_check_passes() {
         domain_mod
     );
     assert!(
-        constraints_mod.contains("use crate::domain::Schedule;")
-            && constraints_mod.contains("ConstraintSet<Schedule, HardSoftDecimalScore>")
-            && !constraints_mod.contains("ConstraintSet<Plan"),
+        assembly.contains("use crate::domain::Schedule;")
+            && assembly.contains("ConstraintSet<Schedule, HardSoftDecimalScore>")
+            && !assembly.contains("ConstraintSet<Plan"),
         "constraint assembly should target the generated solution: {}",
+        assembly
+    );
+    assert!(
+        constraints_mod.contains("pub use assemble::create_constraints;")
+            && !constraints_mod.contains("ConstraintSet"),
+        "the constraint module manifest should hold only declarations: {}",
         constraints_mod
     );
     assert!(
@@ -1673,7 +1686,10 @@ fn test_generate_score_rewrites_constraints_and_contract_files() {
     let mut checked = 0;
     for entry in std::fs::read_dir(&constraints_dir).expect("failed to read constraints dir") {
         let path = entry.expect("failed to read constraints entry").path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+        // mod.rs only declares modules; it names no score type.
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs")
+            || path.file_name().and_then(|name| name.to_str()) == Some("mod.rs")
+        {
             continue;
         }
         let content = std::fs::read_to_string(&path).unwrap();
@@ -2451,24 +2467,7 @@ impl Task {
     std::fs::write(plan_path, invalid_plan).unwrap();
     std::fs::write(
         project_dir.join("src").join("constraints").join("mod.rs"),
-        r#"/* Constraint definitions.
-
-Add constraint modules with `solverforge generate constraint ...`.
-The neutral shell starts with an empty constraint set. */
-
-use crate::domain::Plan;
-use solverforge::prelude::*;
-
-pub use self::assemble::create_constraints;
-
-mod assemble {
-    use super::*;
-
-    pub fn create_constraints() -> impl ConstraintSet<Plan, HardSoftScore> {
-        ()
-    }
-}
-"#,
+        "mod assemble;\n\npub use assemble::create_constraints;\n",
     )
     .unwrap();
 

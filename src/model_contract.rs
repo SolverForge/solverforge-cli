@@ -6,7 +6,9 @@ use crate::app_spec::{
     self, AppSpec, ConflictRepairSpec, ScalarGroupAssignmentHooks, ScalarGroupSpec,
 };
 use crate::commands::generate_constraint::domain::{DomainModel, EntityInfo};
-use crate::commands::generate_constraint::{parse_domain, validate_constraint_mod_source};
+use crate::commands::generate_constraint::{
+    parse_domain, validate_constraint_mod_source, ConstraintSources,
+};
 use crate::error::{CliError, CliResult};
 use crate::model_id::ConstraintId;
 use crate::solver_config::{self, SolverConfigDocument, SolverConfigIndex};
@@ -724,12 +726,8 @@ fn load_constraint_refs(dir: &Path) -> CliResult<Vec<ConstraintRef>> {
     if !mod_path.exists() {
         return Ok(Vec::new());
     }
-    let mod_src = fs::read_to_string(&mod_path).map_err(|err| CliError::IoError {
-        context: format!("failed to read {}", mod_path.display()),
-        source: err,
-    })?;
-    let modules = validate_constraint_mod_source(&mod_src)
-        .map_err(|err| CliError::general(format!("{}: {err}", mod_path.display())))?;
+    let sources = ConstraintSources::read(Path::new("."))?;
+    let modules = validate_constraint_mod_source(&sources).map_err(CliError::general)?;
     let mut refs = Vec::new();
     for id in modules {
         ConstraintId::parse(&id)?;

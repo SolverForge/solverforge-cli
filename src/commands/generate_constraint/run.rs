@@ -4,6 +4,7 @@ use std::path::Path;
 use super::domain::parse_domain;
 use super::mod_rewriter::rewrite_mod;
 use super::skeleton::generate_skeleton;
+use super::sources::{ConstraintSources, CONSTRAINTS_ASSEMBLE_PATH, CONSTRAINTS_MOD_PATH};
 use super::utils::validate_name;
 use super::wizard::{resolve_pattern_and_hardness, PatternFlags};
 use crate::app_spec;
@@ -44,17 +45,11 @@ pub fn run(
     validate_name(name)?;
 
     let constraints_dir = Path::new("src/constraints");
-    let mod_path = constraints_dir.join("mod.rs");
     let new_file = constraints_dir.join(format!("{}.rs", name));
 
     if !constraints_dir.exists() {
         return Err(CliError::NotInProject {
             missing: "src/constraints/",
-        });
-    }
-    if !mod_path.exists() {
-        return Err(CliError::NotInProject {
-            missing: "src/constraints/mod.rs",
         });
     }
     if new_file.exists() && !force {
@@ -64,10 +59,7 @@ pub fn run(
         });
     }
 
-    let mod_src = fs::read_to_string(&mod_path).map_err(|e| CliError::IoError {
-        context: "failed to read src/constraints/mod.rs".to_string(),
-        source: e,
-    })?;
+    let sources = ConstraintSources::read(Path::new("."))?;
 
     let domain = parse_domain().map_err(CliError::general)?;
     let solution_type = domain.solution_type.clone();
@@ -159,11 +151,12 @@ pub fn run(
         Some(&domain),
     );
 
-    let new_mod = rewrite_mod(&mod_src, name).map_err(CliError::general)?;
+    let rewritten = rewrite_mod(&sources, name).map_err(CliError::general)?;
 
     if pretend {
         println!("Would create src/constraints/{}.rs", name);
-        println!("Would update src/constraints/mod.rs");
+        println!("Would update {CONSTRAINTS_MOD_PATH}");
+        println!("Would update {CONSTRAINTS_ASSEMBLE_PATH}");
         return Ok(());
     }
 
@@ -172,18 +165,17 @@ pub fn run(
         source: e,
     })?;
 
-    fs::write(&mod_path, &new_mod).map_err(|e| CliError::IoError {
-        context: "failed to write src/constraints/mod.rs".to_string(),
-        source: e,
-    })?;
+    rewritten.write(Path::new("."))?;
 
     crate::commands::sf_config::add_constraint(name)?;
     app_spec::sync_from_project()?;
 
     output::print_create(&format!("src/constraints/{}.rs", name));
     print_diff_verbose("", &skeleton);
-    output::print_update("src/constraints/mod.rs");
-    print_diff_verbose(&mod_src, &new_mod);
+    output::print_update(CONSTRAINTS_MOD_PATH);
+    print_diff_verbose(&sources.module, &rewritten.module);
+    output::print_update(CONSTRAINTS_ASSEMBLE_PATH);
+    print_diff_verbose(&sources.assemble, &rewritten.assemble);
     println!();
     if !output::is_quiet() {
         println!("  Next steps:");
