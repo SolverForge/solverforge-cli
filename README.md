@@ -16,7 +16,7 @@ Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.25.0`
+- `solverforge 0.25.1`
 - `solverforge-ui 0.9.1` for the default web shell
 - `solverforge-maps 2.3.3` for the default web shell
 - `rmcp 3.9.0` for the MCP shell
@@ -199,7 +199,7 @@ Core commands:
 - `generate score` and `generate solution --score` accept `HardSoftScore`,
   `HardSoftDecimalScore`, `HardMediumSoftScore`, and `SoftScore`.
   `BendableScore` is rejected because `#[planning_solution]` requires a
-  `ParseableScore`, which SolverForge `0.25.0` does not implement for it.
+  `ParseableScore`, which SolverForge `0.25.1` does not implement for it.
 - `solverforge generate scalar-group|conflict-repair` wires opt-in model
   resources by exact ID.
 - `solverforge destroy fact|entity|variable|constraint|solution|scalar-group|conflict-repair`
@@ -327,7 +327,7 @@ including applied/not-doable/rejected moves, hard-score direction counts,
 construction counters, one record per started phase (`phases`, in execution
 order), per-selector and per-move breakdowns, and the bounded applied-move
 trace. The six `conflictRepair*` counters are run-level totals; selector
-records do not carry them because SolverForge `0.25.0` `SelectorTelemetry`
+records do not carry them because SolverForge `0.25.1` `SelectorTelemetry`
 has no such fields. These fields are carried consistently by status,
 snapshot, and typed SSE payloads. Constraint analysis reports each
 constraint's `name`, `weightMultiplier` (the bound constraint weight, a
@@ -460,7 +460,7 @@ Current scenario coverage:
   byte-level stdio check that the transport channel stays pure JSON-RPC; every
   MCP phase runs with parallel evaluation enabled
 
-SolverForge `0.25.0` supports mixed scalar/list construction, canonical mixed
+SolverForge `0.25.1` supports mixed scalar/list construction, canonical mixed
 local-search defaults, and list-based sequence modeling. The CLI suite proves
 the mixed path in both runtime and browser pipelines; the scalar-only scenario keeps the deeper
 pause/resume, analysis, reconnect, and qualified-trace checks.
