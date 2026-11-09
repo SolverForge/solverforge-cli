@@ -149,6 +149,8 @@ the app embeds `solver.toml` and would otherwise fail its first solve.
 - Only local search runs in parallel; construction stays sequential.
 - The effective count is `min(count, Rayon pool, 32)`. Every job in one server
   process shares the pool, sized by `RAYON_NUM_THREADS` (default: core count).
-- The default `auto` is sequential. Enable it only when moves are expensive to
-  score, and measure the wall-clock gain on the real instance: on small models
-  coordinating evaluators can cost more than it saves.
+- The default `auto` uses up to 4 evaluators and chooses, step by step,
+  between sequential and parallel windows from measured trial and coordination
+  costs, so cheap moves stay sequential. Set `"none"` to force sequential
+  evaluation, or `{ count = N }` (N >= 1) to fix the evaluator count, and
+  measure the wall-clock gain on the real instance.

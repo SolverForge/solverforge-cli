@@ -21,7 +21,7 @@ Required Rust version: `1.95` or later.
 
 Current generated projects target:
 
-- `solverforge 0.24.0`
+- `solverforge 0.25.0`
 - `solverforge-ui 0.9.1` for the web shell
 - `solverforge-maps 2.3.3` for the web shell
 - `rmcp 3.9.0` for the MCP shell
@@ -270,7 +270,7 @@ Generated apps should behave like production references:
   snapshot revision
 - status, snapshot, and SSE payloads expose every compact SolverForge telemetry
   aggregate and phase/selector/move/applied-move breakdown; the six
-  `conflictRepair*` counters are run-level only, because SolverForge `0.24.0`
+  `conflictRepair*` counters are run-level only, because SolverForge `0.25.0`
   `SelectorTelemetry` does not carry them
 - constraint analysis carries `name`, `weightMultiplier` (the bound constraint
   weight), `score`, and `matchCount` per constraint
@@ -324,7 +324,7 @@ warning, not an error, so the user can define it afterward.
 `generate score` and `generate solution --score` accept `HardSoftScore`,
 `HardSoftDecimalScore`, `HardMediumSoftScore`, and `SoftScore`.
 `BendableScore` is rejected: `#[planning_solution]` requires a
-`ParseableScore`, and SolverForge `0.24.0` does not implement it for
+`ParseableScore`, and SolverForge `0.25.0` does not implement it for
 `BendableScore`. Score rewrites change only the bare type name inside `use`
 items.
 
@@ -339,7 +339,7 @@ functions that panic with the function name and the
 - `--reward`: `for_each` + `filter(reward_condition)` + `reward`
 - `--pair`: `for_each` + `filter` (variable assigned) + `join(joiner::equal(key))`
   self-join, which yields each unordered pair once, + `filter(pair_condition)`
-  + `penalize`; SolverForge `0.24.0` has no `for_each_unique_pair`
+  + `penalize`; SolverForge `0.25.0` has no `for_each_unique_pair`
 
 Weight helpers return the unit penalty or reward. A solve that reaches a
 placeholder fails: the job ends `FAILED` and the panic names the file and
@@ -377,11 +377,12 @@ can be large.
 Parallel local-search evaluation is enabled through `move_thread_count`,
 including `solverforge config set move_thread_count.count <N>`. The CLI accepts
 exactly the runtime's forms (`"auto"`, `"none"`, `{ count = N }` with a
-non-negative integer) because the generated app parses its embedded
+positive integer) because the generated app parses its embedded
 `solver.toml` on the first solve, where a malformed value would fail the job
 instead of the build. The neutral template documents the setting, the Rayon and
 32-evaluator caps, and the shared per-process pool, and leaves the runtime
-default `auto` (sequential) in place.
+default `auto` (up to 4 evaluators, sequential or parallel per step by measured
+cost) in place.
 
 `.solverforgerc` is loaded from the project root first, then from
 `~/.solverforgerc`. It is intentionally narrow and only carries local CLI
@@ -436,7 +437,7 @@ Current scenario policy:
   legacy client, and byte-level stdio stdout purity during a solve, all with
   parallel evaluation enabled
 
-SolverForge `0.24.0` uses list variables for ordered sequences and routes. Both
+SolverForge `0.25.0` uses list variables for ordered sequences and routes. Both
 generated-app end-to-end suites start and observe the real mixed scalar/list
 path.
 
