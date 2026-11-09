@@ -9,6 +9,7 @@ mod list_variable_metadata;
 mod managed_block;
 mod model_contract;
 mod model_id;
+mod module_manifest;
 mod output;
 mod rc;
 mod scaffold_target;

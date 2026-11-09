@@ -208,6 +208,11 @@ Required managed surfaces:
 Commands that add or remove generated resources should fail clearly when those
 current markers are missing or duplicated.
 
+Every `mod.rs` and `lib.rs` under `src/` holds only module declarations, `use`
+items, and (in `src/domain/mod.rs`) the `planning_model!` manifest.
+`solverforge check` rejects any function, type, impl, constant, or inline module
+body in those files.
+
 `constraint-modules` holds `mod` lines in rustfmt's sorted order and matches
 them to calls by name; `constraint-calls` keeps insertion order because it is
 the constraint set's evaluation order. `generate`, `destroy`, and `new` pipe

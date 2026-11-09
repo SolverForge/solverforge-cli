@@ -177,6 +177,21 @@ fn test_validate_constraint_mod_source_rejects_undeclared_call() {
 }
 
 #[test]
+fn test_validate_constraint_mod_source_rejects_code_in_mod_rs() {
+    let mut src = sources(
+        "mod all_assigned;\n",
+        "    super::all_assigned::constraint()\n",
+    );
+    src.module
+        .push_str("\npub fn create_extra() -> usize {\n    1\n}\n");
+
+    let err = validate_constraint_mod_source(&src).expect_err("code in mod.rs should fail");
+
+    assert!(err.contains("src/constraints/mod.rs"), "{err}");
+    assert!(err.contains("fn `create_extra`"), "{err}");
+}
+
+#[test]
 fn test_validate_constraint_mod_source_rejects_calls_without_super_prefix() {
     let src = sources(
         "mod all_assigned;\n",

@@ -9,6 +9,7 @@ use crate::commands::generate_domain::{find_file_for_type, validate_domain_mod_s
 use crate::error::{CliError, CliResult};
 use crate::managed_block;
 use crate::model_contract::{ContractSeverity, ModelContract};
+use crate::module_manifest;
 use crate::output;
 use crate::solver_config;
 
@@ -79,6 +80,15 @@ pub fn run() -> CliResult {
         }
     } else {
         warnings.push("src/constraints/ directory not found".to_string());
+    }
+
+    output::print_status("check", "src/**/{mod,lib}.rs");
+    for root in module_manifest::module_roots(Path::new("src")) {
+        if let Some(src) = read_path(&root, &mut errors) {
+            if let Err(err) = module_manifest::ensure_declarations_only(&src) {
+                errors.push(format!("{}: {err}", output::display_path(&root)));
+            }
+        }
     }
 
     for (path, required_blocks) in [

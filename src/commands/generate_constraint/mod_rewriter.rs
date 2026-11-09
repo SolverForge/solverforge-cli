@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use super::sources::{ConstraintSources, CONSTRAINTS_ASSEMBLE_PATH, CONSTRAINTS_MOD_PATH};
 use crate::managed_block;
+use crate::module_manifest;
 
 const CONSTRAINT_MODULES_BLOCK: &str = "constraint-modules";
 const CONSTRAINT_CALLS_BLOCK: &str = "constraint-calls";
@@ -175,6 +176,7 @@ fn is_simple_ident(value: &str) -> bool {
 impl ConstraintSurface {
     fn parse(sources: &ConstraintSources) -> Result<Self, String> {
         let in_mod = |err: String| format!("{CONSTRAINTS_MOD_PATH}: {err}");
+        module_manifest::ensure_declarations_only(&sources.module).map_err(in_mod)?;
         let modules = parse_constraint_modules(&sources.module).map_err(in_mod)?;
         let calls = parse_constraint_calls(&sources.assemble)
             .map_err(|err| format!("{CONSTRAINTS_ASSEMBLE_PATH}: {err}"))?;

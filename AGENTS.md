@@ -25,7 +25,7 @@ Current scaffold policy:
 - `templates/scalar/generic` is the embedded neutral scaffold used by `solverforge new`; `templates/list/generic` is not a public `new` selector
 - the neutral `solver.toml` declares no `[[phases]]`, so a fresh app solves through the runtime's model-aware default pipeline; `generate scalar-group` refuses a user-authored scalar construction phase that reaches its assignment-owned target
 - `generate`, `destroy`, and `new` rustfmt every Rust file they write (rustfmt is optional; a missing one leaves files as generated), fresh scaffolds pass `cargo fmt --check`, and managed constraint `mod` lines stay in rustfmt's sorted order so `cargo fmt` never breaks `check`
-- `mod.rs` and `lib.rs` files, in this repo and in every scaffold, hold only module declarations and re-exports (plus the domain `planning_model!` manifest); constraint assembly lives in `src/constraints/assemble.rs`
+- `mod.rs` and `lib.rs` files, in this repo and in every scaffold, hold only module declarations and re-exports (plus the domain `planning_model!` manifest); constraint assembly lives in `src/constraints/assemble.rs`, and `solverforge check` rejects code in any module root
 - `solverforge check` is structural and says it did not compile the project; generated constraint skeletons compile but their placeholders panic with the function and file to edit, so a solve that reaches one ends `FAILED`
 - generated constraint analysis DTOs carry `weightMultiplier`; selector telemetry DTOs carry no `conflictRepair*` counters (the run-level telemetry keeps them)
 - generated `Cargo.toml` files must carry `rust-version = "1.95"` plus the current explicit dependency baselines for the selected shell from the template/materialization code

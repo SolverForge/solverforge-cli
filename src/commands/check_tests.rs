@@ -293,6 +293,29 @@ impl Task {
 }
 
 #[test]
+fn check_rejects_code_in_module_roots() {
+    let _cwd_guard = test_support::lock_cwd();
+    let tmp = tempfile::tempdir().expect("failed to create temp dir");
+    let _dir_guard = CwdGuard::enter(tmp.path());
+    write_project_layout();
+    run().expect("the generated layout holds no code in module roots");
+
+    fs::create_dir_all("src/api").expect("failed to create api dir");
+    fs::write(
+        "src/api/mod.rs",
+        "mod routes;\n\npub fn router() -> usize {\n    1\n}\n",
+    )
+    .expect("failed to write api mod");
+
+    let err = run().expect_err("a function in a mod.rs should fail check");
+    let err = err.to_string();
+    assert!(
+        err.contains("1 error(s), 0 warning(s)"),
+        "unexpected summary: {err}"
+    );
+}
+
+#[test]
 fn check_rejects_stale_scalar_group_variable_targets() {
     let _cwd_guard = test_support::lock_cwd();
     let tmp = tempfile::tempdir().expect("failed to create temp dir");
