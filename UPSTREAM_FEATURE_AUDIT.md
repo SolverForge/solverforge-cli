@@ -5,7 +5,7 @@ Audit date: 2026-11-09
 This audit compares the current `solverforge-cli` scaffold surface against the
 live SolverForge upstream checkout at `/srv/lab/dev/solverforge/solverforge`
 and the crates.io release state. Generated projects now target the published
-SolverForge `0.25.0` release. Registry-only generated-app validation is the
+SolverForge `0.25.1` release. Registry-only generated-app validation is the
 release gate; `SF_USE_LOCAL_PATCHES=1` remains reserved for explicit future
 prerelease checks against sibling checkouts.
 
@@ -15,13 +15,13 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Source Evidence
 
-- Published gate: `cargo info solverforge@0.25.0` resolves the published crate
+- Published gate: `cargo info solverforge@0.25.1` resolves the published crate
   on 2026-11-09, with Rust `1.95` and the `serde`, `console`, and
   `verbose-logging` features; `verbose-logging` is
   `[console, solverforge-console/verbose-logging]`, so the web, API, and CLI
   shells keep all three and the MCP shell enables only `serde`.
 - Upstream local checkout: the workspace and inter-crate dependency baseline is
-  `0.25.0`, with `v0.25.0` (`3115b4dd`) at the checked-out release commit. The `0.19.0`
+  `0.25.1`, with `v0.25.1` (`6069763d`) at the checked-out release commit. The `0.19.0`
   release made list variables the sole sequence and route model; the published
   `0.19.1` through `0.19.7` patch line carries the subsequent solver fixes.
 - Upstream `0.19.7..0.22.0` release surface: `0.19.8` through `0.19.14` are
@@ -179,6 +179,11 @@ without turning the neutral scaffold into a domain-specific demo.
 - Upstream macro docs: `crates/solverforge-macros/WIREFRAME.md` documents
   `scalar_groups = "path"` on `#[planning_solution]` and scalar hook arguments
   on `#[planning_variable]`.
+- Upstream `0.25.0..0.25.1` release surface: the nearby list change and swap
+  cursors keep the nearest destinations in one bounded buffer per cursor, and
+  the zero-regression gate runs both sides from equal-length paths and grades
+  cache and branch behaviour on Cachegrind's simulation. No public API or
+  configuration changes; generated apps pick it up through the version pin.
 - Upstream `0.24.0..0.25.0` release surface (source-carrying, breaking):
   configuration semantics made literal and validated, partitioned search run by
   the framework, the `auto` parallel-evaluation policy, and construction and
@@ -212,7 +217,7 @@ without turning the neutral scaffold into a domain-specific demo.
   `scalar_groups`, `ScalarGroup::assignment`, grouped scalar construction with
   `group_name`, `construction_obligation = "assign_when_candidate_exists"`, and
   `grouped_scalar_move_selector`.
-- CLI coverage today: the scaffold targets `solverforge 0.25.0`, exposes the
+- CLI coverage today: the scaffold targets `solverforge 0.25.1`, exposes the
   `web`, `api`, `cli`, and `mcp` shells, and includes the retained
   `SolverManager` lifecycle, typed SSE, snapshots, analysis,
   pause/resume/cancel/delete, generated `solverforge.app.toml`, scalar/list
@@ -336,7 +341,7 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Recommended Follow-Up Implementation Slice
 
-The current starter-safe 0.25.0 surface is implemented, apart from the
+The current starter-safe 0.25.1 surface is implemented, apart from the
 unknown-key `solver.toml` validation gap recorded in the matrix. The next high-value slice
 is domain-specific documentation and executable examples, not more neutral
 scaffold defaults.
@@ -353,16 +358,16 @@ scaffold defaults.
 
 ## Implementation Status
 
-- Release state: `solverforge 0.25.0` is published on crates.io and matches
+- Release state: `solverforge 0.25.1` is published on crates.io and matches
   the live upstream release checkout and this generated target. The
-  `0.19.8..0.25.0` line is source-carrying (grouped-scalar search/perf work,
+  `0.19.8..0.25.1` line is source-carrying (grouped-scalar search/perf work,
   the `0.20.3` search-order hooks, the `0.21.0` scoring `group_by` joins, the
   `0.21.2` selector-subgraph edge rebase fix, the `0.21.3` precedence route
   delta fix, the `0.22.0` grouped-stream accumulator-kernel rework, the
   `0.23.0` parallel local-search evaluation, the `0.24.0` constraint weights
   and API cleanup, the `0.25.0` configuration audit, framework partitioned
-  search and `auto` evaluation policy), and the published crate, the `v0.25.0`
-  tag, and this
+  search and `auto` evaluation policy, and the `0.25.1` bounded nearby list
+  candidate buffer), and the published crate, the `v0.25.1` tag, and this
   generated target are the same code. Registry-only validation is therefore authoritative.
   `SF_USE_LOCAL_PATCHES=1` is only for an explicit future coordinated prerelease
   check. The audit uses the current `scalar_groups` / `ScalarGroup::assignment`
@@ -462,7 +467,7 @@ scaffold defaults.
   help says: unary is `for_each` + `filter` + `penalize` for both hardness
   levels, reward is `for_each` + `filter` + `reward`, and pair filters out
   unassigned entities before a `joiner::equal` self-join (each unordered pair
-  once; `0.25.0` has no `for_each_unique_pair`) and selects conflicts with a
+  once; `0.25.1` has no `for_each_unique_pair`) and selects conflicts with a
   filter.
 - Changed: the neutral `solver.toml` declares no `[[phases]]` and defers to the
   runtime's model-aware default pipeline; its explicit phases remain as a
@@ -492,7 +497,7 @@ Any implementation from this audit should pass:
 - focused parser/generator/app-spec tests for the new metadata;
 - scaffold contract tests proving fresh generated projects include only the
   opt-in scalar-group surface requested by the user;
-- generated app `cargo check` against the published `0.25.0` registry target;
+- generated app `cargo check` against the published `0.25.1` registry target;
 - runtime pipeline coverage only if the new command claims actual solving
   behavior;
 - `SF_USE_LOCAL_PATCHES=1` only for an explicit future sibling-checkout
