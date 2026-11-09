@@ -482,7 +482,8 @@ fn solver_error(error: solverforge::SolverManagerError) -> ErrorData {
         }
         solverforge::SolverManagerError::NoFreeJobSlots => ErrorData::internal_error(message, None),
         solverforge::SolverManagerError::InvalidStateTransition { .. }
-        | solverforge::SolverManagerError::NoSnapshotAvailable { .. } => {
+        | solverforge::SolverManagerError::NoSnapshotAvailable { .. }
+        | solverforge::SolverManagerError::SnapshotAnalysisDisabled { .. } => {
             ErrorData::invalid_params(message, None)
         }
     }

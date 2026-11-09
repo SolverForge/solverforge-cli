@@ -26,11 +26,12 @@ seconds_spent_limit = 30
 # [candidate_trace]
 # max_entries = 100000
 
-# Opt in to parallel local-search evaluation when moves are expensive to score.
-# Each step's candidates are scored on up to `count` evaluators while one
-# coordinator keeps the sequential acceptance order, so results match the
-# sequential run at fixed work. The effective count is capped by the Rayon pool
-# (RAYON_NUM_THREADS, shared by every concurrent job) and by 32. The default,
-# "auto", stays sequential; small models usually solve faster that way.
+# Parallel local-search evaluation scores each step's candidates on several
+# evaluators while one coordinator keeps the sequential acceptance order, so
+# results match the sequential run at fixed work. The default, "auto", uses up
+# to 4 evaluators and runs each step sequentially or in parallel windows,
+# whichever its measurements say is faster; "none" stays sequential. An
+# explicit { count = N } (N >= 1) uses up to N evaluators, capped by the Rayon
+# pool (RAYON_NUM_THREADS, shared by every concurrent job) and by 32.
 # [move_thread_count]
 # count = 4

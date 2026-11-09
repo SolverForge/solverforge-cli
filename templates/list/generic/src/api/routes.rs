@@ -246,5 +246,6 @@ fn status_from_solver_error(error: solverforge::SolverManagerError) -> StatusCod
         solverforge::SolverManagerError::InvalidStateTransition { .. } => StatusCode::CONFLICT,
         solverforge::SolverManagerError::NoSnapshotAvailable { .. } => StatusCode::CONFLICT,
         solverforge::SolverManagerError::SnapshotNotFound { .. } => StatusCode::NOT_FOUND,
+        solverforge::SolverManagerError::SnapshotAnalysisDisabled { .. } => StatusCode::CONFLICT,
     }
 }

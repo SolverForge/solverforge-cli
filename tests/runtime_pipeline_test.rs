@@ -229,8 +229,15 @@ fn mixed_runtime_pipeline() {
     app.stop_server();
     app.phase("Pin a seeded fixed-work solver config");
     app.write_file("solver.toml", fixed_work_solver_config());
+    // The runtime default `auto` may evaluate in parallel, so the baseline
+    // pins sequential evaluation explicitly.
+    app.run_cli(
+        "Pin sequential local-search evaluation",
+        &["config", "set", "move_thread_count", "none"],
+    );
     app.cargo_build("Build sequential fixed-work mixed app");
     let sequential = run_fixed_work_solve(&mut app, &[]);
+    app.write_file("solver.toml", fixed_work_solver_config());
     app.run_cli(
         "Enable parallel local-search evaluation",
         &["config", "set", "move_thread_count.count", "4"],
