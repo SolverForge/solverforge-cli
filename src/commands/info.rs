@@ -60,16 +60,13 @@ pub fn run() -> CliResult {
         println!();
     }
 
-    let constraints_dir = Path::new("src/constraints");
-    if constraints_dir.exists() {
-        let constraints = list_constraints(constraints_dir);
-        if !constraints.is_empty() {
-            println!("  Constraints:");
-            for c in &constraints {
-                println!("    - {}", c);
-            }
-            println!();
+    let constraints = list_constraints(Path::new(".")).map_err(CliError::general)?;
+    if !constraints.is_empty() {
+        println!("  Constraints:");
+        for c in &constraints {
+            println!("    - {}", c);
         }
+        println!();
     }
 
     if Path::new("solver.toml").exists() {

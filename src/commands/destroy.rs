@@ -1,11 +1,11 @@
 use std::fs;
 use std::path::Path;
 
-use crate::commands::generate_constraint::{domain::DomainModel, parse_domain};
 use crate::commands::generate_constraint::{
-    is_constraint_file_stem, remove_constraint_from_source, ConstraintSources,
+    domain::list_constraints, remove_constraint_from_source, ConstraintSources,
     CONSTRAINTS_ASSEMBLE_PATH, CONSTRAINTS_MOD_PATH,
 };
+use crate::commands::generate_constraint::{domain::DomainModel, parse_domain};
 use crate::commands::generate_domain::{find_file_for_type, snake_to_pascal};
 use crate::commands::generate_domain::{
     remove_domain_mod_entry_source, sync_demo_data_module, unwire_collection_from_solution_source,
@@ -367,13 +367,14 @@ fn ensure_type_is_unreferenced_in_source(
     }
 
     let constraints_dir = Path::new("src/constraints");
+    let declared_constraints = list_constraints(Path::new(".")).map_err(CliError::general)?;
     let mut constraint_ids = Vec::new();
     let mut other_files = Vec::new();
     for file in &dependents {
         let constraint_id = (file.parent() == Some(constraints_dir))
             .then(|| file.file_stem().and_then(|stem| stem.to_str()))
             .flatten()
-            .filter(|stem| is_constraint_file_stem(stem));
+            .filter(|stem| declared_constraints.iter().any(|id| id == stem));
         match constraint_id {
             Some(id) => constraint_ids.push(id.to_string()),
             None => other_files.push(slash_path(file)),

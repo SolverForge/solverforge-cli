@@ -335,7 +335,8 @@ pub fn sync_from_project() -> CliResult {
         Err(err) => return Err(CliError::general(err)),
     }
 
-    spec.constraints = list_constraints(Path::new("src/constraints"))
+    spec.constraints = list_constraints(Path::new("."))
+        .map_err(CliError::general)?
         .into_iter()
         .map(|name| ConstraintSpec {
             module: name.clone(),

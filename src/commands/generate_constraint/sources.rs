@@ -16,12 +16,6 @@ pub(crate) const CONSTRAINTS_MOD_PATH: &str = "src/constraints/mod.rs";
 /// Project-relative path of the constraint set assembly.
 pub(crate) const CONSTRAINTS_ASSEMBLE_PATH: &str = "src/constraints/assemble.rs";
 
-/// Whether `stem` names a constraint module file in `src/constraints/`, as
-/// opposed to the module manifest (`mod.rs`) or the assembly (`assemble.rs`).
-pub(crate) fn is_constraint_file_stem(stem: &str) -> bool {
-    stem != "mod" && stem != "assemble"
-}
-
 /// The constraint module manifest and the constraint set assembly, as text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ConstraintSources {

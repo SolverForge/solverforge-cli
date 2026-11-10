@@ -331,8 +331,13 @@ impl Task {
     );
 }
 
+/// Writes constraint module `name` and declares it in the managed constraint
+/// files, as `solverforge generate constraint` does.
 fn write_task_constraint(name: &str, body: &str) {
-    fs::create_dir_all("src/constraints").expect("failed to create constraints dir");
+    test_support::write_constraint_sources(
+        &format!("mod {name};\n"),
+        &format!("    super::{name}::constraint()\n"),
+    );
     fs::write(format!("src/constraints/{name}.rs"), body).expect("failed to write constraint");
 }
 

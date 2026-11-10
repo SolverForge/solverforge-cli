@@ -742,27 +742,65 @@ fn type_declares_name(item: &Item, type_name: &str) -> bool {
     }
 }
 
-pub(crate) fn list_constraints(dir: &Path) -> Vec<String> {
-    let mut constraints = Vec::new();
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-                if super::sources::is_constraint_file_stem(name) {
-                    constraints.push(name.to_string());
-                }
-            }
-        }
+/// Returns the constraint ids of the project under `root`: the modules declared
+/// in the `constraint-modules` block of `src/constraints/mod.rs`, sorted. Helper
+/// modules declared outside that block are not constraints. A project without
+/// `src/constraints/mod.rs` has none.
+pub(crate) fn list_constraints(root: &Path) -> Result<Vec<String>, String> {
+    if !root.join(super::sources::CONSTRAINTS_MOD_PATH).exists() {
+        return Ok(Vec::new());
     }
-    constraints.sort();
-    constraints
+    let sources = super::sources::ConstraintSources::read(root).map_err(|err| err.to_string())?;
+    let mut ids = super::mod_rewriter::validate_constraint_mod_source(&sources)?;
+    ids.sort();
+    Ok(ids)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn list_constraints_reads_the_manifest_not_file_names() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        assert_eq!(list_constraints(root).unwrap(), Vec::<String>::new());
+
+        fs::create_dir_all(root.join("src/constraints")).unwrap();
+        crate::test_support::constraint_sources(
+            "mod zone_cover;\nmod all_assigned;\n",
+            "    (\n        super::zone_cover::constraint(),\n        super::all_assigned::constraint(),\n    )\n",
+        )
+        .write(root)
+        .unwrap();
+        let mut module = fs::read_to_string(root.join("src/constraints/mod.rs")).unwrap();
+        module.push_str("mod shared;\n#[cfg(test)]\nmod tests;\n");
+        fs::write(root.join("src/constraints/mod.rs"), module).unwrap();
+        for helper in ["shared", "tests", "zone_cover", "all_assigned"] {
+            fs::write(root.join(format!("src/constraints/{helper}.rs")), "").unwrap();
+        }
+
+        assert_eq!(
+            list_constraints(root).unwrap(),
+            ["all_assigned", "zone_cover"]
+        );
+    }
+
+    #[test]
+    fn list_constraints_reports_a_malformed_manifest() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src/constraints")).unwrap();
+        crate::test_support::constraint_sources(
+            "mod all_assigned;\n",
+            "    (\n        super::extra::constraint(),\n    )\n",
+        )
+        .write(temp.path())
+        .unwrap();
+
+        let err = list_constraints(temp.path()).expect_err("unwired module should fail");
+        assert!(err.contains("constraint-calls"), "{err}");
+    }
 
     #[test]
     fn parses_multiline_attrs_and_manifest_modules() {
