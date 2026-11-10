@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [4.0.1](https://github.com/SolverForge/solverforge-cli/compare/v4.0.0...v4.0.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **constraints:** list constraints from the constraint-modules manifest ([0902d68](https://github.com/SolverForge/solverforge-cli/commit/0902d687ef19c474b525650ef2fa80a32c156de7)), closes [#11](https://github.com/SolverForge/solverforge-cli/issues/11)
+
+
 ## [4.0.0](https://github.com/SolverForge/solverforge-cli/compare/v3.9.0...v4.0.0) (2026-11-10)
 
 
