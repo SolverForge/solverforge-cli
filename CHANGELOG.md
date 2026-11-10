@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [4.0.3](https://github.com/SolverForge/solverforge-cli/compare/v4.0.2...v4.0.3) (2026-11-10)
+
+
+### Bug Fixes
+
+* **skills:** read smoke-test responses from files, not a curl pipe ([c78a799](https://github.com/SolverForge/solverforge-cli/commit/c78a7994bd48f6beb2a990e23fb0c9f03665af9f)), closes [#15](https://github.com/SolverForge/solverforge-cli/issues/15)
+
+
 ## [4.0.2](https://github.com/SolverForge/solverforge-cli/compare/v4.0.1...v4.0.2) (2026-11-10)
 
 

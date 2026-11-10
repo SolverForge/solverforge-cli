@@ -7,7 +7,7 @@
 `solverforge-cli` is the default entry point for new SolverForge applications. Treat the CLI as its own versioned product, distinct from the runtime crates and UI assets that generated projects target.
 
 Current scaffold policy:
-- current CLI package version is `4.0.2`
+- current CLI package version is `4.0.3`
 - minimum supported Rust version is `1.95`, matching the current SolverForge runtime crates
 - generated projects currently target `solverforge 0.26.0`; the default web shell additionally targets `solverforge-ui 0.9.1` and `solverforge-maps 2.3.3`; the MCP shell additionally targets `rmcp 3.9.0`
 - `solverforge new <name>` is the only public scaffold path and produces a neutral app shell
