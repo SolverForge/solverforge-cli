@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [4.0.0](https://github.com/SolverForge/solverforge-cli/compare/v3.9.0...v4.0.0) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **scaffold:** Generated projects keep create_constraints and the constraint-calls block in src/constraints/assemble.rs, with each call written as `super::<id>::constraint()`; move them out of src/constraints/mod.rs before running generate, destroy or check.
+
+* **scaffold:** move constraint assembly into src/constraints/assemble.rs ([73598ce](https://github.com/SolverForge/solverforge-cli/commit/73598cea7aec3300e81697b0b71e3c2df3656d71))
+
+
+### Features
+
+* **check:** reject code in mod.rs and lib.rs ([5b4c563](https://github.com/SolverForge/solverforge-cli/commit/5b4c563919032ec4e039caa0e077f5b1b78ca93f)), closes [#8](https://github.com/SolverForge/solverforge-cli/issues/8)
+* **scaffold:** target SolverForge 0.25.1 ([a27ac8f](https://github.com/SolverForge/solverforge-cli/commit/a27ac8f6492d9f2f8bce436b518aec00cb7af4ed))
+
+
+### Bug Fixes
+
+* **check:** accept entity-scoped value_range_provider fields ([ae7defb](https://github.com/SolverForge/solverforge-cli/commit/ae7defbc7f94deebe4b6f519a68fa3c0d24a539a)), closes [#6](https://github.com/SolverForge/solverforge-cli/issues/6)
+
+
 ## [3.9.0](https://github.com/SolverForge/solverforge-cli/compare/v3.8.3...v3.9.0) (2026-11-09)
 
 
