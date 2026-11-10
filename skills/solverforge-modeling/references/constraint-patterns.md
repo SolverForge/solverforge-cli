@@ -182,7 +182,7 @@ fn pair_weight(_left: &Task, _right: &Task) -> HardSoftScore {
 }
 ```
 
-SolverForge `0.25.1` has no `for_each_unique_pair`; this self-join is the pair
+SolverForge `0.26.0` has no `for_each_unique_pair`; this self-join is the pair
 pattern. A self-join visits each unordered pair **exactly once** and never
 pairs an entity with itself, so one match is one violation. Do not add a self-pair guard
 and do not halve the weight. Keep the assigned filter before the join: an

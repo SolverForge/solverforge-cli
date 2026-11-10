@@ -25,7 +25,7 @@ required source/collector rules for the grouped patterns.
   `solverforge --version`, `solverforge new --help`,
   `solverforge generate variable --help`.
 
-This skill describes CLI `4.0.1` (scaffold runtime target `solverforge 0.25.1`,
+This skill describes CLI `4.0.1` (scaffold runtime target `solverforge 0.26.0`,
 UI `solverforge-ui 0.9.1`, maps `solverforge-maps 2.3.3`, MCP `rmcp 3.9.0`).
 Re-derive specifics from the CLI if the version differs.
 
@@ -221,7 +221,7 @@ from a hand-written extractor.
 The common skeletons are `--unary` = `for_each` + `filter` + `penalize` (hard
 or soft), `--reward` = `for_each` + `filter` + `reward`, and `--pair` =
 `for_each` + `filter` (variable assigned) + `joiner::equal` self-join +
-`filter` + `penalize`. SolverForge `0.25.1` has no `for_each_unique_pair`;
+`filter` + `penalize`. SolverForge `0.26.0` has no `for_each_unique_pair`;
 the self-join already yields each unordered pair once.
 
 `#[planning_solution]` generates a public associated accessor for each
