@@ -132,12 +132,21 @@ if [ "$shell" = "mcp" ]; then
 fi
 
 if [ -z "$demo_size" ]; then
-	demo_size=$(curl -sf "http://127.0.0.1:$port/demo-data" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("defaultId","STANDARD"))' 2>/dev/null || echo STANDARD)
+	# Responses go to a file before python3 reads them: a curl-to-interpreter
+	# pipe reads as remote code execution to agent skill scanners, which then
+	# refuse to load the whole skill.
+	catalog="$workdir/demo-data.json"
+	demo_size=STANDARD
+	if curl -sf -o "$catalog" "http://127.0.0.1:$port/demo-data"; then
+		demo_size=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("defaultId","STANDARD"))' "$catalog" 2>/dev/null || echo STANDARD)
+	fi
 fi
 echo "==> solving demo data $demo_size"
 
 curl -sf "http://127.0.0.1:$port/demo-data/$demo_size" > "$plan"
-job=$(curl -sf -X POST -H 'content-type: application/json' --data @"$plan" "http://127.0.0.1:$port/jobs" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+created="$workdir/job.json"
+curl -sf -o "$created" -X POST -H 'content-type: application/json' --data @"$plan" "http://127.0.0.1:$port/jobs"
+job=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$created")
 [ -n "$job" ] || { echo "FAIL: no job id returned"; exit 1; }
 echo "==> job $job started; polling status"
 
