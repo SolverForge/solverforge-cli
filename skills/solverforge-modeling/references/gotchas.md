@@ -153,7 +153,7 @@ construction phase covers the group.
 
 - `SoftScore` has no hard level: only `--soft` constraints are allowed.
 - `generate score <Type>` must name a supported type, or the CLI rejects it.
-  `BendableScore<N, M>` is rejected: SolverForge `0.26.0` has no
+  `BendableScore<N, M>` is rejected: SolverForge `0.26.1` has no
   `ParseableScore` for it, which `#[planning_solution]` requires.
 
 ## `solverforge.app.toml` is a projection, not an input
