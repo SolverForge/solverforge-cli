@@ -491,6 +491,7 @@ fn scalar_solver_pipeline() {
     assert!(solving["telemetry"]["appliedMoveTrace"].is_array());
     assert_eq!(solving["telemetry"]["movesSpeculative"], 0);
     assert!(solving["telemetry"]["phases"].is_array());
+    assert!(solving["telemetry"]["resolvedPhasePlan"].is_null());
 
     let latest_snapshot = client
         .get(format!("{base_url}/jobs/{live_job_id}/snapshot"))
@@ -680,6 +681,14 @@ fn scalar_solver_pipeline() {
         completed["terminalReason"].as_str(),
         Some("completed" | "terminated_by_config")
     ));
+    // The policy the solve ran is reported once it ends.
+    assert!(
+        completed["telemetry"]["resolvedPhasePlan"]["children"]
+            .as_array()
+            .is_some_and(|phases| !phases.is_empty()),
+        "a completed job should report the phase plan it ran: {}",
+        completed["telemetry"]
+    );
 
     let completed_snapshot = client
         .get(format!("{base_url}/jobs/{completed_job_id}/snapshot"))

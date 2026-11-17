@@ -604,6 +604,8 @@ fn test_new_creates_neutral_project_files() {
             && telemetry_rs.contains("pub selector_telemetry: Vec<SelectorTelemetryDto>")
             && telemetry_rs.contains("pub move_telemetry: Vec<MoveTelemetryDto>")
             && telemetry_rs.contains("pub applied_move_trace: Vec<AppliedMoveTelemetryDto>")
+            && telemetry_rs
+                .contains("pub resolved_phase_plan: Option<CandidateTracePhasePlanDto>")
             && telemetry_rs.contains("pub struct CandidateTraceDto")
             && telemetry_rs.contains("pub qualified_run_provenance")
             && telemetry_rs.contains("CandidateTraceSource::ListClarkeWrightCompletionInsertion")

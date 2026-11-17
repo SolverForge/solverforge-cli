@@ -325,8 +325,11 @@ then from `~/.solverforgerc`. Recognized preferences are intentionally narrow:
 Generated web/API apps expose every compact `SolverTelemetry` aggregate,
 including applied/not-doable/rejected moves, hard-score direction counts,
 construction counters, one record per started phase (`phases`, in execution
-order), per-selector and per-move breakdowns, and the bounded applied-move
-trace. The six `conflictRepair*` counters are run-level totals; selector
+order), per-selector and per-move breakdowns, the bounded applied-move
+trace, and `resolvedPhasePlan`: the policy the solve actually ran (every phase,
+the construction chosen for each default stage, the move families and their
+limits, acceptor and forager), `null` until the solve ends. The six
+`conflictRepair*` counters are run-level totals; selector
 records do not carry them because SolverForge `0.26.1` `SelectorTelemetry`
 has no such fields. These fields are carried consistently by status,
 snapshot, and typed SSE payloads. Constraint analysis reports each
