@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "solverforge-cli"
-version = "4.0.4"
+version = "4.1.0"
 dependencies = [
  "clap",
  "clap_complete",

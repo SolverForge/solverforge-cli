@@ -1,6 +1,15 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
+All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+## [4.1.0](https://github.com/SolverForge/solverforge-cli/compare/v4.0.4...v4.1.0) (2026-11-17)
+
+
+### Features
+
+* **scaffold:** target SolverForge 0.31.1 ([c0e055b](https://github.com/SolverForge/solverforge-cli/commit/c0e055b6c68a99659d82ec16bd2cde5c19c46abf))
+* **telemetry:** report the phase plan a solve ran ([2981d81](https://github.com/SolverForge/solverforge-cli/commit/2981d815f70690126c35a1dfa3f5f5ba0f93a821))
+
 
 ## [4.0.4](https://github.com/SolverForge/solverforge-cli/compare/v4.0.3...v4.0.4) (2026-11-11)
 
