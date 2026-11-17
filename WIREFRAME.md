@@ -281,6 +281,8 @@ Generated apps should behave like production references:
   aggregate and phase/selector/move/applied-move breakdown; the six
   `conflictRepair*` counters are run-level only, because SolverForge `0.26.1`
   `SelectorTelemetry` does not carry them
+- telemetry carries `resolvedPhasePlan`, the phase plan the solve resolved and
+  ran, once the solve ends (`null` before that)
 - constraint analysis carries `name`, `weightMultiplier` (the bound constraint
   weight), `score`, and `matchCount` per constraint
 - `GET /jobs/{id}/telemetry` exposes the atomically paired retained status and

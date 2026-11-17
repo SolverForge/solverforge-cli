@@ -122,6 +122,7 @@ pub struct TelemetryDto {
     pub selector_telemetry: Vec<SelectorTelemetryDto>,
     pub move_telemetry: Vec<MoveTelemetryDto>,
     pub applied_move_trace: Vec<AppliedMoveTelemetryDto>,
+    pub resolved_phase_plan: Option<CandidateTracePhasePlanDto>,
 }
 
 impl TelemetryDto {
@@ -180,6 +181,10 @@ impl TelemetryDto {
                 .iter()
                 .map(AppliedMoveTelemetryDto::from_runtime)
                 .collect(),
+            resolved_phase_plan: telemetry
+                .resolved_phase_plan
+                .as_ref()
+                .map(CandidateTracePhasePlanDto::from_runtime),
         }
     }
 }
