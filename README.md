@@ -16,7 +16,7 @@ Required Rust version: `1.95` or later.
 
 New projects currently target these crate versions:
 
-- `solverforge 0.31.1`
+- `solverforge 0.31.2`
 - `solverforge-ui 0.9.1` for the default web shell
 - `solverforge-maps 2.3.3` for the default web shell
 - `rmcp 3.9.0` for the MCP shell
@@ -199,7 +199,7 @@ Core commands:
 - `generate score` and `generate solution --score` accept `HardSoftScore`,
   `HardSoftDecimalScore`, `HardMediumSoftScore`, and `SoftScore`.
   `BendableScore` is rejected because `#[planning_solution]` requires a
-  `ParseableScore`, which SolverForge `0.31.1` does not implement for it.
+  `ParseableScore`, which SolverForge `0.31.2` does not implement for it.
 - `solverforge generate scalar-group|conflict-repair` wires opt-in model
   resources by exact ID.
 - `solverforge destroy fact|entity|variable|constraint|solution|scalar-group|conflict-repair`
@@ -330,7 +330,7 @@ trace, and `resolvedPhasePlan`: the policy the solve actually ran (every phase,
 the construction chosen for each default stage, the move families and their
 limits, acceptor and forager), `null` until the solve ends. The six
 `conflictRepair*` counters are run-level totals; selector
-records do not carry them because SolverForge `0.31.1` `SelectorTelemetry`
+records do not carry them because SolverForge `0.31.2` `SelectorTelemetry`
 has no such fields. These fields are carried consistently by status,
 snapshot, and typed SSE payloads. Constraint analysis reports each
 constraint's `name`, `weightMultiplier` (the bound constraint weight, a
@@ -463,7 +463,7 @@ Current scenario coverage:
   byte-level stdio check that the transport channel stays pure JSON-RPC; every
   MCP phase runs with parallel evaluation enabled
 
-SolverForge `0.31.1` supports mixed scalar/list construction, canonical mixed
+SolverForge `0.31.2` supports mixed scalar/list construction, canonical mixed
 local-search defaults, and list-based sequence modeling. The CLI suite proves
 the mixed path in both runtime and browser pipelines; the scalar-only scenario keeps the deeper
 pause/resume, analysis, reconnect, and qualified-trace checks.
