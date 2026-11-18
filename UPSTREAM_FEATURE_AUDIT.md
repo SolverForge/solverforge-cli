@@ -1,11 +1,11 @@
 # SolverForge Upstream Feature Audit
 
-Audit date: 2026-11-17
+Audit date: 2026-11-18
 
 This audit compares the current `solverforge-cli` scaffold surface against the
 live SolverForge upstream checkout at `/srv/lab/dev/solverforge/solverforge`
 and the crates.io release state. Generated projects now target the published
-SolverForge `0.31.1` release. Registry-only generated-app validation is the
+SolverForge `0.31.2` release. Registry-only generated-app validation is the
 release gate; `SF_USE_LOCAL_PATCHES=1` remains reserved for explicit future
 prerelease checks against sibling checkouts.
 
@@ -15,13 +15,13 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Source Evidence
 
-- Published gate: `cargo info solverforge@0.31.1` resolves the published crate
-  on 2026-11-17, with Rust `1.95` and the `serde`, `console`, and
+- Published gate: `cargo info solverforge@0.31.2` resolves the published crate
+  on 2026-11-18, with Rust `1.95` and the `serde`, `console`, and
   `verbose-logging` features; `verbose-logging` is
   `[console, solverforge-console/verbose-logging]`, so the web, API, and CLI
   shells keep all three and the MCP shell enables only `serde`.
 - Upstream local checkout: the workspace and inter-crate dependency baseline is
-  `0.31.1`, with `v0.31.1` (`ff945a3b`) at the checked-out release commit. The `0.19.0`
+  `0.31.2`, with `v0.31.2` (`78889c3f`) at the checked-out release commit. The `0.19.0`
   release made list variables the sole sequence and route model; the published
   `0.19.1` through `0.19.7` patch line carries the subsequent solver fixes.
 - Upstream `0.19.7..0.22.0` release surface: `0.19.8` through `0.19.14` are
@@ -233,6 +233,21 @@ without turning the neutral scaffold into a domain-specific demo.
   pass with shared trial prefixes, through a new defaulted
   `PlanningSolution::list_structure_unchanged` hook the macros generate. No
   configuration change; generated apps pick it up through the version pin.
+- Upstream `0.31.1..0.31.2` release surface: the default policy changes how
+  much work a solve does, with no public API or configuration change. Default
+  local search collects fewer accepted moves per step (4 for list variables,
+  32 for scalar groups and for scalar models with nearby or repair moves, and
+  32 as the precedence forager's ceiling, down from 256), and a multi-family
+  union weights families by candidate cost: list ruin and unbounded k-opt draw
+  weight 1 against 4. The optional assignment pass stops at a fifth of a
+  time-limited solve. A fixed fleet whose strict savings hooks reject
+  Clarke-Wright merges now ends default construction with every element placed
+  through a `list_completion` cheapest-insertion step, and the default
+  Clarke-Wright keeps 40 savings per element when a savings neighbour hook is
+  declared. The new phase-plan facts (`weighting = fixed:[...]`,
+  `time_budget_seconds`, the `list_completion` stage) are plan attributes, so
+  `resolvedPhasePlan` carries them through its verbatim attribute projection
+  without a template change.
 - Upstream `0.24.0..0.25.0` release surface (source-carrying, breaking):
   configuration semantics made literal and validated, partitioned search run by
   the framework, the `auto` parallel-evaluation policy, and construction and
@@ -266,7 +281,7 @@ without turning the neutral scaffold into a domain-specific demo.
   `scalar_groups`, `ScalarGroup::assignment`, grouped scalar construction with
   `group_name`, `construction_obligation = "assign_when_candidate_exists"`, and
   `grouped_scalar_move_selector`.
-- CLI coverage today: the scaffold targets `solverforge 0.31.1`, exposes the
+- CLI coverage today: the scaffold targets `solverforge 0.31.2`, exposes the
   `web`, `api`, `cli`, and `mcp` shells, and includes the retained
   `SolverManager` lifecycle, typed SSE, snapshots, analysis,
   pause/resume/cancel/delete, generated `solverforge.app.toml`, scalar/list
@@ -366,6 +381,7 @@ without turning the neutral scaffold into a domain-specific demo.
 | Sequence and route modeling | Implemented only through `--kind list --elements <collection>` and current list metadata. | Included. One list representation owns assignment and order and is the canonical sequence architecture. | Keep the public CLI, app spec, parser, generated data, UI projection, and runtime gates scalar/list-only. | List generator/parser/projection tests, mixed generated-app compile and runtime gates, and CVRP metadata generation/projection assertions (no generated CVRP app is built or solved). |
 | `0.19.4` assignment-backed omitted-phase defaults | Generated projects consume the runtime compiler through the umbrella `solverforge` crate; CLI-managed scalar-group phases already use explicit grouped `first_fit`. | Covered by the runtime target upgrade. The hard-first required batch and deferred rematch policy are runtime-owned and do not require a new CLI flag or template branch. | Preserve the explicit CLI-managed phase contract and let omitted-phase projects inherit the `0.19.4` runtime defaults. | Scalar-group config assertions, registry-only generated-app compilation, and upstream required-assignment runtime tests. |
 | `0.19.5` runtime fixes (cancellation retention, score-history fill, complete Clarke-Wright construction) | Generated projects consume the runtime through the umbrella `solverforge` crate; the retained cancellation and local-search paths are exercised by the scalar and mixed runtime/browser scenarios. The CVRP list profile has generator, projection, and conflict-validation coverage only; no generated CVRP app is built or solved. | Covered by the runtime target upgrade. These are runtime-owned bug fixes and require no CLI flag, template branch, or compatibility path. | Keep the generated model and config contracts unchanged and validate every shell plus scalar, list, and mixed runtime pipelines against `0.25.0`. | Registry-only scaffold checks, seeded scalar/mixed generated solves, browser lifecycle tests, and CVRP generation/projection assertions (no generated CVRP runtime solve today). |
+| `0.31.2` default search effort, optional-assignment budget and fixed-fleet completion | Generated projects declare no `[[phases]]`, so the runtime's new accepted-move counts, cost-weighted family union, time-budgeted optional assignment pass and Clarke-Wright list completion apply through the version pin. `resolvedPhasePlan` projects every plan attribute verbatim, including `weighting` and `time_budget_seconds`. | Covered by the runtime target upgrade. These are runtime-owned defaults and need no CLI flag, template branch, or `solver.toml` key. | Keep the neutral `solver.toml` phase-free so new apps inherit the measured defaults. | The neutral runtime pipeline and the Playwright scenarios solve the untouched `solver.toml` through the default pipeline against `0.31.2`, the browser mixed scenario under the new list accepted count and weighted union. The scalar, mixed and MCP runtime pipelines pin explicit phases and do not exercise the new defaults. The optional-assignment time budget and fixed-fleet Clarke-Wright completion are not exercised: no generated scenario declares optional assignments under a time limit or strict savings hooks. |
 | Current construction heuristic catalog | The neutral scaffold declares no phases and inherits the runtime's model-aware construction; the internal list template keeps `list_cheapest_insertion`; `config set` stays generic. CLI-generated scalar-group phases select grouped `first_fit`. | Do not mirror every variant in scaffold defaults. | Document which upstream heuristics need opt-in model hooks; the commented example in the neutral `solver.toml` shows an explicit `first_fit` construction plus local search. | Docs/audit assertions only unless a preset command is added. |
 | Immutable runtime compilation and resolved selector policy | Generated planning macros and `solver.toml` enter the canonical 0.25.0 runtime compiler; the templates do not assemble phases directly. | Covered by the runtime dependency upgrade. This is runtime-owned architecture, not a new scaffold family or compatibility path. | Keep the generated model and config contracts unchanged and validate every shell plus scalar, list, and mixed runtime pipelines against `0.25.0`. | Registry-only scaffold checks, seeded scalar/mixed generated solves, and browser lifecycle tests. |
 | `0.19.6` entity pinning (`#[planning_pin]`) | Not emitted by the CLI. The neutral scaffold declares no pin field and no `generate` surface writes `#[planning_pin]`; the attribute is user-authored domain metadata. The CLI's managed-block rewrites and model-contract check leave it in place: a generated app with a hand-added `#[planning_pin] bool` field passes `solverforge check` and, once `solverforge generate data` re-renders the seed with the new field, `cargo check` against the published `0.24.0` registry (re-checked 2026-11-03). Sample data seeds that bool as `idx % 2 == 0`, so half the sample entities start pinned. | Covered by the runtime target upgrade as opt-in domain metadata. Pinning is a per-entity modeling decision, not a scaffold family or a neutral default. | No scaffold change. Keep the neutral scaffold pin-free; if pinning is ever exposed it belongs in an explicit post-scaffold modeling command, in the same class as scalar groups and conflict repairs. | Generated-app `solverforge check` and registry-only `cargo check` with a hand-added pin field. Pinned solve semantics stay runtime-owned and are not exercised by this suite. |
@@ -390,7 +406,7 @@ without turning the neutral scaffold into a domain-specific demo.
 
 ## Recommended Follow-Up Implementation Slice
 
-The current starter-safe 0.31.1 surface is implemented, apart from the
+The current starter-safe 0.31.2 surface is implemented, apart from the
 unknown-key `solver.toml` validation gap recorded in the matrix. The next high-value slice
 is domain-specific documentation and executable examples, not more neutral
 scaffold defaults.
@@ -407,9 +423,9 @@ scaffold defaults.
 
 ## Implementation Status
 
-- Release state: `solverforge 0.31.1` is published on crates.io and matches
+- Release state: `solverforge 0.31.2` is published on crates.io and matches
   the live upstream release checkout and this generated target. The
-  `0.19.8..0.31.1` line is source-carrying (grouped-scalar search/perf work,
+  `0.19.8..0.31.2` line is source-carrying (grouped-scalar search/perf work,
   the `0.20.3` search-order hooks, the `0.21.0` scoring `group_by` joins, the
   `0.21.2` selector-subgraph edge rebase fix, the `0.21.3` precedence route
   delta fix, the `0.22.0` grouped-stream accumulator-kernel rework, the
@@ -420,8 +436,9 @@ scaffold defaults.
   late-acceptance history fix, the `0.27.0` route metric, the `0.28.0` resolved
   phase plan and match descriptions, the `0.29.0` planning ids in matches, the
   `0.30.0` cross-owner cascading shadows, the `0.31.0` list element groups and
-  joint cascading groups, and the `0.31.1` list-shadow row rescoring), and the
-  published crate, the `v0.31.1` tag,
+  joint cascading groups, the `0.31.1` list-shadow row rescoring, and the
+  `0.31.2` default search effort, construction budget and fixed-fleet
+  completion), and the published crate, the `v0.31.2` tag,
   and this
   generated target are the same code. Registry-only validation is therefore authoritative.
   `SF_USE_LOCAL_PATCHES=1` is only for an explicit future coordinated prerelease
@@ -522,7 +539,7 @@ scaffold defaults.
   help says: unary is `for_each` + `filter` + `penalize` for both hardness
   levels, reward is `for_each` + `filter` + `reward`, and pair filters out
   unassigned entities before a `joiner::equal` self-join (each unordered pair
-  once; `0.31.1` has no `for_each_unique_pair`) and selects conflicts with a
+  once; `0.31.2` has no `for_each_unique_pair`) and selects conflicts with a
   filter.
 - Changed: the neutral `solver.toml` declares no `[[phases]]` and defers to the
   runtime's model-aware default pipeline; its explicit phases remain as a
@@ -552,7 +569,7 @@ Any implementation from this audit should pass:
 - focused parser/generator/app-spec tests for the new metadata;
 - scaffold contract tests proving fresh generated projects include only the
   opt-in scalar-group surface requested by the user;
-- generated app `cargo check` against the published `0.31.1` registry target;
+- generated app `cargo check` against the published `0.31.2` registry target;
 - runtime pipeline coverage only if the new command claims actual solving
   behavior;
 - `SF_USE_LOCAL_PATCHES=1` only for an explicit future sibling-checkout
