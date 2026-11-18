@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.2.0](https://github.com/SolverForge/solverforge-cli/compare/v4.1.0...v4.2.0) (2026-11-18)
+
+
+### Features
+
+* **scaffold:** target SolverForge 0.31.2 ([631a9f9](https://github.com/SolverForge/solverforge-cli/commit/631a9f9afb226f3e66ad75e7d5c638656f13925f))
+
+
 ## [4.1.0](https://github.com/SolverForge/solverforge-cli/compare/v4.0.4...v4.1.0) (2026-11-17)
 
 
