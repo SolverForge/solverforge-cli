@@ -382,54 +382,18 @@ pub(crate) fn validate_managed_blocks(raw: &str) -> CliResult {
     parse_managed_region(raw).map(|_| ())
 }
 
-pub(crate) fn validate_current_settings(raw: &str) -> CliResult {
-    let value: toml::Value = toml::from_str(raw)
-        .map_err(|err| CliError::general(format!("failed to parse solver.toml: {err}")))?;
-    validate_move_thread_count(&value)?;
-    validate_candidate_trace(&value)
-}
-
 // The generated app embeds solver.toml and parses it on the first solve, so a
-// malformed thread count builds cleanly and then panics the job. Accept exactly
-// the runtime's forms: "auto", "none", or { count = N }.
-fn validate_move_thread_count(value: &toml::Value) -> CliResult {
-    let Some(move_thread_count) = value.get("move_thread_count") else {
-        return Ok(());
+// file the runtime refuses builds cleanly and then fails every job. Parse it
+// with the runtime's own configuration type, pinned to the scaffold target.
+pub(crate) fn validate_current_settings(raw: &str) -> CliResult {
+    let err = match solverforge_config::SolverConfig::from_toml_str(raw) {
+        Ok(_) => return Ok(()),
+        Err(solverforge_config::ConfigError::Toml(err)) => err.to_string(),
+        Err(err) => err.to_string(),
     };
-    let invalid = || {
-        CliError::general(
-            "solver.toml move_thread_count must be \"auto\", \"none\", or { count = N } with N a positive integer",
-        )
-    };
-    match move_thread_count {
-        toml::Value::String(mode) if mode == "auto" || mode == "none" => Ok(()),
-        toml::Value::Table(table) if table.len() == 1 => match table.get("count") {
-            Some(toml::Value::Integer(count)) if *count >= 1 => Ok(()),
-            _ => Err(invalid()),
-        },
-        _ => Err(invalid()),
-    }
-}
-
-fn validate_candidate_trace(value: &toml::Value) -> CliResult {
-    let Some(candidate_trace) = value.get("candidate_trace") else {
-        return Ok(());
-    };
-    let table = candidate_trace
-        .as_table()
-        .ok_or_else(|| CliError::general("solver.toml candidate_trace must be a TOML table"))?;
-    let max_entries = table
-        .get("max_entries")
-        .and_then(toml::Value::as_integer)
-        .ok_or_else(|| {
-            CliError::general("solver.toml candidate_trace.max_entries must be a positive integer")
-        })?;
-    if max_entries <= 0 {
-        return Err(CliError::general(
-            "solver.toml candidate_trace.max_entries must be a positive integer",
-        ));
-    }
-    Ok(())
+    Err(CliError::general(format!(
+        "solver.toml does not load in the SolverForge runtime: {err}"
+    )))
 }
 
 fn parse_managed_region(raw: &str) -> CliResult<Option<ManagedRegion>> {
@@ -1642,7 +1606,11 @@ group_name = "other"
             "candidate_trace = \"enabled\"\n",
         ] {
             let err = validate_current_settings(raw).expect_err("invalid trace config should fail");
-            assert!(err.to_string().contains("candidate_trace"));
+            assert!(
+                err.to_string()
+                    .contains("does not load in the SolverForge runtime"),
+                "{raw}"
+            );
         }
     }
 
@@ -1671,7 +1639,34 @@ group_name = "other"
         ] {
             let err = validate_current_settings(raw)
                 .expect_err("malformed thread count should fail validation");
-            assert!(err.to_string().contains("move_thread_count"), "{raw}");
+            assert!(
+                err.to_string()
+                    .contains("does not load in the SolverForge runtime"),
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn config_schema_pin_matches_the_scaffold_runtime_target() {
+        let pin = format!(
+            "solverforge-config = \"={}\"",
+            crate::scaffold_target::RUNTIME_CRATE_VERSION
+        );
+        assert!(
+            include_str!("../Cargo.toml").contains(&pin),
+            "missing {pin}"
+        );
+    }
+
+    #[test]
+    fn keys_the_runtime_does_not_know_are_rejected() {
+        for raw in [
+            "[app]\nname = \"demo\"\n",
+            "[termination]\nseconds_spent_limit = 30\nseconds = 30\n",
+        ] {
+            let err = validate_current_settings(raw).expect_err("unknown key should fail");
+            assert!(err.to_string().contains("unknown field"), "{raw}: {err}");
         }
     }
 
