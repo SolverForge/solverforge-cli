@@ -122,11 +122,8 @@ fn run_set_updates_solver_toml_with_typed_nested_value() {
     let tmp = tempdir().expect("failed to create temp dir");
     let original_dir = std::env::current_dir().expect("failed to read current dir");
     std::env::set_current_dir(tmp.path()).expect("failed to enter temp dir");
-    fs::write(
-        "solver.toml",
-        "[termination]\nscore_calculation_count_limit = 10\n",
-    )
-    .expect("failed to write solver.toml");
+    fs::write("solver.toml", "[termination]\nstep_count_limit = 10\n")
+        .expect("failed to write solver.toml");
 
     run_set("termination.seconds_spent_limit", "60").expect("run_set should succeed");
 
@@ -139,7 +136,7 @@ fn run_set_updates_solver_toml_with_typed_nested_value() {
         toml::Value::Integer(60)
     );
     assert_eq!(
-        saved_doc["termination"]["score_calculation_count_limit"],
+        saved_doc["termination"]["step_count_limit"],
         toml::Value::Integer(10)
     );
 }
@@ -152,7 +149,7 @@ fn run_set_updates_nested_value_in_inline_table() {
     std::env::set_current_dir(tmp.path()).expect("failed to enter temp dir");
     fs::write(
         "solver.toml",
-        "termination = { seconds_spent_limit = 30, score_calculation_count_limit = 10 }\n",
+        "termination = { seconds_spent_limit = 30, step_count_limit = 10 }\n",
     )
     .expect("failed to write solver.toml");
 
@@ -167,7 +164,7 @@ fn run_set_updates_nested_value_in_inline_table() {
         toml::Value::Integer(60)
     );
     assert_eq!(
-        saved_doc["termination"]["score_calculation_count_limit"],
+        saved_doc["termination"]["step_count_limit"],
         toml::Value::Integer(10)
     );
 }
@@ -209,7 +206,7 @@ fn run_set_rejects_zero_candidate_trace_capacity_without_writing() {
     assert_eq!(saved, original);
     assert!(error
         .to_string()
-        .contains("candidate_trace.max_entries must be a positive TOML integer"));
+        .contains("solver.toml does not load in the SolverForge runtime"));
 }
 
 #[test]
@@ -218,19 +215,19 @@ fn run_set_stores_string_values_as_strings() {
     let tmp = tempdir().expect("failed to create temp dir");
     let original_dir = std::env::current_dir().expect("failed to read current dir");
     std::env::set_current_dir(tmp.path()).expect("failed to enter temp dir");
-    fs::write("solver.toml", "[phase]\nenabled = true\n").expect("failed to write solver.toml");
+    fs::write("solver.toml", "random_seed = 7\n").expect("failed to write solver.toml");
 
-    run_set("phase.name", "construction").expect("run_set should succeed");
+    run_set("environment_mode", "full_assert").expect("run_set should succeed");
 
     let saved = fs::read_to_string("solver.toml").expect("failed to read solver.toml");
     std::env::set_current_dir(original_dir).expect("failed to restore current dir");
 
     let saved_doc: toml::Value = toml::from_str(&saved).expect("saved toml should be valid");
     assert_eq!(
-        saved_doc["phase"]["name"],
-        toml::Value::String("construction".to_string())
+        saved_doc["environment_mode"],
+        toml::Value::String("full_assert".to_string())
     );
-    assert_eq!(saved_doc["phase"]["enabled"], toml::Value::Boolean(true));
+    assert_eq!(saved_doc["random_seed"], toml::Value::Integer(7));
 }
 
 #[test]
@@ -295,7 +292,7 @@ fn run_set_preserves_managed_solver_config_blocks_for_non_phase_keys() {
         "solver.toml",
         r#"
 [termination]
-score_calculation_count_limit = 10
+step_count_limit = 10
 
 # @solverforge:begin solver-config
 # @solverforge:owner scalar-group required_assignment construction
@@ -359,7 +356,7 @@ type = "late_acceptance"
 late_acceptance_size = 400
 
 [termination]
-score_calculation_count_limit = 10
+step_count_limit = 10
 "#,
     )
     .expect("failed to write solver.toml");

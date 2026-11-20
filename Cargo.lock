@@ -1743,12 +1743,24 @@ dependencies = [
  "rmcp",
  "serde",
  "serde_json",
+ "solverforge-config",
  "strsim",
  "syn 3.0.6",
  "tempfile",
  "tokio",
  "toml",
  "toml_edit",
+]
+
+[[package]]
+name = "solverforge-config"
+version = "0.31.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b454194b3d8864d3a4a449c34ae3da9b94fa01a2274f58d9b229bd626dcd3317"
+dependencies = [
+ "serde",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]

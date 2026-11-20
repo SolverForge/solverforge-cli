@@ -43,7 +43,6 @@ pub fn run_set(key: &str, value: &str) -> CliResult {
     })?;
 
     let segments = parse_key_segments(key)?;
-    validate_known_setting(key, value)?;
     if segments
         .first()
         .is_some_and(|segment| segment.name == "phases")
@@ -72,22 +71,6 @@ pub fn run_set(key: &str, value: &str) -> CliResult {
     })?;
 
     output::print_update(CONFIG_PATH);
-    Ok(())
-}
-
-fn validate_known_setting(key: &str, raw_value: &str) -> CliResult {
-    if key != "candidate_trace.max_entries" {
-        return Ok(());
-    }
-
-    let max_entries = raw_value
-        .parse::<u64>()
-        .map_err(|_| CliError::general("candidate_trace.max_entries must be a positive integer"))?;
-    if max_entries == 0 || max_entries > i64::MAX as u64 {
-        return Err(CliError::general(
-            "candidate_trace.max_entries must be a positive TOML integer",
-        ));
-    }
     Ok(())
 }
 
