@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.2.1](https://github.com/SolverForge/solverforge-cli/compare/v4.2.0...v4.2.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **check:** load solver.toml with the runtime's own configuration schema ([f9464f6](https://github.com/SolverForge/solverforge-cli/commit/f9464f6ac547dab21659689c2b477e5e080fe8ef))
+
+
 ## [4.2.0](https://github.com/SolverForge/solverforge-cli/compare/v4.1.0...v4.2.0) (2026-11-18)
 
 
