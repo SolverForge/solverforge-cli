@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [4.2.2](https://github.com/SolverForge/solverforge-cli/compare/v4.2.1...v4.2.2) (2026-11-21)
+
+
+### Bug Fixes
+
+* **config:** name the key in a rejected config set ([a0d6a43](https://github.com/SolverForge/solverforge-cli/commit/a0d6a43bdadb138e9cc0cba98b63a344c8784a6a))
+
+
 ## [4.2.1](https://github.com/SolverForge/solverforge-cli/compare/v4.2.0...v4.2.1) (2026-11-20)
 
 
