@@ -63,7 +63,8 @@ pub fn run_set(key: &str, value: &str) -> CliResult {
 
     set_toml_edit_segments(&mut doc, &segments, value)?;
     let new_content = doc.to_string();
-    solver_config::validate_current_settings(&new_content)?;
+    solver_config::validate_current_settings(&new_content)
+        .map_err(|err| CliError::general(format!("cannot set `{key}`: {err}")))?;
 
     fs::write(path, &new_content).map_err(|e| CliError::IoError {
         context: "failed to write solver.toml".to_string(),
