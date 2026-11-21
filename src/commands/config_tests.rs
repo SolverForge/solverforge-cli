@@ -206,7 +206,7 @@ fn run_set_rejects_zero_candidate_trace_capacity_without_writing() {
     assert_eq!(saved, original);
     assert!(error
         .to_string()
-        .contains("solver.toml does not load in the SolverForge runtime"));
+        .starts_with("cannot set `candidate_trace.max_entries`: solver.toml does not load in the SolverForge runtime"));
 }
 
 #[test]
